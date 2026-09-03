@@ -1,0 +1,54 @@
+# ---------------------------------------------------------------------------
+# Deny by default.
+#
+# Broad denials first, then narrow re-inclusions ONLY for fixture directories
+# that CI verifies are synthetic. Do not add re-inclusions below without a
+# corresponding check in tools/scan_pii.py.
+# ---------------------------------------------------------------------------
+
+# Everything the user feeds in, and everything derived from it.
+# Nothing under these paths can be re-included: git will not descend into an
+# excluded directory, which is exactly the property we want here.
+/data/
+/output/
+*.sqlite
+*.sqlite3
+*.db
+
+# Common report formats anywhere outside fixtures.
+*.pdf
+*.zip
+*.csv
+!src/**/fixtures/**
+!tests/fixtures/**
+
+# The PII scanner's literal denylist is itself a PII file.
+tools/denylist.txt
+
+# Local overrides
+*.local.*
+.env
+
+# ---------------------------------------------------------------------------
+# Ordinary build and tooling noise
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+node_modules/
+.vite/
+frontend/dist/
+
+.DS_Store
+.idea/
+.vscode/

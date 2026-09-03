@@ -1,0 +1,51 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "unbagged"
+version = "0.0.0"
+description = "Read what the grocery store knows about you."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.12"
+authors = [{ name = "Jason MacLeod" }]
+keywords = ["ccpa", "cpra", "privacy", "dsar", "right-to-know"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Utilities",
+]
+
+# Runtime dependencies are added by the milestone that first needs them
+# (fastapi/uvicorn at M4, pdfplumber/pypdf at M3). M0 is stdlib only, which keeps
+# the safeguard tooling installable and fast in CI.
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pre-commit>=3.7",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+unbagged = "unbagged.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/jasonmacleod/unbagged"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/unbagged"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tools", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]

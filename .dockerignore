@@ -1,0 +1,36 @@
+# ---------------------------------------------------------------------------
+# Mirrors .gitignore. Real data must never be baked into an image layer:
+# the data directory is a bind mount at runtime, never a COPY.
+# ---------------------------------------------------------------------------
+data/
+output/
+*.sqlite
+*.sqlite3
+*.db
+*.pdf
+*.zip
+*.csv
+tools/denylist.txt
+*.local.*
+.env
+
+.git/
+.github/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+node_modules/
+frontend/dist/
+.vite/
+
+.DS_Store

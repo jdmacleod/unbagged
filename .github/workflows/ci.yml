@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  safeguards:
+    name: PII safeguards
+    runs-on: ubuntu-latest
+    steps:
+      # Full history: a contributor who commits their real report and then amends
+      # it away must still be caught before merge.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Scan the checkout
+        run: python tools/scan_pii.py
+
+      - name: Scan the history introduced by this PR
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags origin "${{ github.base_ref }}"
+          python tools/scan_pii.py --history "origin/${{ github.base_ref }}..HEAD"
+
+      - name: Scan the full history
+        if: github.event_name == 'push'
+        run: python tools/scan_pii.py --history
+
+      - name: Refuse tracked files under data/
+        run: |
+          tracked=$(git ls-files -- data output || true)
+          if [ -n "$tracked" ]; then
+            echo "Tracked files under a data directory:"; echo "$tracked"; exit 1
+          fi
+
+      - name: Verify fixture directories are the only re-inclusions
+        run: |
+          # Committed fixtures must live under a fixtures/ directory. Anything else
+          # claiming to be sample data has bypassed the synthetic generator.
+          stray=$(git ls-files '*.csv' '*.pdf' '*.zip' | grep -v '/fixtures/' || true)
+          if [ -n "$stray" ]; then
+            echo "Report-shaped files outside fixtures/:"; echo "$stray"; exit 1
+          fi
+
+  test:
+    name: Lint and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: pytest -q
+
+  hooks:
+    name: pre-commit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: pre-commit/action@v3.0.1

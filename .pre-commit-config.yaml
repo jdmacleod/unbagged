@@ -1,0 +1,36 @@
+# Install with `pre-commit install`, or just run `make setup`.
+# Do not bypass these with `git commit --no-verify`.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        # A 5 MB PDF sneaking in is a red flag, not a large asset.
+        args: ["--maxkb=5120"]
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.6
+    hooks:
+      - id: ruff
+
+  - repo: local
+    hooks:
+      - id: no-data-dir
+        name: refuse files under data/
+        entry: python3 tools/no_data_dir.py
+        language: system
+        pass_filenames: true
+
+      - id: scan-pii
+        name: scan for personal data
+        entry: python3 tools/scan_pii.py
+        language: system
+        pass_filenames: true
