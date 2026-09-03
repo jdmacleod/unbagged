@@ -66,6 +66,13 @@ IDENTIFYING_KEY = re.compile(
 # Keys that look identifying but hold format constants rather than your data.
 SKIP_KEY = re.compile(r"(campaign|status|type|description|purchasedescription)", re.IGNORECASE)
 
+# Keys that are *exactly* these hold a field label, not a value. Reports use a
+# `{"Name": "SubscriberKey", "Value": "..."}` shape, and the label half matched
+# IDENTIFYING_KEY on "name" — which put the retailer's own field names on the
+# denylist and made the scanner fire on the adapter that reads them.
+# firstName and lastName still match, because they are not exact.
+LABEL_KEYS = {"name", "key", "label", "field", "attribute", "property"}
+
 # Never worth denylisting: they appear in ordinary code and prose.
 STOPLIST = {
     "unknown", "customer", "california", "united states", "privacy", "kroger",
@@ -156,6 +163,7 @@ def from_json_values(text: str, found: dict[str, set[str]]) -> None:
                 if (
                     IDENTIFYING_KEY.search(key)
                     and not SKIP_KEY.search(key)
+                    and key.strip().lower() not in LABEL_KEYS
                     and _worth_keeping(str(value))
                 ):
                     found["identifying JSON fields"].add(str(value).strip())

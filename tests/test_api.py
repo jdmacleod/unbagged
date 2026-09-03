@@ -228,22 +228,24 @@ class TestProfile:
         # These describe people who never enrolled in anything.
         data = client.get(f"/api/requests/{uploaded['request_id']}/profile").json()
         labels = {i["label"] for i in data["household_scoped"]}
-        assert {"householdComposition", "incomePredictorScore"} <= labels
+        assert {"Income Predictor Score (in $000)",
+                "Number of Children in Household"} <= labels
 
     def test_the_identity_graph_is_returned_with_provenance(self, client, uploaded):
         data = client.get(f"/api/requests/{uploaded['request_id']}/profile").json()
         assert data["identity_count"] > 5
         assert all(i["provenance"]["locator"] for i in data["identities"])
 
-    def test_derivability_survives_as_three_states(self, client, uploaded):
+    def test_derivability_survives_the_round_trip(self, client, uploaded):
+        # True / False / unknown are three different claims, and SQLite's
+        # 1 / 0 / NULL must not collapse the third into the second.
         data = client.get(f"/api/requests/{uploaded['request_id']}/profile").json()
         appended = {
             i["label"]: i["derivable_from_txns"]
             for i in data["inferences_by_origin"]["appended_third_party"]
         }
-        assert appended["petOwner"] is True
-        assert appended["educationLevel"] is False
-        assert appended["onlineShopperLikelihood"] is None
+        assert appended["Cat Owner"] is True
+        assert appended["Education Level of Individual"] is False
 
 
 class TestCompliance:

@@ -16,8 +16,12 @@ Generic on purpose: it started in the Kroger reader, and the second consumer
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterator
 from typing import Any
+
+# A comma with nothing but whitespace between it and a closing brace or bracket.
+TRAILING_COMMA = re.compile(r",\s*([}\]])")
 
 
 def scan_braces(text: str) -> tuple[list[tuple[int, int]], int | None]:
@@ -64,6 +68,54 @@ def unterminated_span(text: str) -> int | None:
     return scan_braces(text)[1]
 
 
+def repair(fragment: str) -> str:
+    """Fix the two ways a report's JSON arrives invalid, and no others.
+
+    Both come from the real world rather than from theory:
+
+    * **A newline inside a string.** PDF text extraction wraps long lines, and a
+      wrapped line inside a JSON string key is not legal JSON. Joined with a
+      space, which is what the wrap replaced.
+    * **A trailing comma** before a closing brace or bracket. Retailers emit
+      them; `json` refuses them.
+
+    Deliberately not a general-purpose JSON fixer. Anything cleverer starts
+    guessing at what the retailer meant, and a parser that silently invents
+    structure is worse than one that reports it could not read the section.
+    """
+    out: list[str] = []
+    in_string = False
+    escaped = False
+    for ch in fragment:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            elif ch in "\r\n":
+                # A wrapped line inside a string: the newline stood in for a space.
+                if out and out[-1] != " ":
+                    out.append(" ")
+                continue
+        elif ch == '"':
+            in_string = True
+        out.append(ch)
+
+    # Trailing commas, now that strings are single-line and cannot hide one.
+    repaired = "".join(out)
+    return TRAILING_COMMA.sub(r"\1", repaired)
+
+
+def _loads(fragment: str) -> Any:
+    """Parse, repairing once if the first attempt fails."""
+    try:
+        return json.loads(fragment)
+    except json.JSONDecodeError:
+        return json.loads(repair(fragment))
+
+
 def iter_json(text: str) -> Iterator[tuple[int, int, Any]]:
     """Yield `(start, end, parsed)` for every span that parses.
 
@@ -72,7 +124,7 @@ def iter_json(text: str) -> Iterator[tuple[int, int, Any]]:
     """
     for start, end in json_spans(text):
         try:
-            yield start, end, json.loads(text[start:end])
+            yield start, end, _loads(text[start:end])
         except json.JSONDecodeError:
             continue
 
@@ -82,7 +134,7 @@ def unparseable_spans(text: str) -> list[tuple[int, int]]:
     bad = []
     for start, end in json_spans(text):
         try:
-            json.loads(text[start:end])
+            _loads(text[start:end])
         except json.JSONDecodeError:
             bad.append((start, end))
     return bad

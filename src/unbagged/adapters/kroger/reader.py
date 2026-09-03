@@ -36,6 +36,8 @@ SECTION_HEADERS: tuple[str, ...] = (
 )
 
 LOYALTY_HEADER = "Data we hold related to our Loyalty program:"
+# The loyalty section carries more than one blob, so callers that want a
+# specific one match on its shape rather than on its position.
 ADVERTISING_HEADER = "Data we hold to communicate and advertise to you in a personalized way:"
 EMAIL_HEADER = "Email Information"
 PURCHASE_HEADERS = ("Information about your purchases:", "Data related to in-store services:")
@@ -213,6 +215,20 @@ def blob_for_header(blobs: list[Blob], *headers: str) -> Blob | None:
     return None
 
 
+def blob_with_keys(blobs: list[Blob], *keys: str) -> Blob | None:
+    """The first blob whose top level contains all of `keys`.
+
+    Position is not a reliable way to find a blob: the real reports put two
+    different structures under the same header, and a third appeared once the
+    JSON repair pass started recovering malformed sections. Shape is stable
+    where order is not.
+    """
+    for blob in blobs:
+        if isinstance(blob.data, dict) and all(k in blob.data for k in keys):
+            return blob
+    return None
+
+
 __all__ = [
     "ADVERTISING_HEADER",
     "Blob",
@@ -223,6 +239,7 @@ __all__ = [
     "SECTION_HEADERS",
     "Section",
     "blob_for_header",
+    "blob_with_keys",
     "find_blobs",
     "find_sections",
     "header_for",

@@ -36,6 +36,11 @@ def report() -> str:
     return REPORT.read_text(encoding="utf-8")
 
 
+def PURCHASES(blobs: list[dict]) -> dict:
+    """The purchase blob, found by shape rather than by position."""
+    return next(b for b in blobs if "customer" in b)["customer"][0]
+
+
 @pytest.fixture(scope="module")
 def blobs(report) -> list[dict]:
     return [json.loads(b) for b in JSON_BLOB.findall(PAGE_NUMBER_LINE.sub("\n", report))]
@@ -77,8 +82,10 @@ class TestStructuralFidelity:
         # does not parse as extracted.
         assert not JSON_BLOB.findall(report) or json_fails_without_stripping(report)
 
-    def test_stripping_page_numbers_recovers_four_parseable_blobs(self, blobs):
-        assert len(blobs) == 4
+    def test_stripping_page_numbers_recovers_every_blob(self, blobs):
+        # Five now: the loyalty section carries both the identity graph and the
+        # propensity scores, which is what a real report does.
+        assert len(blobs) == 5
 
 
 def json_fails_without_stripping(report: str) -> bool:
@@ -91,43 +98,74 @@ def json_fails_without_stripping(report: str) -> bool:
 
 
 class TestIdentityBlob:
-    def test_every_documented_identifier_is_present(self, blobs):
-        customer = blobs[0]["customer"][0]
-        for key in ("loyaltyno", "cardNumberWithCD", "alternateId", "ehhn",
-                    "householdId", "cgPersonId", "epsn", "SubscriberID"):
-            assert key in customer, key
+    def test_the_nested_account_shape_is_reproduced(self, blobs):
+        blob = next(b for b in blobs if "accounts" in b)
+        account = blob["accounts"][0]["accounts"][0]
+        assert set(account) >= {"dataSource", "loyaltyCards", "personalInfo"}
+        # Card numbers are the *keys* of loyaltyCards, not values.
+        card_number, card = next(iter(account["loyaltyCards"].items()))
+        assert card_number.isdigit()
+        assert set(card) >= {"altIds", "cardNumberWithCD", "status", "type"}
+        assert set(account["personalInfo"]["name"]) == {"firstName", "lastName"}
+
+    def test_identity_groups_state_their_own_scope(self, blobs):
+        # The report says which groups describe a household, so the adapter does
+        # not have to guess from field names.
+        blob = next(b for b in blobs if "groups" in b)
+        types = {g["type"] for g in blob["groups"]}
+        assert types == {"CG_PERSON", "KROGER_HOUSEHOLD"}
+        household = next(g for g in blob["groups"] if g["type"] == "KROGER_HOUSEHOLD")
+        assert set(household["aliasIds"]) == {"ehhn", "householdId"}
+        assert "address" in household["metadata"]
 
     def test_contact_details_use_reserved_for_fiction_values(self, blobs):
-        customer = blobs[0]["customer"][0]
-        assert customer["emailAddress"].endswith("@example.com")
-        # 555 is the reserved exchange; the middle group is what matters.
-        assert re.search(r"\)\s*555-", customer["phoneNumber"])
+        email = next(b for b in blobs if "emailData" in b)
+        addresses = [r["Value"] for r in email["emailData"] if r["Name"] == "EmailAddress"]
+        assert addresses and all(a.endswith("@example.com") for a in addresses)
+
+    def test_email_arrives_as_name_value_pairs(self, blobs):
+        # The Name half is a field label, not a value — a shape that has already
+        # caught out one harvester.
+        email = next(b for b in blobs if "emailData" in b)
+        assert {r["Name"] for r in email["emailData"]} >= {
+            "EmailAddress", "SubscriberID", "SubscriberKey", "Status"
+        }
 
 
 class TestInferenceBlob:
-    def test_the_five_propensity_axes_are_present_with_prose_values(self, blobs):
-        propensities = blobs[1]["customer"][0]["propensities"]
-        assert set(propensities) == {
-            "Convenience", "Loyalty", "Price", "Quality", "Variety Seeking"
+    def test_the_five_propensity_axes_sit_under_the_loyalty_header(self, blobs):
+        # Under loyalty, not advertising: that is where a real report puts them.
+        blob = next(b for b in blobs if "Convenience" in b)
+        assert set(blob) == {
+            "loyaltyIdNumber", "Convenience", "Loyalty", "Price", "Quality",
+            "Variety Seeking",
         }
+        axes = {k: v for k, v in blob.items() if k != "loyaltyIdNumber"}
         # Prose, not numbers — the real report scores these in words.
-        assert all(isinstance(v, str) and not v.isdigit() for v in propensities.values())
+        assert all(isinstance(v, str) and not v.isdigit() for v in axes.values())
 
-    def test_appended_attributes_are_present_and_not_derivable_from_baskets(self, blobs):
-        customer = blobs[1]["customer"][0]
-        assert "educationLevel" in customer["demographics"]
-        assert "householdComposition" in customer["demographics"]
-        assert "incomePredictorScore" in customer["likelihoods"]
-        assert "cruiseLikelihood" in customer["likelihoods"]
+    def test_appended_attributes_are_split_by_who_they_describe(self, blobs):
+        blob = next(b for b in blobs if "Individual" in b and "Household" in b)
+        individual = blob["Individual"][0]
+        household = blob["Household"][0]
+        assert "Education Level of Individual" in individual
+        assert "Year of Birth for Individual" in individual
+        # These describe people who never enrolled in anything.
+        assert "Income Predictor Score (in $000)" in household
+        assert "Number of Children in Household" in household
 
-    def test_likelihood_scales_are_ordinal_one_to_seven(self, blobs):
-        for value in blobs[1]["customer"][0]["likelihoods"].values():
-            assert re.match(r"^[1-7] - ", value), value
+    def test_likelihood_labels_carry_their_own_scale(self, blobs):
+        blob = next(b for b in blobs if "Individual" in b)
+        likelihoods = [k for k in blob["Individual"][0] if k.startswith("Likelihood")]
+        assert likelihoods
+        for label in likelihoods:
+            assert "7=Most Likely" in label
+            assert blob["Individual"][0][label] in [str(n) for n in range(1, 8)]
 
 
 class TestPurchaseBlob:
     def test_baskets_carry_the_documented_shape(self, blobs):
-        basket = blobs[3]["customer"][0]["basket"][0]
+        basket = PURCHASES(blobs)["basket"][0]
         for key in ("date", "time", "division", "store", "orderno",
                     "total_amount_prior_to_discounts", "tenders", "items"):
             assert key in basket, key
@@ -135,26 +173,35 @@ class TestPurchaseBlob:
         for key in ("purchasedescription", "productupc", "retailamt", "customerloyamt"):
             assert key in item, key
 
+    def test_amounts_and_dates_arrive_as_strings(self, blobs):
+        # A real report sends "12.34", not 12.34, and welds a zeroed time onto
+        # the date while keeping the real clock in a separate field.
+        basket = PURCHASES(blobs)["basket"][0]
+        assert isinstance(basket["total_amount_prior_to_discounts"], str)
+        assert isinstance(basket["items"][0]["retailamt"], str)
+        assert re.match(r"^\d{2}/\d{2}/\d{4} 00:00:00$", basket["date"])
+        assert re.match(r"^\d{2}:\d{2}:\d{2}$", basket["time"])
+
     def test_placeholder_rows_are_reproduced(self, blobs):
-        items = [i for b in blobs[3]["customer"][0]["basket"] for i in b["items"]]
+        items = [i for b in PURCHASES(blobs)["basket"] for i in b["items"]]
         placeholders = [i for i in items if i["purchasedescription"] == "UNKNOWN"]
         assert placeholders, "the adapter has to recognise these; the fixture must have them"
-        assert all(i["retailamt"] == 0.0 for i in placeholders)
+        assert all(float(i["retailamt"]) == 0.0 for i in placeholders)
         # pii-scan: allow placeholder UPC, not an identifier
         assert {i["productupc"] for i in placeholders} == {"00010000080000"}
 
     def test_returns_appear_as_negative_amounts(self, blobs):
-        items = [i for b in blobs[3]["customer"][0]["basket"] for i in b["items"]]
-        assert any(i["retailamt"] < 0 for i in items)
+        items = [i for b in PURCHASES(blobs)["basket"] for i in b["items"]]
+        assert any(float(i["retailamt"]) < 0 for i in items)
 
     def test_the_window_spans_roughly_two_years(self, blobs):
-        baskets = blobs[3]["customer"][0]["basket"]
+        baskets = PURCHASES(blobs)["basket"]
         assert len(baskets) > 80
-        assert baskets[0]["date"] < baskets[-1]["date"]
-        assert baskets[-1]["date"][:4] != baskets[0]["date"][:4]
+        years = {b["date"][6:10] for b in baskets}
+        assert len(years) > 1
 
     def test_there_are_enough_distinct_products_for_a_price_series(self, blobs):
-        items = [i for b in blobs[3]["customer"][0]["basket"] for i in b["items"]]
+        items = [i for b in PURCHASES(blobs)["basket"] for i in b["items"]]
         assert len({i["productupc"] for i in items}) > 150
 
 

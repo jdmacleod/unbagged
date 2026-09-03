@@ -5,6 +5,12 @@ reproduces. **No values from the real report appear here or anywhere in this
 repository** — only structure. Where a shape is described, it was observed once;
 treat every claim below as "seen in one report", not as a documented contract.
 
+> **Revised after reading a real response.** An earlier version of this file
+> described the format second-hand, and three of the four blobs turned out to be
+> shaped differently. Everything below has now been checked against an actual
+> report. Where the two disagreed, the differences are called out, because the
+> earlier shapes are still read as fallbacks and a future report may use them.
+
 ## Delivery
 
 A single PDF. The text layer is prose interrupted by four pretty-printed JSON
@@ -28,7 +34,24 @@ Strip them before parsing:
 re.sub(r"\n\s*\d{1,3}\r?\n", "\n", text)
 ```
 
-**Hazard:** that pattern also eats a JSON line consisting only of a number, which
+### The JSON is not valid JSON
+
+Two separate reasons, both seen in one report, both handled by
+`unbagged.jsonscan.repair`:
+
+- **A newline inside a string.** PDF text extraction wraps long lines, and the
+  advertising section has label keys long enough to wrap. A literal newline
+  inside a JSON string is not legal, and the section simply failed to parse.
+- **A trailing comma** before a closing brace. The identity blob has one.
+
+Between them these cost two of the six blobs until the repair pass existed. The
+repair is deliberately narrow: joining a wrapped line and dropping a trailing
+comma are both reversals of a known corruption. Anything cleverer starts guessing
+at what the retailer meant, and a parser that invents structure is worse than one
+that reports it could not read a section.
+
+**Hazard:** the documented page-strip pattern also eats a JSON line consisting
+only of a number, which
 is what a pretty-printed array of bare numbers looks like. No such array was
 observed, and the generator deliberately produces none, but any future export
 containing one would silently lose an element.
@@ -57,17 +80,40 @@ status are all simply absent — which is why the adapter emits an explicit
 
 ## The four blobs
 
-| # | Follows header | Shape |
-|---|---|---|
-| 1 | Loyalty program | `customer[0]` with the identifier set below |
-| 2 | Personalized advertising | `customer[0].propensities` / `.demographics` / `.likelihoods` |
-| 3 | Email Information | `customer[0].emailActivity[]` |
-| 4 | Purchases | `customer[0].basket[]` |
+There are **five**, not four, and two of them share the loyalty header. Position
+is therefore not a way to identify a blob; `reader.blob_with_keys` finds them by
+shape.
 
-### Identifiers (blob 1)
+| Follows header | Shape |
+|---|---|
+| Loyalty program | `{accounts, groups}` — the identity graph |
+| Loyalty program | `{loyaltyIdNumber, Convenience, Loyalty, Price, Quality, Variety Seeking}` |
+| Personalized advertising | `{Individual: [{...}], Household: [{...}]}` |
+| Email Information | `{emailData: [{Name, Value}], smsData, pushData}` |
+| Purchases | `{customer: [{subtaskid, loyaltyno, basket[]}]}` |
 
-`loyaltyno`, `cardNumberWithCD`, `alternateId`, `ehhn`, `householdId`,
-`cgPersonId`, `epsn`, `SubscriberID`.
+### Identifiers
+
+```
+accounts[].accounts[].loyaltyCards           keyed BY the card number
+                     .loyaltyCards[*].altIds, .cardNumberWithCD, .status, .type
+                     .personalInfo.name.{firstName, lastName}
+accounts[].attributes[]                      {name, value} pairs
+groups[]  .type          CG_PERSON | KROGER_HOUSEHOLD
+          .aliasIds      cgPersonId | ehhn + householdId
+          .metadata      {key: {type, value}} — epsn, address, cgPersonName, …
+```
+
+Two things worth noticing.
+
+**Loyalty card numbers are dictionary keys, not values.** A reader that walks
+values finds the card's metadata and never the number itself.
+
+**The report types its identity groups**, so it states for itself whether a
+record describes a person or a household. That is better evidence than inferring
+scope from a field name, which is what the adapter used to do. `KROGER_HOUSEHOLD`
+carries the postal address, and an address describes everyone living there — not
+only the person who enrolled.
 
 `cardNumberWithCD` is the loyalty number plus a check digit, which makes it a
 14-digit run indistinguishable in shape from a payment card. The generator picks
@@ -80,18 +126,31 @@ itself worth surfacing: each becomes an `Identity` row so the user can see how
 many separate keys exist for them. `householdId` and `ehhn` are household-scoped,
 which means they cover people who never enrolled in anything.
 
-### Inferences (blob 2)
+### Inferences
 
-Two populations that the report mixes together and the adapter must separate.
+Two populations, in two different blobs under two different headers.
 
-**Propensity axes** — Convenience, Loyalty, Price, Quality, Variety Seeking —
-carry prose values ("Above Average"), not numbers. Classified
-`FIRST_PARTY_MODEL`: they are computable from the baskets in this very report.
+**Propensity axes** — Convenience, Loyalty, Price, Quality, Variety Seeking — sit
+under the *loyalty* header beside a `loyaltyIdNumber`, not under the advertising
+header. They carry prose values, not numbers. Classified `FIRST_PARTY_MODEL`:
+they are computable from the baskets in this very report.
 
-**Demographics and likelihoods** — age range, education level, gender, household
-composition, adult and child counts, pet ownership, home ownership, length of
-residence, income predictor score, and 1–7 likelihood scales for cruise, travel,
-charitable giving and online shopping. Classified `APPENDED_THIRD_PARTY`.
+**Appended attributes** sit under the advertising header, already grouped by whom
+they describe:
+
+| `Individual` | `Household` |
+|---|---|
+| Age of Individual | Income Predictor Score (in $000) |
+| Year of Birth for Individual | Number of Adults / Children / Individuals in Household |
+| Education Level of Individual | Presence of Children Ages 0-2 |
+| Gender of Individual | Known Presence/Absence of Children Age 0-17 |
+| Cat Owner, Dog Owner | |
+| Likelihood of: a New/Used Auto, Going on a Cruise, Traveling Domestically, Traveling Internationally | |
+
+The 1–7 scale is stated **in the label** — `(7=Most Likely; 1=Least Likely)` —
+rather than as a prefix on the value, so the scale is read from the key.
+
+All classified `APPENDED_THIRD_PARTY`.
 
 The reasoning for that classification, which matters more than the code:
 **nothing in a grocery basket tells you someone's education level, how long they
@@ -138,19 +197,34 @@ fact that Kroger holds online order data it did not disclose here.
 `"CREDIT + GIFT CARD"` rather than just the first. Dropping the second would
 quietly rewrite the receipt.
 
-**`petOwner` is appended but derivable.** It is classified
-`APPENDED_THIRD_PARTY` like the rest of the demographics block, but flagged
+**Cat Owner and Dog Owner are appended but derivable.** Classified
+`APPENDED_THIRD_PARTY` like the rest of the block, but flagged
 `derivable_from_txns=True`: pet food appears as line items in these very baskets.
-The two fields answer different questions — where it most likely came from, and
-whether the retailer *could* have worked it out from what it already had.
+The two fields answer different questions — where a value most likely came from,
+and whether the retailer *could* have worked it out from what it already had.
 
-**`onlineShopperLikelihood` is derivable-unknown.** Kroger holds its own online
-order records, but this report discloses no channel field, so from the data
-provided the question cannot be answered. `NULL`, not `False`. The tri-state
-exists for exactly this.
+Their values are small integers rather than flags, and the report does not say
+what the scale is. Stored as `COUNT` with the raw value intact, because guessing
+would be worse than admitting the label is undocumented.
 
-**The address is household-scoped.** An address describes everyone living there,
-not only the person who enrolled.
+**An online-shopping likelihood, if one appears, is derivable-unknown.** Kroger
+holds its own online order records, but the response discloses no channel field,
+so from the data provided the question cannot be answered — `NULL`, not `False`.
+No such attribute appeared in the report that was read, and the fixture does not
+invent one; `_derivable` is unit-tested directly instead. The tri-state exists
+for exactly this case.
+
+**The address is household-scoped**, and the report agrees: it lives on the
+`KROGER_HOUSEHOLD` group.
+
+**Dates are not dates.** The `date` field arrives as `"08/17/2024 00:00:00"` — a
+US-format date with a zeroed time welded on — while the real clock sits in a
+separate `time` field. Concatenating the two produces something that is not a
+timestamp and does not sort, which put the timeline in arbitrary order until it
+was fixed. Both halves are parsed.
+
+**Amounts arrive as strings.** `"12.34"`, not `12.34`. Coerced, and left `NULL`
+when they cannot be.
 
 ## Coverage window
 
@@ -185,9 +259,9 @@ sequence, the four blobs, mid-JSON page numbers, the placeholder rows, the
 negative amounts, and the missing sections.
 
 Scale differs from the reference report and that is deliberate — the fixture is
-seeded from structure, never from values. It currently yields roughly 126
-baskets, 1,300 line items and 228 distinct UPCs across 24 months, against
-roughly 380 distinct UPCs across 23 months in the reference. Prices carry a
+seeded from structure, never from values. It currently yields roughly 122
+baskets, 1,300 line items and 226 distinct UPCs across 24 months, against 54
+baskets and 790 line items in the report that was read. Prices carry a
 small annual drift so the price-history view shows a series rather than noise.
 
 `make fixtures-check` regenerates it and fails on any difference. That check is

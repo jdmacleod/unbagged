@@ -120,19 +120,31 @@ class TestSections:
 
 
 class TestBlobs:
-    def test_four_blobs_are_recovered(self, cleaned):
+    def test_every_blob_is_recovered(self, cleaned):
         clean, _ = cleaned
-        assert len(reader.find_blobs(clean)) == 4
+        # Five: the loyalty section carries both the identity graph and the
+        # propensity scores.
+        assert len(reader.find_blobs(clean)) == 5
 
     def test_each_blob_is_attributed_to_its_header(self, cleaned):
         clean, _ = cleaned
         headers = [b.header for b in reader.find_blobs(clean)]
         assert headers == [
             reader.LOYALTY_HEADER,
+            reader.LOYALTY_HEADER,
             reader.ADVERTISING_HEADER,
             reader.EMAIL_HEADER,
             "Information about your purchases:",
         ]
+
+    def test_a_blob_can_be_found_by_shape_when_position_will_not_do(self, cleaned):
+        # Two structures share the loyalty header, so position identifies
+        # neither of them.
+        clean, _ = cleaned
+        blobs = reader.find_blobs(clean)
+        assert reader.blob_with_keys(blobs, "accounts", "groups") is not None
+        assert reader.blob_with_keys(blobs, "Convenience", "Variety Seeking") is not None
+        assert reader.blob_with_keys(blobs, "nope") is None
 
     def test_the_purchase_blob_is_findable_under_either_header(self, cleaned):
         clean, _ = cleaned
@@ -154,7 +166,7 @@ class TestBlobs:
     def test_a_corrupt_blob_is_skipped_not_raised(self):
         text = (
             'Data we hold related to our Loyalty program:\n'
-            '{"loyaltyno": "123", }\n'
+            '{"loyaltyno": nonsense}\n'
             'Information about your purchases:\n'
             '{"customer": [{"basket": []}]}\n'
         )

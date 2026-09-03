@@ -74,6 +74,30 @@ IDENTIFIER_FIELDS: tuple[tuple[str, IdType, Scope], ...] = (
 
 ADDRESS_FIELDS = ("addressLine1", "addressLine2", "city", "state", "zipCode")
 
+# The report types its identity groups, which means it states whether a record
+# describes a person or a household rather than leaving the adapter to guess
+# from field names.
+GROUP_SCOPES: dict[str, Scope] = {
+    "CG_PERSON": Scope.INDIVIDUAL,
+    "KROGER_HOUSEHOLD": Scope.HOUSEHOLD,
+}
+
+# aliasIds and metadata keys, and what kind of identifier each one is.
+ALIAS_TYPES: dict[str, IdType] = {
+    "cgPersonId": IdType.INTERNAL_PERSON,
+    "epsn": IdType.INTERNAL_PERSON,
+    "ehhn": IdType.HOUSEHOLD,
+    "householdId": IdType.HOUSEHOLD,
+    "loyaltyId": IdType.LOYALTY_CARD,
+}
+
+# Inference labels that the baskets in this same report could account for.
+# Everything else defaults to False; see NOTES.md for the reasoning.
+DERIVABLE_LABELS = ("cat owner", "dog owner", "pet owner")
+
+# "(7=Most Likely; 1=Least Likely)" and friends.
+ORDINAL_LABEL = re.compile(r"\(\s*[17]\s*=\s*(?:most|least)", re.IGNORECASE)
+
 # Which demographic attributes describe a household rather than a person. These
 # are the ones that describe people who never enrolled in anything, and the
 # profile view calls them out.
@@ -97,6 +121,10 @@ DERIVABLE_FROM_TXNS: dict[str, bool | None] = {
 }
 
 ORDINAL_PREFIX = re.compile(r"^\s*([1-7])\s*[-–]")
+
+# The five named axes. Used to find the blob by shape, because the report puts
+# more than one structure under the same header.
+PROPENSITY_AXES = ("Convenience", "Loyalty", "Price", "Quality", "Variety Seeking")
 
 
 class Cursor:
@@ -143,20 +171,48 @@ def _text(value: Any) -> str | None:
     return text or None
 
 
+US_DATE = re.compile(r"^(\d{1,2})/(\d{1,2})/(\d{4})")
+ISO_DATE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})")
+CLOCK = re.compile(r"(\d{1,2}):(\d{2})(?::(\d{2}))?")
+
+
 def _occurred_at(date: Any, time: Any) -> str | None:
     """Combine the report's date and time fields into one ISO-8601 timestamp.
+
+    The `date` field is not always a date. Real reports send
+    "08/17/2024 00:00:00" — a US-format date with a zeroed time welded on —
+    while `time` separately holds the real clock. Concatenating the two
+    produced "08/17/2024 00:00:00T15:52:00", which is not a timestamp, does not
+    sort, and put the timeline in arbitrary order. Both parts are parsed now.
 
     Deliberately not stamped with Z. The report gives a store-local wall clock
     with no timezone, and asserting UTC would push every evening shop in
     California into the next day. Sorting is unaffected; see NOTES.md.
     """
-    day = _text(date)
-    if not day:
+    raw_date = _text(date)
+    if not raw_date:
         return None
-    clock = _text(time) or "00:00:00"
-    if len(clock) == 5:
-        clock = f"{clock}:00"
-    return f"{day}T{clock}"
+
+    if match := ISO_DATE.match(raw_date):
+        year, month, day = match.group(1), match.group(2), match.group(3)
+    elif match := US_DATE.match(raw_date):
+        year = match.group(3)
+        month = f"{int(match.group(1)):02d}"
+        day = f"{int(match.group(2)):02d}"
+    else:
+        return None
+
+    # Prefer the dedicated time field; fall back to any clock inside `date`,
+    # which is where a zeroed placeholder usually lives.
+    clock = None
+    for candidate in (_text(time), raw_date[len(match.group(0)):]):
+        if candidate and (found := CLOCK.search(candidate)):
+            hour, minute, second = found.group(1), found.group(2), found.group(3) or "00"
+            if clock is None or (hour, minute, second) != ("00", "00", "00"):
+                clock = f"{int(hour):02d}:{minute}:{second}"
+            if clock != "00:00:00":
+                break
+    return f"{year}-{month}-{day}T{clock or '00:00:00'}"
 
 
 class KrogerAdapter:
@@ -300,11 +356,17 @@ class KrogerAdapter:
         )
 
     def _identities(self, blobs, provenance, warnings) -> tuple[Identity, ...]:
-        blob = reader.blob_for_header(blobs, reader.LOYALTY_HEADER)
+        """Every key the retailer holds for one shopper.
+
+        Two shapes have been observed under the loyalty header. The current one
+        nests accounts and typed identity groups; an earlier flat `customer[0]`
+        shape is still read, because a retailer is free to send either and the
+        cost of supporting both is a fallback branch.
+        """
         identities: list[Identity] = []
         seen: set[tuple[str, str]] = set()
 
-        def add(id_type: IdType, value: str | None, scope: Scope, offset: int, path: str):
+        def add(id_type: IdType, value: Any, scope: Scope, offset: int, path: str):
             text = _text(value)
             if not text or (str(id_type), text) in seen:
                 return
@@ -314,43 +376,134 @@ class KrogerAdapter:
                          provenance=provenance(offset, path))
             )
 
-        if blob is None:
-            warnings.error("No loyalty section found, so no identifiers were read.")
+        accounts_blob = reader.blob_with_keys(blobs, "accounts", "groups")
+        if accounts_blob is not None:
+            self._identities_from_accounts(accounts_blob, add, provenance)
         else:
-            customer = self._first_customer(blob.data, warnings, reader.LOYALTY_HEADER)
-            if customer:
-                cursor = Cursor(blob.raw, blob.start)
-                for field, id_type, scope in IDENTIFIER_FIELDS:
-                    if field not in customer:
-                        continue
-                    offset = cursor.find(f'"{field}"')
-                    add(id_type, customer[field], scope,
-                        offset, f"$.customer[0].{field}")
+            flat = reader.blob_for_header(blobs, reader.LOYALTY_HEADER)
+            if flat is None:
+                warnings.error("No loyalty section found, so no identifiers were read.")
+            else:
+                self._identities_from_flat_customer(flat, add, warnings)
 
-                address = ", ".join(
-                    part for part in (_text(customer.get(f)) for f in ADDRESS_FIELDS) if part
+        purchases = reader.blob_for_header(blobs, *reader.PURCHASE_HEADERS)
+        if purchases is not None:
+            customer = self._first_customer(purchases.data, WarningCollector(), "purchases")
+            if customer:
+                cursor = Cursor(purchases.raw, purchases.start)
+                add(IdType.LOYALTY_CARD, customer.get("loyaltyno"), Scope.INDIVIDUAL,
+                    cursor.find('"loyaltyno"'), "$.customer[0].loyaltyno")
+
+        self._identities_from_email(blobs, add)
+        if not identities:
+            warnings.error(
+                "No identifiers were found. The loyalty section's shape may have "
+                "changed; see the adapter's NOTES.md."
+            )
+        return tuple(identities)
+
+    def _identities_from_accounts(self, blob, add, provenance) -> None:
+        """The nested `accounts` / `groups` shape."""
+        cursor = Cursor(blob.raw, blob.start)
+        for i, outer in enumerate(blob.data.get("accounts") or []):
+            if not isinstance(outer, dict):
+                continue
+            for j, account in enumerate(outer.get("accounts") or []):
+                if not isinstance(account, dict):
+                    continue
+                base = f"$.accounts[{i}].accounts[{j}]"
+                # Card numbers are the *keys* of loyaltyCards, not values.
+                for number, card in (account.get("loyaltyCards") or {}).items():
+                    offset = cursor.find(f'"{number}"')
+                    add(IdType.LOYALTY_CARD, number, Scope.INDIVIDUAL,
+                        offset, f"{base}.loyaltyCards.{number}")
+                    if isinstance(card, dict):
+                        add(IdType.LOYALTY_CARD, card.get("cardNumberWithCD"),
+                            Scope.INDIVIDUAL, offset,
+                            f"{base}.loyaltyCards.{number}.cardNumberWithCD")
+                        for alt in card.get("altIds") or []:
+                            add(IdType.ALTERNATE_ID, alt, Scope.INDIVIDUAL, offset,
+                                f"{base}.loyaltyCards.{number}.altIds")
+                name = (account.get("personalInfo") or {}).get("name") or {}
+                full = " ".join(
+                    part for part in (_text(name.get("firstName")),
+                                      _text(name.get("lastName"))) if part
                 )
-                if address:
-                    offset = cursor.find('"addressLine1"')
+                if full:
+                    add(IdType.NAME, full, Scope.INDIVIDUAL,
+                        cursor.find('"personalInfo"'), f"{base}.personalInfo.name")
+
+        for k, group in enumerate(blob.data.get("groups") or []):
+            if not isinstance(group, dict):
+                continue
+            # The report says which of these describe a household. Believe it.
+            scope = GROUP_SCOPES.get(str(group.get("type")), Scope.INDIVIDUAL)
+            base = f"$.groups[{k}]"
+            offset = cursor.find(f'"{group.get("type")}"')
+            for key, value in (group.get("aliasIds") or {}).items():
+                add(ALIAS_TYPES.get(key, IdType.INTERNAL_PERSON), value, scope,
+                    offset, f"{base}.aliasIds.{key}")
+            for key, entry in (group.get("metadata") or {}).items():
+                value = entry.get("value") if isinstance(entry, dict) else entry
+                if key in ALIAS_TYPES:
+                    add(ALIAS_TYPES[key], value, scope, offset,
+                        f"{base}.metadata.{key}.value")
+                elif key.lower() == "address" and value is not None:
+                    text = value if isinstance(value, str) else ", ".join(
+                        str(v) for v in (value.values() if isinstance(value, dict)
+                                         else value) if v
+                    )
                     # Household-scoped on purpose: an address describes everyone
                     # living there, not only the person who enrolled.
-                    add(IdType.ADDRESS, address, Scope.HOUSEHOLD,
-                        offset, "$.customer[0].addressLine1")
+                    add(IdType.ADDRESS, text, Scope.HOUSEHOLD, offset,
+                        f"{base}.metadata.address.value")
 
-        email_blob = reader.blob_for_header(blobs, reader.EMAIL_HEADER)
-        if email_blob is not None:
-            customer = self._first_customer(email_blob.data, warnings, reader.EMAIL_HEADER)
-            cursor = Cursor(email_blob.raw, email_blob.start)
-            for index, record in enumerate((customer or {}).get("emailActivity", []) or []):
-                if not isinstance(record, dict):
-                    continue
-                value = _text(record.get("emailAddress"))
-                if value:
-                    offset = cursor.find(f'"{value}"')
-                    add(IdType.EMAIL, value, Scope.INDIVIDUAL, offset,
-                        f"$.customer[0].emailActivity[{index}].emailAddress")
+    def _identities_from_flat_customer(self, blob, add, warnings) -> None:
+        """The flat `customer[0]` shape, kept as a fallback."""
+        customer = self._first_customer(blob.data, warnings, reader.LOYALTY_HEADER)
+        if not customer:
+            return
+        cursor = Cursor(blob.raw, blob.start)
+        for field, id_type, scope in IDENTIFIER_FIELDS:
+            if field in customer:
+                add(id_type, customer[field], scope,
+                    cursor.find(f'"{field}"'), f"$.customer[0].{field}")
+        address = ", ".join(
+            part for part in (_text(customer.get(f)) for f in ADDRESS_FIELDS) if part
+        )
+        if address:
+            add(IdType.ADDRESS, address, Scope.HOUSEHOLD,
+                cursor.find('"addressLine1"'), "$.customer[0].addressLine1")
 
-        return tuple(identities)
+    def _identities_from_email(self, blobs, add) -> None:
+        """Email identifiers, from either the name/value or the activity shape."""
+        blob = reader.blob_for_header(blobs, reader.EMAIL_HEADER)
+        if blob is None:
+            return
+        cursor = Cursor(blob.raw, blob.start)
+        data = blob.data if isinstance(blob.data, dict) else {}
+
+        for index, row in enumerate(data.get("emailData") or []):
+            if not isinstance(row, dict):
+                continue
+            name, value = _text(row.get("Name")), row.get("Value")
+            offset = cursor.find(f'"{name}"')
+            if name == "EmailAddress":
+                add(IdType.EMAIL, value, Scope.INDIVIDUAL, offset,
+                    f"$.emailData[{index}].Value")
+            elif name in ("SubscriberID", "SubscriberKey"):
+                add(IdType.INTERNAL_PERSON, value, Scope.INDIVIDUAL, offset,
+                    f"$.emailData[{index}].Value")
+
+        customer = data.get("customer")
+        if isinstance(customer, list) and customer and isinstance(customer[0], dict):
+            for index, record in enumerate(customer[0].get("emailActivity") or []):
+                if isinstance(record, dict):
+                    value = _text(record.get("emailAddress"))
+                    if value:
+                        add(IdType.EMAIL, value, Scope.INDIVIDUAL,
+                            cursor.find(f'"{value}"'),
+                            f"$.customer[0].emailActivity[{index}].emailAddress")
 
     def _transactions(self, blobs, provenance, warnings) -> tuple[Transaction, ...]:
         blob = reader.blob_for_header(blobs, *reader.PURCHASE_HEADERS)
@@ -445,66 +598,158 @@ class KrogerAdapter:
         return tuple(parsed)
 
     def _inferences(self, blobs, provenance, warnings) -> tuple[Inference, ...]:
-        blob = reader.blob_for_header(blobs, reader.ADVERTISING_HEADER)
-        if blob is None:
-            warnings.info(
-                "No personalised-advertising section found, so no inferred "
-                "attributes were read."
-            )
-            return ()
+        """The two populations the report mixes, separated.
 
-        customer = self._first_customer(blob.data, warnings, reader.ADVERTISING_HEADER)
-        if not customer:
-            return ()
+        Propensity axes are computable from the baskets in this same report.
+        Age, education level, income band and cruise likelihood are not: nothing
+        in a grocery basket says any of them. They were obtained elsewhere, and
+        the response does not say where — which is also what SOURCES being
+        ABSENT means in practice.
+        """
+        inferences: list[Inference] = []
+        inferences += self._propensities(blobs, provenance)
+        inferences += self._appended_attributes(blobs, provenance)
+        if not inferences:
+            warnings.info(
+                "No inferred attributes were found. If the report has a "
+                "personalised-advertising section, its shape has changed."
+            )
+        return tuple(inferences)
+
+    def _propensities(self, blobs, provenance) -> list[Inference]:
+        """Five named axes with prose values, keyed beside a loyalty id."""
+        blob = reader.blob_with_keys(blobs, *PROPENSITY_AXES)
+        if blob is None:
+            blob = reader.blob_for_header(blobs, reader.ADVERTISING_HEADER)
+            if blob is None or not isinstance(blob.data, dict):
+                return []
+            customer = blob.data.get("customer")
+            source = (
+                customer[0].get("propensities", {})
+                if isinstance(customer, list) and customer else {}
+            )
+            path = "$.customer[0].propensities"
+        else:
+            source = {k: v for k, v in blob.data.items() if k in PROPENSITY_AXES}
+            path = "$"
 
         cursor = Cursor(blob.raw, blob.start)
-        inferences: list[Inference] = []
-
-        for label, value in (customer.get("propensities") or {}).items():
+        out = []
+        for label, value in source.items():
             raw = _text(value)
             if raw is None:
                 continue
-            offset = cursor.find(f'"{label}"')
-            inferences.append(
+            out.append(
                 Inference(
                     label=str(label),
                     value_raw=raw,
-                    # Computable from the baskets in this very report.
                     origin=InferenceOrigin.FIRST_PARTY_MODEL,
                     scale=Scale.CATEGORICAL,
                     subject=Scope.INDIVIDUAL,
                     derivable_from_txns=True,
-                    provenance=provenance(offset, f"$.customer[0].propensities.{label}"),
+                    provenance=provenance(cursor.find(f'"{label}"'), f"{path}.{label}"),
                 )
             )
+        return out
 
-        for group in ("demographics", "likelihoods"):
-            for label, value in (customer.get(group) or {}).items():
+    def _appended_attributes(self, blobs, provenance) -> list[Inference]:
+        """Attributes the report groups by whether they describe you or your household.
+
+        The retailer states the subject itself — an `Individual` and a
+        `Household` bucket — which is better evidence than any guess from a
+        field name. The household bucket is the one worth staring at: it
+        describes people who never enrolled in anything.
+        """
+        blob = reader.blob_with_keys(blobs, "Individual") or reader.blob_with_keys(
+            blobs, "Household"
+        )
+        if blob is not None:
+            groups = [
+                (subject, row)
+                for subject, rows in blob.data.items()
+                for row in (rows if isinstance(rows, list) else [rows])
+                if isinstance(row, dict)
+            ]
+            path_for = lambda subject, label: f"$.{subject}[0].{label!r}"  # noqa: E731
+        else:
+            legacy = reader.blob_for_header(blobs, reader.ADVERTISING_HEADER)
+            if legacy is None or not isinstance(legacy.data, dict):
+                return []
+            customer = legacy.data.get("customer")
+            first = customer[0] if isinstance(customer, list) and customer else {}
+            groups = [
+                (group, first.get(group) or {})
+                for group in ("demographics", "likelihoods")
+            ]
+            blob = legacy
+            path_for = lambda subject, label: f"$.customer[0].{subject}.{label}"  # noqa: E731
+
+        cursor = Cursor(blob.raw, blob.start)
+        out = []
+        for subject, row in groups:
+            scope = (
+                Scope.HOUSEHOLD
+                if str(subject).lower() == "household"
+                else Scope.INDIVIDUAL
+            )
+            for label, value in row.items():
                 raw = _text(value)
                 if raw is None:
                     continue
-                offset = cursor.find(f'"{label}"')
-                ordinal = ORDINAL_PREFIX.match(raw)
-                numeric = _number(value)
-                inferences.append(
+                if scope is Scope.INDIVIDUAL and str(subject).lower() not in (
+                    "individual", "demographics", "likelihoods"
+                ):
+                    continue
+                scale, number = self._scale_and_number(str(label), value)
+                out.append(
                     Inference(
                         label=str(label),
                         value_raw=raw,
-                        # Nothing in a grocery basket says how long someone has
-                        # lived at an address or whether they will take a cruise.
-                        # These were bought, and the report does not say from whom.
                         origin=InferenceOrigin.APPENDED_THIRD_PARTY,
-                        value_num=float(ordinal.group(1)) if ordinal else numeric,
-                        scale=Scale.ORDINAL_1_7 if ordinal else self._scale_of(value),
+                        value_num=number,
+                        scale=scale,
                         subject=(
-                            Scope.HOUSEHOLD if label in HOUSEHOLD_ATTRIBUTES
+                            Scope.HOUSEHOLD
+                            if scope is Scope.HOUSEHOLD
+                            or str(label) in HOUSEHOLD_ATTRIBUTES
                             else Scope.INDIVIDUAL
                         ),
-                        derivable_from_txns=DERIVABLE_FROM_TXNS.get(str(label), False),
-                        provenance=provenance(offset, f"$.customer[0].{group}.{label}"),
+                        derivable_from_txns=self._derivable(str(label)),
+                        provenance=provenance(
+                            cursor.find(f'"{label}"'), path_for(subject, label)
+                        ),
                     )
                 )
-        return tuple(inferences)
+        return out
+
+    @staticmethod
+    def _derivable(label: str) -> bool | None:
+        """Could the baskets in this report account for this value?
+
+        A separate question from where it came from, and the answer is
+        three-valued. Pet ownership is right there in the line items. Nothing
+        here explains a year of birth. And where the report withholds what would
+        settle it — an online-shopping score with no channel field disclosed —
+        the honest answer is that we cannot tell.
+        """
+        lowered = label.lower()
+        if any(hint in lowered for hint in DERIVABLE_LABELS):
+            return True
+        if "online" in lowered and ("shop" in lowered or "purchas" in lowered):
+            return None
+        return DERIVABLE_FROM_TXNS.get(label, False)
+
+    @staticmethod
+    def _scale_and_number(label: str, value: Any) -> tuple[Scale, float | None]:
+        raw = _text(value) or ""
+        if ORDINAL_LABEL.search(label) or ORDINAL_PREFIX.match(raw):
+            match = ORDINAL_PREFIX.match(raw)
+            return Scale.ORDINAL_1_7, float(match.group(1)) if match else _number(value)
+        number = _number(value)
+        if number is not None and not isinstance(value, bool):
+            currency = "$" in label or "income" in label.lower()
+            return (Scale.CURRENCY if currency else Scale.COUNT), number
+        return Scale.CATEGORICAL, None
 
     @staticmethod
     def _scale_of(value: Any) -> Scale:

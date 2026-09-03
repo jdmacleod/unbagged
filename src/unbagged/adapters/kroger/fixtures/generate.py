@@ -236,71 +236,144 @@ def _card_number_with_cd(rng: random.Random, loyalty: str) -> str:
     raise AssertionError("unreachable: at most one check digit satisfies Luhn")
 
 
+def _uuid(rng: random.Random) -> str:
+    hexd = "0123456789abcdef"
+    pick = lambda n: "".join(rng.choice(hexd) for _ in range(n))  # noqa: E731
+    return f"{pick(8)}-{pick(4)}-4{pick(3)}-{rng.choice('89ab')}{pick(3)}-{pick(12)}"
+
+
 def _identity_blob(fake: Faker, rng: random.Random, loyalty: str) -> dict:
-    """The identity graph. Eight different identifiers for one shopper, which is
-    itself the finding: the report never explains what any of them are for."""
+    """The identity graph, in the shape a real report uses.
+
+    Two nested account levels, loyalty card numbers as dictionary *keys*, and
+    typed identity groups. The types matter: the report states for itself
+    whether a group describes a person or a household, which is better evidence
+    than guessing from a field name.
+    """
     street = f"{rng.randrange(100, 9999)} {rng.choice(FICTIONAL_STREETS)}"
+    city = fake.city()
+    postcode = f"9{rng.randrange(0, 10000):04d}"
     return {
-        "customer": [
+        "accounts": [
             {
-                "firstName": fake.first_name(),
-                "lastName": fake.last_name(),
-                "loyaltyno": loyalty,
-                "cardNumberWithCD": _card_number_with_cd(rng, loyalty),
-                "alternateId": f"{rng.randrange(10**9, 10**10)}",
-                "ehhn": f"{rng.randrange(10**10, 10**11)}",
-                "householdId": f"HH{rng.randrange(10**8, 10**9)}",
-                "cgPersonId": f"CG-{rng.randrange(10**7, 10**8)}",
-                "epsn": f"{rng.randrange(10**11, 10**12)}",
-                "SubscriberID": f"{rng.randrange(10**7, 10**8)}",
-                "emailAddress": f"{fake.user_name()}@example.com",
-                "phoneNumber": f"({rng.randrange(200, 990)}) 555-{rng.randrange(0, 10000):04d}",
-                "addressLine1": street,
-                "city": fake.city(),
-                "state": "CA",
-                "zipCode": f"9{rng.randrange(0, 10000):04d}",
-                "enrollmentDate": fake.date_between(
-                    datetime(2009, 1, 1).date(), datetime(2019, 12, 31).date()
-                ).isoformat(),
+                "accounts": [
+                    {
+                        "dataSource": "LOYAL",
+                        "loyaltyCards": {
+                            loyalty: {
+                                "altIds": [f"{rng.randrange(10**9, 10**10)}"],
+                                "cardNumberWithCD": _card_number_with_cd(rng, loyalty),
+                                "dataSource": "LOYAL",
+                                "firstPurchaseDate": fake.date_between(
+                                    datetime(2009, 1, 1).date(),
+                                    datetime(2019, 12, 31).date(),
+                                ).isoformat(),
+                                "key": f"{rng.randrange(10**11, 10**12)}",
+                                "status": "ACTIVE",
+                                "type": "LOYALTY",
+                            }
+                        },
+                        "personalInfo": {
+                            "name": {
+                                "firstName": fake.first_name(),
+                                "lastName": fake.last_name(),
+                            }
+                        },
+                    }
+                ],
+                "attributes": [
+                    {"name": "CPA Data Request Date", "value": "2026-01-04 00:00:00"}
+                ],
             }
-        ]
+        ],
+        "groups": [
+            {
+                "aliasIds": {"cgPersonId": _uuid(rng)},
+                "id": _uuid(rng),
+                "members": {_uuid(rng): {"id": _uuid(rng), "role": "MEMBER"}},
+                "metadata": {
+                    "ccpaDataRequest": {"type": "STRING", "value": "2026-01-04 00:00:00"},
+                    "cgPersonName": {"type": "OBJECT", "value": {"first": fake.first_name()}},
+                    "epsn": {"type": "STR", "value": f"{rng.randrange(10**8, 10**9)}"},
+                    "primary": {"type": "BOOLEAN", "value": True},
+                },
+                "name": "CG_PERSON",
+                "systemGenerated": True,
+                "type": "CG_PERSON",
+            },
+            {
+                "aliasIds": {
+                    "ehhn": f"{rng.randrange(10**7, 10**8)}",
+                    "householdId": _uuid(rng),
+                },
+                "id": _uuid(rng),
+                "members": {_uuid(rng): {"id": _uuid(rng), "role": "MEMBER"}},
+                "metadata": {
+                    "address": {
+                        "type": "OBJECT",
+                        "value": f"{street}, {city}, CA {postcode}, UNITED STATES",
+                    },
+                    "directMailPreference": {"type": "BOOLEAN", "value": False},
+                    "noLink": {"type": "BOOLEAN", "value": False},
+                    "primaryDivisionNumber": {"type": "STR", "value": rng.choice(DIVISIONS)},
+                },
+                "name": "KROGER_HOUSEHOLD",
+                "systemGenerated": True,
+                "type": "KROGER_HOUSEHOLD",
+            },
+        ],
     }
 
 
-def _inference_blob(rng: random.Random) -> dict:
-    """Both inference classes in one blob, exactly as the real report mixes them.
+def _propensity_blob(rng: random.Random, loyalty: str) -> dict:
+    """The five propensity axes, keyed beside a loyalty id.
 
-    Separating them is the adapter's job, and the classification is the most
-    interesting output the tool produces: propensity axes are computable from the
-    baskets in this same report, while household income and cruise likelihood are
-    not, and the report never says where they came from.
+    Under the *loyalty* header in a real report, not the advertising one, and
+    with prose values rather than numbers.
+    """
+    blob = {"loyaltyIdNumber": loyalty}
+    for axis, values in PROPENSITY_AXES:
+        blob[axis] = rng.choice(values)
+    return blob
+
+
+def _inference_blob(rng: random.Random) -> dict:
+    """Appended attributes, grouped by whom they describe.
+
+    The report itself splits these into Individual and Household. The household
+    bucket is the one worth staring at: it describes people who never enrolled
+    in anything, and nothing in a grocery basket accounts for any of it.
     """
     return {
-        "customer": [
+        "Individual": [
             {
-                "propensities": {
-                    axis: rng.choice(values) for axis, values in PROPENSITY_AXES
-                },
-                "demographics": {
-                    "ageRange": rng.choice(("25-34", "35-44", "45-54", "55-64", "65+")),
-                    "educationLevel": rng.choice(EDUCATION_LEVELS),
-                    "gender": rng.choice(("M", "F", "U")),
-                    "householdComposition": rng.choice(HOUSEHOLD_COMPOSITIONS),
-                    "numberOfAdults": rng.randrange(1, 5),
-                    "numberOfChildren": rng.randrange(0, 4),
-                    "petOwner": rng.choice(("Y", "N")),
-                    "homeOwnerStatus": rng.choice(("Owner", "Renter", "Unknown")),
-                    "lengthOfResidence": rng.randrange(1, 25),
-                },
-                "likelihoods": {
-                    "incomePredictorScore": rng.choice(INCOME_BANDS),
-                    "cruiseLikelihood": rng.choice(ORDINAL_1_7),
-                    "travelLikelihood": rng.choice(ORDINAL_1_7),
-                    "charitableGivingLikelihood": rng.choice(ORDINAL_1_7),
-                    "onlineShopperLikelihood": rng.choice(ORDINAL_1_7),
-                },
+                "Age of Individual": str(rng.randrange(24, 78)),
+                "Cat Owner": str(rng.randrange(0, 10)),
+                "Dog Owner": str(rng.randrange(0, 10)),
+                "Education Level of Individual": rng.choice(EDUCATION_LEVELS),
+                "Gender of Individual": rng.choice(("M", "F", "U")),
+                "Likelihood of Being in-the-Market for a New/Used Auto "
+                "(7=Most Likely; 1=Least Likely)": str(rng.randrange(1, 8)),
+                "Likelihood of Going on a Cruise (7=Most Likely; 1=Least Likely)":
+                    str(rng.randrange(1, 8)),
+                "Likelihood of Traveling Domestically (7=Most Likely; 1=Least Likely)":
+                    str(rng.randrange(1, 8)),
+                "Likelihood of Traveling Internationally "
+                "(7=Most Likely; 1=Least Likely)": str(rng.randrange(1, 8)),
+                "Year of Birth for Individual": str(rng.randrange(1948, 2002)),
             }
-        ]
+        ],
+        "Household": [
+            {
+                "Income Predictor Score (in $000)": str(rng.randrange(30, 400)),
+                "Indicates the Known Presence/Absence of Children Age 0-17 in the "
+                "Household": rng.choice(("Y", "N")),
+                "Number of Adults in Household": str(rng.randrange(1, 5)),
+                "Number of Children in Household": str(rng.randrange(0, 4)),
+                "Number of Individuals in Household": str(rng.randrange(1, 7)),
+                "Presence of Children Ages 0-2": rng.choice(("Y", "N")),
+            }
+        ],
     }
 
 
@@ -319,27 +392,27 @@ def _shopping_time(rng: random.Random, day: datetime) -> datetime:
 
 
 def _email_blob(fake: Faker, rng: random.Random, start: datetime, address: str) -> dict:
-    campaigns = (
-        "Weekly Digital Deals", "Fuel Points Reminder", "Personalized Coupons",
-        "New Store Opening", "Boost Membership Offer",
-    )
-    records = []
-    # One address, as a real account has. A different address per campaign would
-    # make the identity graph look like a dozen people.
-    for i in range(rng.randrange(8, 14)):
-        sent = start + timedelta(days=rng.randrange(0, 700), hours=rng.randrange(0, 24))
-        records.append(
-            {
-                "campaignName": rng.choice(campaigns),
-                "sentDate": sent.strftime("%Y-%m-%d"),
-                "sentTime": sent.strftime("%H:%M:%S"),
-                "opened": rng.choice(("Y", "N")),
-                "clicked": rng.choice(("Y", "N")),
-                "emailAddress": address,
-                "subscriptionStatus": "Subscribed" if i % 7 else "Unsubscribed",
-            }
-        )
-    return {"customer": [{"emailActivity": records}]}
+    """Email data as Name/Value pairs, which is what a real report sends.
+
+    Note the shape hazard this reproduces: the `Name` half is a field label, not
+    a value. A harvester that treats it as personal data ends up denylisting the
+    retailer's own field names.
+    """
+    joined = start - timedelta(days=rng.randrange(400, 3000))
+    return {
+        "emailData": [
+            {"Name": "DateUndeliverable", "Value": ""},
+            {"Name": "DateJoined", "Value": joined.strftime("%Y-%m-%d %H:%M:%S")},
+            {"Name": "DateUnsubscribed", "Value": ""},
+            {"Name": "Domain", "Value": "example.com"},
+            {"Name": "EmailAddress", "Value": address},
+            {"Name": "SubscriberKey", "Value": f"{rng.randrange(10**11, 10**12)}"},
+            {"Name": "Status", "Value": "Active"},
+            {"Name": "SubscriberID", "Value": f"{rng.randrange(10**8, 10**9)}"},
+        ],
+        "smsData": [],
+        "pushData": [],
+    }
 
 
 def _basket(rng: random.Random, when: datetime, index: int, origin: datetime) -> dict:
@@ -354,8 +427,8 @@ def _basket(rng: random.Random, when: datetime, index: int, origin: datetime) ->
             {
                 "purchasedescription": description,
                 "productupc": upc,
-                "retailamt": retail,
-                "customerloyamt": loyalty,
+                "retailamt": f"{retail:.2f}",
+                "customerloyamt": f"{loyalty:.2f}",
             }
         )
 
@@ -365,8 +438,8 @@ def _basket(rng: random.Random, when: datetime, index: int, origin: datetime) ->
             {
                 "purchasedescription": PLACEHOLDER_DESCRIPTION,
                 "productupc": PLACEHOLDER_UPC,
-                "retailamt": 0.0,
-                "customerloyamt": 0.0,
+                "retailamt": "0.00",
+                "customerloyamt": "0.00",
             }
         )
 
@@ -380,25 +453,31 @@ def _basket(rng: random.Random, when: datetime, index: int, origin: datetime) ->
             {
                 "purchasedescription": description,
                 "productupc": upc,
-                "retailamt": refund,
-                "customerloyamt": 0.0,
+                "retailamt": f"{refund:.2f}",
+                "customerloyamt": "0.00",
             }
         )
 
     rng.shuffle(items)
     return {
-        "date": when.strftime("%Y-%m-%d"),
+        # A US-format date with a zeroed time welded on, and the real clock in a
+        # separate field — exactly as observed. Concatenating the two naively
+        # produces something that is not a timestamp and does not sort.
+        "date": when.strftime("%m/%d/%Y 00:00:00"),
         "time": when.strftime("%H:%M:%S"),
         "division": rng.choice(DIVISIONS),
         "store": rng.choice(STORES),
-        "orderno": f"{index:06d}",
-        "total_amount_prior_to_discounts": round(total, 2),
-        "tenders": [{"tendertype": rng.choice(TENDERS), "amount": round(total, 2)}],
+        "orderno": str(index),
+        # Amounts arrive as strings, not numbers.
+        "total_amount_prior_to_discounts": f"{total:.2f}",
+        "tenders": [{"tendertype": rng.choice(TENDERS), "amount": f"{total:.2f}"}],
         "items": items,
     }
 
 
-def _purchase_blob(rng: random.Random, start: datetime, months: int) -> dict:
+def _purchase_blob(
+    rng: random.Random, start: datetime, months: int, loyalty: str
+) -> dict:
     baskets = []
     when = start
     index = 1
@@ -409,7 +488,8 @@ def _purchase_blob(rng: random.Random, start: datetime, months: int) -> dict:
             break
         baskets.append(_basket(rng, _shopping_time(rng, when), index, start))
         index += 1
-    return {"customer": [{"basket": baskets}]}
+    return {"customer": [{"subtaskid": _uuid(rng), "loyaltyno": loyalty,
+                          "basket": baskets}]}
 
 
 def _interleave_page_numbers(text: str, lines_per_page: int = LINES_PER_PAGE) -> str:
@@ -442,7 +522,7 @@ def build(seed: int = DEFAULT_SEED, *, months: int = 24) -> str:
         return json.dumps(value, indent=2)
 
     identity = _identity_blob(fake, rng, loyalty)
-    email_address = identity["customer"][0]["emailAddress"]
+    email_address = f"{fake.user_name()}@example.com"
 
     sections = [
         "KROGER CONSUMER PRIVACY REQUEST RESPONSE",
@@ -458,6 +538,8 @@ def build(seed: int = DEFAULT_SEED, *, months: int = 24) -> str:
         "",
         blob(identity),
         "",
+        blob(_propensity_blob(rng, loyalty)),
+        "",
         "Data we hold to communicate and advertise to you in a personalized way:",
         "",
         blob(_inference_blob(rng)),
@@ -470,7 +552,7 @@ def build(seed: int = DEFAULT_SEED, *, months: int = 24) -> str:
         "",
         "Information about your purchases:",
         "",
-        blob(_purchase_blob(rng, start, months)),
+        blob(_purchase_blob(rng, start, months, loyalty)),
         "",
         PROSE_CLOSING,
     ]

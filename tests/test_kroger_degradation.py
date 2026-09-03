@@ -188,7 +188,7 @@ class TestCorruptJson:
     def test_one_corrupt_blob_does_not_cost_the_others(self, tmp_path):
         text = (
             # pii-scan: allow synthetic loyalty number
-            HEADERS + '{"customer": [{"loyaltyno": "6000000000001", }]}\n\n'
+            HEADERS + '{"customer": [{"loyaltyno": nonsense}]}\n\n'
             "Information about your purchases:\n\n"
             + json.dumps({"customer": [{"basket": [GOOD_BASKET]}]}, indent=2) + "\n"
         )

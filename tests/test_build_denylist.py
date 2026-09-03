@@ -166,3 +166,27 @@ class TestMerge:
         output = tmp_path / "denylist.txt"
         merge(output, {FAKE_LOYALTY})
         assert "gitignored" in output.read_text(encoding="utf-8")
+
+
+class TestNameValuePairs:
+    def test_a_field_label_is_not_treated_as_personal_data(self):
+        """Reports use `{"Name": "SubscriberKey", "Value": "..."}`.
+
+        The label half matched on "name", which put the retailer's own field
+        names on the denylist — and then the scanner fired on the adapter code
+        that reads those fields. Found by exactly that happening.
+        """
+        report = (
+            'Email Information\n'
+            '{"emailData": [{"Name": "SubscriberKey", "Value": "' + FAKE_LOYALTY + '"},'
+            ' {"Name": "EmailAddress", "Value": "' + FAKE_EMAIL + '"}]}\n'
+        )
+        found = harvest(report, "report.pdf")["identifying JSON fields"]
+        assert "SubscriberKey" not in found
+        assert "EmailAddress" not in found
+
+    def test_camel_case_name_fields_are_still_caught(self):
+        report = '{"firstName": "' + FAKE_NAME + '", "lastName": "Okonkwo"}'
+        found = harvest(report, "report.pdf")["identifying JSON fields"]
+        assert FAKE_NAME in found
+        assert "Okonkwo" in found

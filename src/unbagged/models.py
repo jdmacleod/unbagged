@@ -76,6 +76,7 @@ class InferenceOrigin(StrEnum):
 
 
 class IdType(StrEnum):
+    NAME = "name"
     LOYALTY_CARD = "loyalty_card"
     ALTERNATE_ID = "alternate_id"
     HOUSEHOLD = "household"

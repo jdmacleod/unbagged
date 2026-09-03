@@ -73,9 +73,16 @@ class TestRequestMeta:
 class TestIdentities:
     def test_every_documented_identifier_type_is_emitted(self, result):
         assert {i.id_type for i in result.identities} >= {
-            IdType.LOYALTY_CARD, IdType.ALTERNATE_ID, IdType.HOUSEHOLD,
-            IdType.INTERNAL_PERSON, IdType.EMAIL, IdType.PHONE, IdType.ADDRESS,
+            IdType.NAME, IdType.LOYALTY_CARD, IdType.ALTERNATE_ID, IdType.HOUSEHOLD,
+            IdType.INTERNAL_PERSON, IdType.EMAIL, IdType.ADDRESS,
         }
+
+    def test_loyalty_card_numbers_are_read_from_dictionary_keys(self, result):
+        # The report keys loyaltyCards by the card number itself, so the value a
+        # naive reader would take is the card's metadata, not the number.
+        cards = [i for i in result.identities if i.id_type is IdType.LOYALTY_CARD]
+        assert cards
+        assert any("loyaltyCards." in i.provenance.locator for i in cards)
 
     def test_household_identifiers_are_scoped_to_the_household(self, result):
         # These cover people who never enrolled in anything.
@@ -93,7 +100,7 @@ class TestIdentities:
 
     def test_each_identifier_is_traceable(self, result):
         for identity in result.identities:
-            assert identity.provenance.locator.startswith("$.customer[0]")
+            assert identity.provenance.locator.startswith("$.")
             assert identity.provenance.page >= 1
             assert identity.provenance.source_document_id == 1
 
@@ -160,43 +167,77 @@ class TestInferences:
     def test_demographics_are_classified_as_appended(self, result):
         """The most interesting output this tool produces.
 
-        Nothing in a grocery basket says how long someone has lived at an
-        address, or whether they will take a cruise. These were bought, and the
+        Nothing in a grocery basket says someone's year of birth, education
+        level, or whether they will take a cruise. These were bought, and the
         report does not say from whom.
         """
         appended = {
             f.label for f in result.inferences
             if f.origin is InferenceOrigin.APPENDED_THIRD_PARTY
         }
-        assert {"educationLevel", "householdComposition", "incomePredictorScore",
-                "cruiseLikelihood", "lengthOfResidence"} <= appended
+        assert {"Education Level of Individual", "Year of Birth for Individual",
+                "Income Predictor Score (in $000)"} <= appended
+        assert any("Cruise" in label for label in appended)
 
     def test_household_attributes_describe_the_household(self, result):
+        # The report groups these itself, so the subject is read rather than
+        # guessed from the field name.
         household = {
             f.label for f in result.inferences if f.subject is Scope.HOUSEHOLD
         }
-        assert {"householdComposition", "numberOfAdults", "numberOfChildren",
-                "incomePredictorScore"} <= household
+        assert {"Income Predictor Score (in $000)", "Number of Adults in Household",
+                "Number of Children in Household"} <= household
+        # Stated explicitly rather than by keyword: the two buckets come from
+        # the report, and the whole point is that nothing crosses between them.
+        assert household == {
+            "Income Predictor Score (in $000)",
+            "Indicates the Known Presence/Absence of Children Age 0-17 in the Household",
+            "Number of Adults in Household",
+            "Number of Children in Household",
+            "Number of Individuals in Household",
+            "Presence of Children Ages 0-2",
+        }
+        individual = {
+            f.label for f in result.inferences if f.subject is Scope.INDIVIDUAL
+        }
+        assert {"Education Level of Individual", "Gender of Individual",
+                "Year of Birth for Individual"} <= individual
 
-    def test_ordinal_scales_keep_both_the_label_and_the_number(self, result):
-        cruise = next(f for f in result.inferences if f.label == "cruiseLikelihood")
+    def test_ordinal_scales_are_taken_from_the_label(self, result):
+        # The scale is stated in the label — "(7=Most Likely; 1=Least Likely)" —
+        # rather than as a prefix on the value.
+        cruise = next(f for f in result.inferences if "Cruise" in f.label)
         assert cruise.scale is Scale.ORDINAL_1_7
         assert 1 <= cruise.value_num <= 7
-        assert cruise.value_raw.startswith(str(int(cruise.value_num)))
 
-    def test_derivability_is_tri_state(self, result):
+    def test_counts_and_currency_are_distinguished(self, result):
+        by_label = {f.label: f for f in result.inferences}
+        assert by_label["Number of Adults in Household"].scale is Scale.COUNT
+        assert by_label["Income Predictor Score (in $000)"].scale is Scale.CURRENCY
+
+    def test_derivability_is_the_adapters_own_judgment(self, result):
         by_label = {f.label: f.derivable_from_txns for f in result.inferences}
         # Pet food is in these baskets.
-        assert by_label["petOwner"] is True
-        # Nothing here explains this one.
-        assert by_label["educationLevel"] is False
-        # Kroger holds its own order data, but this report discloses no channel,
-        # so from the data provided it is genuinely unknown.
-        assert by_label["onlineShopperLikelihood"] is None
+        assert by_label["Cat Owner"] is True
+        assert by_label["Dog Owner"] is True
+        # Nothing here explains these.
+        assert by_label["Education Level of Individual"] is False
+        assert by_label["Year of Birth for Individual"] is False
+
+    def test_unanswerable_derivability_stays_unknown(self):
+        """The third state is not decoration.
+
+        Where a retailer holds what would settle the question but did not
+        disclose it, "we cannot tell" is the honest answer, not "no".
+        """
+        derivable = KrogerAdapter()._derivable
+        assert derivable("Likelihood of Online Shopping") is None
+        assert derivable("Cat Owner") is True
+        assert derivable("Gender of Individual") is False
 
     def test_every_inference_is_traceable(self, result):
         for inference in result.inferences:
-            assert inference.provenance.locator.startswith("$.customer[0].")
+            assert inference.provenance.locator.startswith("$.")
             assert inference.provenance.page >= 1
 
 
