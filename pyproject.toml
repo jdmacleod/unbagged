@@ -17,10 +17,12 @@ classifiers = [
     "Topic :: Utilities",
 ]
 
-# Runtime dependencies are added by the milestone that first needs them
-# (fastapi/uvicorn at M4, pdfplumber/pypdf at M3). M0 is stdlib only, which keeps
-# the safeguard tooling installable and fast in CI.
-dependencies = []
+# Runtime dependencies are added by the milestone that first needs them, so the
+# safeguard tooling stays installable and fast in CI. fastapi/uvicorn arrive at M4.
+dependencies = [
+    "pdfplumber>=0.11",   # text extraction, page by page
+    "pypdf>=4",           # structure: page count, metadata
+]
 
 [project.optional-dependencies]
 dev = [

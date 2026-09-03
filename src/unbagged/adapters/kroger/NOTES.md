@@ -30,9 +30,17 @@ re.sub(r"\n\s*\d{1,3}\r?\n", "\n", text)
 
 **Hazard:** that pattern also eats a JSON line consisting only of a number, which
 is what a pretty-printed array of bare numbers looks like. No such array was
-observed, and the generator deliberately produces none, but an adapter that ever
-sees one will silently lose an element. If Kroger changes their export, check
-this first.
+observed, and the generator deliberately produces none, but any future export
+containing one would silently lose an element.
+
+`reader.strip_page_markers` therefore does not use the naive form. Matching the
+shape is only the first step: a candidate counts as a page marker only if it
+belongs to the document's longest run of numbers increasing by exactly one. A
+value sitting in an array forms a run with nothing, so it survives.
+
+The trade-off is that a report printing fewer than two page numbers keeps them in
+its text. That is the right way round — two stray lines are recoverable, a
+silently deleted value is not.
 
 ## Section headers, in the order observed
 
