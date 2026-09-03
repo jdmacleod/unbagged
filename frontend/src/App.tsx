@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api } from "./api";
 import { useAsync } from "./components/useAsync";
 import { Upload } from "./components/Upload";
-import { Empty, ErrorBox, Spinner } from "./components/ui";
+import { ErrorBox, Spinner } from "./components/ui";
 import { Compare } from "./views/Compare";
 import { Compliance } from "./views/Compliance";
 import { PriceHistory } from "./views/PriceHistory";
@@ -74,13 +74,13 @@ export default function App() {
         {requests.loading && <Spinner label="Looking for stored responses" />}
         {requests.error && <ErrorBox error={requests.error} />}
 
+        {/* One box, not two. The empty state used to stack a dashed drop zone on
+            top of a dashed "nothing loaded yet, drop in a response" panel, which
+            restated the box directly above it in the same visual language. Two
+            dashed rectangles competing, one of them redundant. The drop zone is
+            already the empty state. */}
         {!requests.loading && rows.length === 0 && (
-          <>
-            <Upload onDone={() => requests.reload()} />
-            <Empty>
-              Nothing loaded yet. Drop in a right-to-know response and this fills up.
-            </Empty>
-          </>
+          <Upload onDone={() => requests.reload()} />
         )}
 
         {current !== null && (
