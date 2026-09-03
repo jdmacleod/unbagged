@@ -1,0 +1,46 @@
+# Overlay for contributors. Adds a Vite dev server with hot reload and mounts
+# the source, so neither side needs rebuilding to see a change.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# or just `make dev`.
+services:
+  unbagged:
+    build:
+      context: .
+      target: runtime
+    command:
+      - uvicorn
+      - unbagged.api:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --reload
+    volumes:
+      - ./data:/data
+      - ./src:/app/src:ro
+    environment:
+      UNBAGGED_DB: /data/db/unbagged.sqlite
+      UNBAGGED_INCOMING: /data/incoming
+
+  web:
+    image: node:22-slim
+    working_dir: /app/frontend
+    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0"
+    volumes:
+      - ./frontend:/app/frontend
+      # Keep the container's node_modules out of the host checkout, so a Linux
+      # build does not overwrite a macOS one.
+      - unbagged_node_modules:/app/frontend/node_modules
+    ports:
+      - "127.0.0.1:5173:5173"
+    environment:
+      # Vite proxies /api to the backend service by name inside the compose
+      # network; see vite.config.ts.
+      VITE_API_PROXY: http://unbagged:8000
+    depends_on:
+      - unbagged
+
+volumes:
+  unbagged_node_modules:

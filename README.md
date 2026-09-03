@@ -19,46 +19,77 @@ three things:
 Point 3 is the part nothing else does. Existing open-source tooling covers request
 *generation* and company-side request *fulfillment*. Nothing reads the response back.
 
-## Status
-
-**Early. M0 of 8.** The PII safeguards and scaffolding are in place; no parsers yet.
-See `HANDOFF.md` for the full design and milestone plan.
-
-| | Milestone | State |
-|---|---|---|
-| M0 | Safeguards and scaffolding | done |
-| M1 | Canonical schema | next |
-| M2 | Synthetic fixture generator | |
-| M3 | Kroger adapter | |
-| M4 | Read API | |
-| M5 | UI — timeline, profile, compliance | |
-| M6 | Docker packaging | |
-| M7 | Adapter authoring guide | |
-
 ## Quickstart
 
-Not yet — packaging lands at M6. The bar it has to clear:
+Three commands, no Python install, no Node install, no database setup.
 
 ```bash
 git clone https://github.com/jasonmacleod/unbagged
 cd unbagged
 docker compose up
-# open http://localhost:8420 and drag the PDF onto the upload area
 ```
 
-For now, development setup:
+Then open <http://localhost:8420> and drag the retailer's response onto the upload
+area. Your database and your uploads live in `./data`, on your disk — back the
+whole thing up by copying that directory.
+
+## What you get
+
+**Timeline** — every visit over the coverage window, with the header numbers
+(spend, baskets, distinct products, window) above it. Click a basket to expand the
+line items, with the shelf price and the loyalty discount side by side, which is
+the one thing a receipt never shows you.
+
+**Profile** — the identifiers the retailer holds for you, and the attributes it
+has inferred, split by where they came from. Scores it modelled from your own
+baskets sit in one column; attributes it obtained somewhere it does not name sit
+in the other. Anything describing your *household* rather than you is called out,
+because those describe people who never signed up for anything.
+
+**Compliance** — retailers as rows, the eight CCPA/CPRA disclosure categories as
+columns, and a "draft a follow-up" action that writes a supplemental request
+naming what went unanswered. You read it and send it yourself.
+
+**Compare** and **Prices** — two retailers side by side once a second response
+arrives, and a personal inflation series per product, which two years of itemised
+baskets contains for free.
+
+## Status
+
+**M0–M6 of 8 complete.** The Kroger adapter is the only full one; Safeway and
+H Mart stubs land with M7. See `HANDOFF.md` for the design and the milestone plan.
+
+| | Milestone | State |
+|---|---|---|
+| M0 | Safeguards and scaffolding | done |
+| M1 | Canonical schema | done |
+| M2 | Synthetic fixture generator | done |
+| M3 | Kroger adapter | done |
+| M4 | Read API | done |
+| M5 | UI — timeline, profile, compliance, compare, prices | done |
+| M6 | Docker packaging | done |
+| M7 | Adapter authoring guide | next |
+
+## Working on it
 
 ```bash
-make setup        # venv, dev deps, git hooks
+make setup           # venv, dev deps, git hooks
+make setup-frontend  # npm install
+make dev             # compose + Vite with hot reload
 make test
-make check-pii
+make check-pii       # run this before every commit
 ```
+
+`make help` lists the rest.
 
 ## Your data stays on your machine
 
 - Local-first and single-user. No accounts, no hosted service, no telemetry, no crash
   reporting, no update checks.
-- The app binds to `127.0.0.1` by default. LAN access is an explicit opt-in.
+- The app binds to `127.0.0.1` by default, and the published Docker port is
+  `127.0.0.1`-scoped too. Without that prefix Docker publishes on every interface
+  and goes straight through the host firewall. LAN access is an explicit opt-in,
+  and `unbagged serve` warns on stderr if you ask for it.
 - Fonts and JS are vendored. Zero CDN requests — the app works fully offline, and a CDN
   request would leak usage timing to a third party.
 - Your reports live in `data/`, which is gitignored wholesale, excluded from Docker build

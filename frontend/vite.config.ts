@@ -15,8 +15,14 @@ export default defineConfig({
     assetsInlineLimit: 4096,
   },
   server: {
-    host: "127.0.0.1",
+    // 0.0.0.0 only inside a container; the compose file publishes it on
+    // 127.0.0.1 so it is still not reachable from the network.
+    host: process.env.VITE_API_PROXY ? "0.0.0.0" : "127.0.0.1",
     port: 5173,
-    proxy: { "/api": "http://127.0.0.1:8000" },
+    proxy: {
+      // Locally the backend is on the host; under `make dev` it is a compose
+      // service reached by name.
+      "/api": process.env.VITE_API_PROXY ?? "http://127.0.0.1:8000",
+    },
   },
 });

@@ -1,0 +1,17 @@
+services:
+  unbagged:
+    build: .
+    image: unbagged:local
+    ports:
+      # The 127.0.0.1 prefix is load-bearing. Without it Docker publishes on
+      # every interface and punches straight through the host firewall, which
+      # would put two years of your groceries on the local network.
+      - "127.0.0.1:8420:8000"
+    volumes:
+      # Your reports and your database, on your disk. Back the whole thing up by
+      # copying this directory.
+      - ./data:/data
+    environment:
+      UNBAGGED_DB: /data/db/unbagged.sqlite
+      UNBAGGED_INCOMING: /data/incoming
+    restart: unless-stopped
