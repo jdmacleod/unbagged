@@ -567,8 +567,9 @@ class KrogerAdapter:
                     FollowUpAction(
                         kind=FollowUpKind.MISSING_CATEGORY,
                         description=(
-                            f"Ask Kroger to disclose {disclosure.category.value}, which "
-                            "the response did not address."
+                            f"Ask {DISPLAY_NAME} to disclose "
+                            f"{disclosure.category.label}, which the response did "
+                            "not address."
                         ),
                     )
                 )

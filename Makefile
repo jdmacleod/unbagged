@@ -8,7 +8,7 @@ PY := $(shell test -x .venv/bin/python && echo .venv/bin/python || echo $(BOOTST
 COMPOSE := docker compose
 DEV_COMPOSE := docker compose -f docker-compose.yml -f docker-compose.dev.yml
 
-.PHONY: help setup up dev test lint check-pii check-pii-history fixtures fixtures-check clean
+.PHONY: help setup setup-frontend build-frontend serve up dev test lint check-pii check-pii-history fixtures fixtures-check clean
 
 help:  ## Show this help
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -23,6 +23,15 @@ setup:  ## Create the venv, install dev deps, install git hooks
 	@echo
 	@echo "Ready. data/incoming and data/db are gitignored — put real reports there."
 	@echo "Run 'make check-pii' before every commit; the hook runs it too."
+
+setup-frontend:  ## Install the UI's build dependencies
+	cd frontend && npm install
+
+build-frontend:  ## Build the UI into the Python package
+	cd frontend && npm run build
+
+serve:  ## Run the app locally without Docker (needs make build-frontend first)
+	$(PY) -m unbagged.cli serve
 
 up:  ## Start the app (single container)
 	@test -f docker-compose.yml || { echo "Docker packaging lands in M6 (see HANDOFF.md §9)."; exit 1; }

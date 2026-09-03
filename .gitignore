@@ -47,7 +47,12 @@ htmlcov/
 
 node_modules/
 .vite/
+*.tsbuildinfo
 frontend/dist/
+
+# Built UI. Reproducible from frontend/ via the Docker build; committing a
+# minified bundle would put unreviewable generated code in every diff.
+/src/unbagged/static/
 
 .DS_Store
 .idea/

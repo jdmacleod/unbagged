@@ -146,3 +146,16 @@ class TestInference:
         assert inf.value_num == 5.0
         assert re.match(r"^\d", inf.value_raw)
         assert inf.derivable_from_txns is False
+
+
+class TestCategoryLabels:
+    def test_every_category_has_a_readable_label(self):
+        # A new category cannot be added without naming it, because the UI and the
+        # follow-up text both read this rather than the enum key.
+        for category in DisclosureCategory:
+            assert category.label
+            assert category.label != category.value
+            assert "_" not in category.label
+
+    def test_labels_do_not_leak_into_the_stored_value(self):
+        assert str(DisclosureCategory.SOURCES) == "SOURCES"

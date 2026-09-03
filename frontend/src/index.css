@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+/* A system font stack rather than a vendored webfont. Vendoring would work, but
+   the rule is zero external requests, and the cheapest way to keep that rule
+   permanently true is to ship no font files at all. */
+@theme {
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
+
+  /* Compliance statuses. Deliberately not red/amber/green alone: the matrix has
+     to be readable without colour vision, so cells carry a glyph too. */
+  --color-provided: oklch(0.62 0.14 155);
+  --color-partial: oklch(0.72 0.15 75);
+  --color-absent: oklch(0.58 0.19 25);
+}
+
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--color-stone-50);
+  color: var(--color-stone-900);
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background: var(--color-stone-950);
+    color: var(--color-stone-100);
+  }
+}
+
+/* Wide content scrolls inside its own container rather than the page. */
+.scroll-x {
+  overflow-x: auto;
+}

@@ -237,6 +237,16 @@ class TestFollowUps:
         assert len(supplemental) == 1
         assert "privacy office" in supplemental[0].description
 
+    def test_follow_ups_are_written_for_a_person_not_a_parser(self, result):
+        # These strings end up in the UI and in a letter someone sends.
+        missing = [
+            f for f in result.follow_ups if f.kind is FollowUpKind.MISSING_CATEGORY
+        ]
+        assert missing
+        for action in missing:
+            assert "_" not in action.description
+            assert action.description.isupper() is False
+
     def test_every_absent_category_gets_a_follow_up(self, result):
         missing = [
             f for f in result.follow_ups if f.kind is FollowUpKind.MISSING_CATEGORY

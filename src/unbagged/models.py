@@ -33,6 +33,27 @@ class DisclosureCategory(StrEnum):
     DISCLOSED_FOR_BUSINESS_PURPOSE = "DISCLOSED_FOR_BUSINESS_PURPOSE"
     RETENTION_PERIOD = "RETENTION_PERIOD"
 
+    @property
+    def label(self) -> str:
+        """Readable third-person name, for text a person will read."""
+        return CATEGORY_LABELS[self.value]
+
+
+# Readable names for the disclosure categories, in the third person. The enum
+# keys are an interface and stay stable; these are what a person reads. Kept
+# beside the enum so a new category cannot be added without naming it, and
+# separate from letters.py, whose phrasing is second-person letter voice.
+CATEGORY_LABELS: dict[str, str] = {
+    "CATEGORIES_COLLECTED": "the categories of personal information collected",
+    "SOURCES": "the categories of sources it was collected from",
+    "BUSINESS_PURPOSE": "the business or commercial purpose for collecting it",
+    "THIRD_PARTIES_SHARED_WITH": "the categories of third parties it is disclosed to",
+    "SPECIFIC_PIECES": "the specific pieces of personal information held",
+    "SOLD_OR_SHARED": "whether it was sold or shared, and with whom",
+    "DISCLOSED_FOR_BUSINESS_PURPOSE": "the categories disclosed for a business purpose",
+    "RETENTION_PERIOD": "how long each category is retained",
+}
+
 
 class DisclosureStatus(StrEnum):
     PROVIDED = "provided"
