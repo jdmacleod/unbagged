@@ -18,7 +18,11 @@ export function useShowMore<T>(items: T[], step = 25) {
           onClick={() => setLimit((n) => n + step * 4)}
           className="rounded border border-stone-300 px-3 py-1 text-xs hover:bg-stone-100 dark:border-stone-700 dark:hover:bg-stone-800"
         >
-          Show {Math.min(remaining, step * 4)} more ({remaining.toLocaleString()} left)
+          {/* "Show 97 more (97 left)" said 97 twice. The count of what you get
+              is the useful half; the remainder only differs once you are partway
+              through, and then it is worth showing. */}
+          Show {Math.min(remaining, step * 4).toLocaleString()} more
+          {remaining > step * 4 ? ` (${remaining.toLocaleString()} left)` : ""}
         </button>
       </div>
     ) : null;
