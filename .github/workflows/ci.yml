@@ -43,6 +43,15 @@ jobs:
             echo "Tracked files under a data directory:"; echo "$tracked"; exit 1
           fi
 
+      - name: Verify committed fixtures are generator output
+        # Load-bearing: scan_pii.py stands a few address-shaped rules down inside
+        # generated fixture directories, and byte-identical regeneration from a
+        # fixed seed is what replaces them. A real report dropped into a fixtures
+        # directory does not reproduce from the seed.
+        run: |
+          pip install -e ".[dev]"
+          python tools/make_fixtures.py --check
+
       - name: Verify fixture directories are the only re-inclusions
         run: |
           # Committed fixtures must live under a fixtures/ directory. Anything else

@@ -8,7 +8,7 @@ PY := $(shell test -x .venv/bin/python && echo .venv/bin/python || echo $(BOOTST
 COMPOSE := docker compose
 DEV_COMPOSE := docker compose -f docker-compose.yml -f docker-compose.dev.yml
 
-.PHONY: help setup up dev test lint check-pii check-pii-history fixtures clean
+.PHONY: help setup up dev test lint check-pii check-pii-history fixtures fixtures-check clean
 
 help:  ## Show this help
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -45,8 +45,10 @@ check-pii-history:  ## Scan commit messages and diffs across all history
 	$(PY) tools/scan_pii.py --history
 
 fixtures:  ## Regenerate synthetic fixtures
-	@test -f tools/make_fixtures.py || { echo "Fixture generator lands in M2 (see HANDOFF.md §9)."; exit 1; }
 	$(PY) tools/make_fixtures.py
+
+fixtures-check:  ## Fail if a committed fixture is not generator output
+	$(PY) tools/make_fixtures.py --check
 
 clean:  ## Remove build and cache artifacts (never touches data/)
 	rm -rf .pytest_cache .ruff_cache build dist src/*.egg-info
