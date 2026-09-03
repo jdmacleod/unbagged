@@ -422,3 +422,46 @@ class TestDisclosedVersusZero:
         ).json()
         assert data["stats"]["disclosed"] is True
         assert data["filtered_count"] == 0
+
+
+class TestDuplicateAcrossRequests:
+    """Regression: ISSUE-002 — the same report ingested twice as two requests
+    Found by /qa on 2026-09-03
+    Report: .gstack/qa-reports/qa-report-localhost8420-2026-09-03.md
+
+    The in-upload duplicate check only covered one request. Dropping the same
+    file again — what people do when a 13-second parse shows no progress —
+    produced a second request identical to the first: same retailer, same
+    reference, indistinguishable in the selector, a duplicate column in Compare,
+    and no way to delete either from the UI.
+    """
+
+    def test_the_same_report_cannot_be_loaded_twice(self, client, uploaded):
+        with FIXTURE.open("rb") as fh:
+            second = client.post(
+                "/api/requests", files={"files": ("again.txt", fh, "text/plain")}
+            )
+        assert second.status_code == 400
+        detail = second.json()["detail"]
+        assert "already loaded" in detail
+        assert "Kroger" in detail, "the message must name the existing entry"
+        assert len(client.get("/api/requests").json()["requests"]) == 1
+
+    def test_a_different_file_is_still_accepted(self, client, uploaded):
+        response = client.post(
+            "/api/requests",
+            files={"files": ("letter.txt", b"Dear customer, hello.\n", "text/plain")},
+            data={"declared_retailer": "Corner Market"},
+        )
+        assert response.status_code == 201
+        assert len(client.get("/api/requests").json()["requests"]) == 2
+
+    def test_reloading_after_deleting_the_original_works(self, client, uploaded):
+        # The message tells the user to remove the existing one first, so that
+        # path has to actually work.
+        client.delete(f"/api/requests/{uploaded['request_id']}")
+        with FIXTURE.open("rb") as fh:
+            again = client.post(
+                "/api/requests", files={"files": ("again.txt", fh, "text/plain")}
+            )
+        assert again.status_code == 201

@@ -133,6 +133,21 @@ def ingest(
             "try again — ingesting it twice would double every basket in it."
         )
 
+    already = _already_ingested(conn, seen)
+    if already:
+        # The check above only covered duplicates within a single upload. Dropping
+        # the same report a second time — which is what people do when a 13-second
+        # parse gives no immediate sign of progress — created a second request
+        # identical to the first: same retailer, same reference, same everything.
+        # The selector then showed two options with the same label and no way to
+        # tell them apart, Compare grew a duplicate column, and nothing in the UI
+        # could delete either one.
+        raise IngestError(
+            f"You have already loaded this response, as {already}. Loading it "
+            "again would create a second copy you could not tell apart from the "
+            "first. If you meant to replace it, remove the existing one first."
+        )
+
     bundle = bundle_from(files, declared_retailer)
     match = registry.select(bundle)
     if match is None:
@@ -160,6 +175,26 @@ def ingest(
     )
     request_id = _save(conn, result, documents)
     return IngestResult(request_id=request_id, match=match, result=result)
+
+
+def _already_ingested(conn: sqlite3.Connection, hashes: set[str]) -> str | None:
+    """Name an existing request holding any of these documents, if one exists.
+
+    Documents are hashed on the way in, so an identical file is identical
+    bytes. The unique index on source_document is per request, which stops the
+    same file appearing twice inside one request and does nothing about the same
+    file arriving as a second request.
+    """
+    if not hashes:
+        return None
+    placeholders = ",".join("?" for _ in hashes)
+    row = conn.execute(
+        f"SELECT r.display_name, r.id FROM source_document d "  # noqa: S608
+        f"JOIN request r ON r.id = d.request_id "
+        f"WHERE d.sha256 IN ({placeholders}) ORDER BY r.id LIMIT 1",
+        tuple(hashes),
+    ).fetchone()
+    return f'"{row["display_name"]}"' if row else None
 
 
 def _why_nothing_matched(bundle: SourceBundle) -> str:
