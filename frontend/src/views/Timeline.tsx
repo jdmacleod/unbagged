@@ -219,11 +219,27 @@ function BasketRow({
   );
 
   return (
-    <li className="py-2">
+    <li className={open ? "py-1" : "py-0.5"}>
       <button
         onClick={onToggle}
-        className="flex w-full items-baseline justify-between gap-3 text-left text-sm hover:opacity-80"
+        aria-expanded={open}
+        // cursor-pointer and a disclosure caret, because nothing else said these
+        // rows were clickable. Expanding a basket to its line items is the whole
+        // point of this view, and the affordance was a hover opacity change that
+        // does not exist on touch. py-1.5 also lifts the row from a 20px hit
+        // target toward something usable on a phone.
+        className={`flex w-full cursor-pointer items-baseline gap-3 rounded px-2 py-1.5 text-left text-sm transition hover:bg-stone-100 dark:hover:bg-stone-800 ${
+          open ? "bg-stone-100 dark:bg-stone-800" : ""
+        }`}
       >
+        <span
+          aria-hidden
+          className={`select-none text-stone-400 transition-transform dark:text-stone-500 ${
+            open ? "rotate-90" : ""
+          }`}
+        >
+          ›
+        </span>
         <span className="tabular-nums">{dayAndTime(basket.occurred_at)}</span>
         <span className="text-stone-500 dark:text-stone-400">
           store {basket.store_code ?? "—"}
@@ -237,7 +253,11 @@ function BasketRow({
       </button>
 
       {open && (
-        <div className="mt-2 scroll-x">
+        // Indented and rule-bordered so the line items read as detail belonging
+        // to the row above, rather than a table injected into the list. Without
+        // it the next basket row follows on the same divider weight and the
+        // nesting is invisible.
+        <div className="scroll-x ml-4 border-l-2 border-stone-200 pl-4 dark:border-stone-700">
           {detail.loading && <Spinner label="Opening the basket" />}
           {detail.data && <LineItems detail={detail.data} />}
         </div>
