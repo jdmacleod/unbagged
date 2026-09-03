@@ -40,3 +40,19 @@ body {
 .scroll-x {
   overflow-x: auto;
 }
+
+/* The app animates: the upload indicator bounces, rows and pills transition,
+   and Recharts animates on mount. None of it respected a reduced-motion
+   preference, which for a vestibular disorder is not a preference. Motion that
+   communicates state is kept as an instant change rather than removed, so
+   nothing becomes invisible. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
