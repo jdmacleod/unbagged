@@ -55,6 +55,10 @@ export default function App() {
           ))}
           {rows.length > 1 && (
             <select
+              // The only control on the page with no label. It also read as a
+              // nav item on mobile, sitting inline with the tab pills.
+              aria-label="Which retailer's response to show"
+              title="Which retailer's response to show"
               className="ml-auto rounded-md border border-stone-300 bg-white px-2 py-1.5 text-sm dark:border-stone-700 dark:bg-stone-900"
               value={current ?? ""}
               onChange={(e) => setSelected(Number(e.target.value))}

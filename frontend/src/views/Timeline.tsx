@@ -251,7 +251,12 @@ function BasketRow({
       >
         <span
           aria-hidden
-          className={`select-none text-stone-400 transition-transform dark:text-stone-500 ${
+          // stone-500/400, not stone-400/500. The first version of this caret
+          // landed at 2.59:1, reintroducing the exact contrast failure fixed in
+          // FINDING-001 one commit earlier. aria-hidden makes it decorative to a
+          // screen reader, but it is still the only thing showing open/closed to
+          // everyone else, so it needs the 3:1 UI-component floor.
+          className={`select-none text-stone-500 transition-transform dark:text-stone-400 ${
             open ? "rotate-90" : ""
           }`}
         >
