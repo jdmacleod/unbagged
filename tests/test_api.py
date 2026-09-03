@@ -70,10 +70,31 @@ class TestUpload:
         assert response.status_code == 400
         assert "empty" in response.json()["detail"].lower()
 
-    def test_an_unrecognised_report_says_what_to_do(self, client):
+    def test_a_letter_with_no_data_is_accepted_as_a_finding(self, client):
+        """A retailer that answers with prose has still not disclosed anything.
+
+        Refusing to ingest it would hide the finding behind an error message, so
+        it goes to the fallback adapter and shows up in the matrix as absent.
+        """
         response = client.post(
             "/api/requests",
             files={"files": ("letter.txt", b"Dear customer, hello.\n", "text/plain")},
+        )
+        assert response.status_code == 201
+        body = response.json()
+        assert body["retailer_id"] == "generic"
+        # Presented as a guess, not a finding: the UI labels it uncertain.
+        assert body["confident"] is False
+        assert body["summary"]["transactions"] == 0
+        assert body["summary"]["disclosures"] == len(DisclosureCategory)
+        assert any("no adapter recognised" in w["message"].lower()
+                   for w in body["warnings"])
+
+    def test_a_file_with_no_readable_text_is_refused(self, client):
+        # Nothing to find a finding in. Distinct from a letter that says nothing.
+        response = client.post(
+            "/api/requests",
+            files={"files": ("scan.pdf", b"%PDF-1.4\nnot really\n", "application/pdf")},
         )
         assert response.status_code == 400
         assert "adapter" in response.json()["detail"].lower()

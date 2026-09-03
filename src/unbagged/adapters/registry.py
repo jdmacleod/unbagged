@@ -20,6 +20,16 @@ log = logging.getLogger(__name__)
 MIN_CONFIDENCE = 0.25
 
 
+def is_fallback(adapter: RetailerAdapter) -> bool:
+    """Whether an adapter is a last resort rather than a retailer.
+
+    An explicit flag beats relying on a fallback scoring lower than every real
+    adapter: that invariant lives in two files and breaks silently the first
+    time a retailer's format degrades.
+    """
+    return bool(getattr(adapter, "fallback", False))
+
+
 @dataclass(frozen=True)
 class Match:
     adapter: RetailerAdapter
@@ -28,6 +38,10 @@ class Match:
     @property
     def is_confident(self) -> bool:
         return self.confidence >= MIN_CONFIDENCE
+
+    @property
+    def is_fallback(self) -> bool:
+        return is_fallback(self.adapter)
 
 
 class AdapterRegistry:
@@ -64,11 +78,18 @@ class AdapterRegistry:
         return sorted(matches, key=lambda m: (-m.confidence, m.adapter.retailer_id))
 
     def select(self, bundle: SourceBundle) -> Match | None:
-        """The best match, or None when nothing recognises the bundle."""
-        matches = self.score(bundle)
-        if not matches or matches[0].confidence <= 0.0:
+        """The best match, or None when nothing can read the bundle at all.
+
+        A fallback adapter is only consulted when no real one recognises the
+        documents. A letter with no structured data in it is still worth
+        parsing — the absence of data is itself a compliance finding — but it
+        must never win over a retailer that actually knows the format.
+        """
+        matches = [m for m in self.score(bundle) if m.confidence > 0.0]
+        if not matches:
             return None
-        return matches[0]
+        specific = [m for m in matches if not m.is_fallback]
+        return (specific or matches)[0]
 
 
 registry = AdapterRegistry()

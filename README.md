@@ -56,8 +56,13 @@ baskets contains for free.
 
 ## Status
 
-**M0–M6 of 8 complete.** The Kroger adapter is the only full one; Safeway and
-H Mart stubs land with M7. See `HANDOFF.md` for the design and the milestone plan.
+**All eight milestones complete.** Kroger is the only full adapter — it is the
+only format anyone has had a real response for. A retailer with no adapter still
+works: the fallback reads the response as text and records what it did and did
+not address, because a letter with no data in it is itself the finding.
+
+To add a retailer, see `docs/writing-an-adapter.md`. It should not require
+touching any code outside the retailer's own package.
 
 | | Milestone | State |
 |---|---|---|
@@ -68,7 +73,7 @@ H Mart stubs land with M7. See `HANDOFF.md` for the design and the milestone pla
 | M4 | Read API | done |
 | M5 | UI — timeline, profile, compliance, compare, prices | done |
 | M6 | Docker packaging | done |
-| M7 | Adapter authoring guide | next |
+| M7 | Adapter authoring guide, fallback, stubs | done |
 
 ## Working on it
 
@@ -95,6 +100,15 @@ make check-pii       # run this before every commit
 - Your reports live in `data/`, which is gitignored wholesale, excluded from Docker build
   context, and guarded by a pre-commit hook, a scanner, and a CI gate. If you plan to
   contribute, read `CONTRIBUTING.md` before you put anything there.
+
+## Supported responses
+
+| Retailer | State |
+|---|---|
+| Kroger | Full adapter — purchases, identity graph, inferred attributes, disclosures |
+| Safeway (Albertsons) | Stub. Expectations recorded in its `NOTES.md`; no real response seen |
+| H Mart | Stub. A letter is handled by the fallback already |
+| Anything else | Fallback: read as text, disclosures recorded, no data extracted |
 
 ## What this is not
 

@@ -90,11 +90,16 @@ without quoting the data. Do not try to rewrite history yourself.
 
 ## Adding a retailer adapter
 
-See `docs/writing-an-adapter.md` (M7). The short version: implement the `RetailerAdapter`
-protocol, emit provenance on every record, never mutate raw values, treat a missing
-disclosure section as an explicit `ABSENT` finding rather than a missing row, degrade with
-warnings instead of raising, and ship a synthetic fixture plus a `NOTES.md` documenting
-the format's quirks. The notes are as valuable as the code.
+See **`docs/writing-an-adapter.md`**. The short version: implement the
+`RetailerAdapter` protocol, emit provenance on every record, never mutate raw
+values, treat a missing disclosure section as an explicit `ABSENT` finding rather
+than a missing row, degrade with warnings instead of raising, and ship a synthetic
+fixture plus a `NOTES.md` documenting the format's quirks. The notes are as
+valuable as the code.
+
+Adding a retailer should not require editing anything outside its own package,
+apart from one import line in `src/unbagged/adapters/__init__.py`. If it does,
+that is a bug in the abstraction — please open an issue.
 
 ## Style
 
