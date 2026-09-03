@@ -266,7 +266,7 @@ function BasketRow({
         // point of this view, and the affordance was a hover opacity change that
         // does not exist on touch. py-1.5 also lifts the row from a 20px hit
         // target toward something usable on a phone.
-        className={`flex w-full cursor-pointer items-baseline gap-3 rounded px-2 py-1.5 text-left text-sm transition hover:bg-stone-100 dark:hover:bg-stone-800 ${
+        className={`flex w-full cursor-pointer items-start gap-2 rounded px-2 py-2 text-left text-sm transition hover:bg-stone-100 sm:items-baseline sm:gap-3 sm:py-1.5 dark:hover:bg-stone-800 ${
           open ? "bg-stone-100 dark:bg-stone-800" : ""
         }`}
       >
@@ -277,21 +277,41 @@ function BasketRow({
           // FINDING-001 one commit earlier. aria-hidden makes it decorative to a
           // screen reader, but it is still the only thing showing open/closed to
           // everyone else, so it needs the 3:1 UI-component floor.
-          className={`select-none text-stone-500 transition-transform dark:text-stone-400 ${
+          className={`mt-0.5 shrink-0 select-none text-stone-500 transition-transform sm:mt-0 dark:text-stone-400 ${
             open ? "rotate-90" : ""
           }`}
         >
           ›
         </span>
-        <span className="tabular-nums">{dayAndTime(basket.occurred_at)}</span>
-        <span className="text-stone-500 dark:text-stone-400">
-          store {basket.store_code ?? "—"}
-          {basket.tender_type ? ` · ${basket.tender_type}` : ""}
+
+        {/* Two deliberate lines on a phone, one row from `sm` up.
+            Letting the five desktop columns wrap produced three or four ragged
+            lines per basket, none of them aligned with the row above, so no
+            column could be scanned. Here the date and the amount — the two
+            things you actually scan a shopping history for — own the first
+            line, and the descriptive detail drops to the second.
+
+            `sm:contents` dissolves the two mobile line-wrappers at the
+            breakpoint, so the desktop row stays a single flex line with exactly
+            the columns it had before. */}
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3">
+          <span className="flex items-baseline justify-between gap-3 sm:contents">
+            <span className="tabular-nums">{dayAndTime(basket.occurred_at)}</span>
+            <span className="font-medium tabular-nums sm:order-last sm:w-20 sm:text-right">
+              {money(basket.items_total)}
+            </span>
+          </span>
+          <span className="flex items-baseline justify-between gap-3 text-stone-500 sm:contents dark:text-stone-400">
+            <span className="truncate">
+              store {basket.store_code ?? "—"}
+              {basket.tender_type ? ` · ${basket.tender_type}` : ""}
+            </span>
+            <span className="shrink-0 tabular-nums sm:ml-auto">
+              {number(basket.item_count)} items
+            </span>
+          </span>
         </span>
-        <span className="ml-auto tabular-nums">{number(basket.item_count)} items</span>
-        <span className="w-20 text-right font-medium tabular-nums">
-          {money(basket.items_total)}
-        </span>
+
         <ProvenanceTag provenance={basket.provenance} />
       </button>
 
