@@ -61,12 +61,33 @@ function PriceBody({
 }) {
   const { visible, control } = useShowMore(products, 30);
 
+  // The threshold control lives outside the empty-state branch on purpose.
+  // Returning a bare <Empty> used to unmount it, so raising the threshold too
+  // high left the user reading "try lowering the threshold" with no threshold
+  // input on screen. The only escape was reloading the page.
+  const threshold = (
+    <label className="flex items-center gap-2 text-xs text-stone-500 dark:text-stone-400">
+      seen at least
+      <input
+        type="number"
+        min={2}
+        max={40}
+        value={minObservations}
+        onChange={(e) => setMinObservations(Number(e.target.value) || 2)}
+        className="w-14 rounded border border-stone-300 px-2 py-1 dark:border-stone-700 dark:bg-stone-950"
+      />
+      times
+    </label>
+  );
+
   if (products.length === 0) {
     return (
-      <Empty>
-        No product was bought often enough to show a price history. Try lowering the
-        threshold.
-      </Empty>
+      <Card title="No price history at this threshold" actions={threshold}>
+        <Empty>
+          No product was bought at least {minObservations} times, so there is no
+          series to plot. Lower the threshold above to widen the net.
+        </Empty>
+      </Card>
     );
   }
 
@@ -74,20 +95,7 @@ function PriceBody({
     <div className="space-y-4">
       <Card
         title={`${productCount} products with a price history`}
-        actions={
-          <label className="flex items-center gap-2 text-xs text-stone-500 dark:text-stone-400">
-            seen at least
-            <input
-              type="number"
-              min={2}
-              max={40}
-              value={minObservations}
-              onChange={(e) => setMinObservations(Number(e.target.value) || 2)}
-              className="w-14 rounded border border-stone-300 px-2 py-1 dark:border-stone-700 dark:bg-stone-950"
-            />
-            times
-          </label>
-        }
+        actions={threshold}
       >
         {current && <Series series={current} />}
       </Card>
