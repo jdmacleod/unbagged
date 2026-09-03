@@ -54,7 +54,13 @@ export function ProvenanceTag({ provenance }: { provenance?: Provenance | null }
   const page = provenance.page ? `p.${provenance.page}` : "";
   return (
     <span
-      className="cursor-help font-mono text-[11px] text-stone-400 dark:text-stone-500"
+      // stone-500/stone-400 at 12px, not stone-400/stone-500 at 11px. Measured
+      // against the card background: the old pair was 2.59:1 in light and
+      // 3.65:1 in dark, both under the 4.5:1 AA floor for text this size, and
+      // 11px was below the 12px caption minimum. This tag is the tool's whole
+      // promise — every number traceable to a page — so it was the least
+      // legible thing on screen while carrying the most weight.
+      className="cursor-help font-mono text-xs text-stone-500 dark:text-stone-400"
       title={`Source document ${provenance.source_document_id ?? "?"}${
         page ? `, page ${provenance.page}` : ""
       }\n${provenance.locator}`}
