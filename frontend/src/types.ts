@@ -50,16 +50,20 @@ export type LineItem = {
 export type BasketDetail = Basket & { items: LineItem[] };
 
 export type Stats = {
-  basket_count: number;
+  /** False when the retailer disclosed no specific pieces of personal
+   *  information. Every count below is then null rather than 0, because "0
+   *  visits" is a claim about the retailer that such a response never made. */
+  disclosed: boolean;
+  basket_count: number | null;
   first_visit: string | null;
   last_visit: string | null;
-  total_spend: number;
-  total_loyalty_discount: number;
-  line_count: number;
-  distinct_products: number;
+  total_spend: number | null;
+  total_loyalty_discount: number | null;
+  line_count: number | null;
+  distinct_products: number | null;
   /** Lines naming no product at zero cost. Reported, never folded into products. */
-  zero_value_lines: number;
-  negative_lines: number;
+  zero_value_lines: number | null;
+  negative_lines: number | null;
   stores: { store_code: string; visits: number }[];
 };
 
@@ -121,14 +125,17 @@ export type CompareRow = {
   display_name: string;
   period_start: string | null;
   period_end: string | null;
-  visits: number;
-  total_spend: number;
-  distinct_products: number;
+  /** See Stats.disclosed. Null metrics below mean "not disclosed", not zero. */
+  disclosed: boolean;
+  visits: number | null;
+  total_spend: number | null;
+  distinct_products: number | null;
   first_visit: string | null;
   last_visit: string | null;
-  identifier_count: number;
-  inference_count: number;
-  appended_inference_count: number;
+  identifier_count: number | null;
+  inference_count: number | null;
+  appended_inference_count: number | null;
+  /** Never null: what a retailer failed to address is a real finding about it. */
   absent_disclosures: number;
 };
 

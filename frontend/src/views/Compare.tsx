@@ -45,7 +45,15 @@ export function Compare() {
                 <th key={r.id} className="py-2 font-medium">
                   {r.display_name}
                   <span className="block text-xs font-normal text-stone-500 dark:text-stone-400">
-                    {day(r.first_visit)} → {day(r.last_visit)}
+                    {r.disclosed ? (
+                      `${day(r.first_visit)} → ${day(r.last_visit)}`
+                    ) : (
+                      // Said plainly at the top of the column, because a column
+                      // of em dashes on its own is ambiguous: it could mean zero.
+                      <span className="text-amber-700 dark:text-amber-400">
+                        disclosed no data
+                      </span>
+                    )}
                   </span>
                 </th>
               ))}
@@ -58,8 +66,16 @@ export function Compare() {
                   {row.label}
                 </th>
                 {requests.map((r) => (
-                  <td key={r.id} className="py-2 tabular-nums">
-                    {row.format(r[row.key] as number)}
+                  <td
+                    key={r.id}
+                    className="py-2 tabular-nums"
+                    title={
+                      r.disclosed
+                        ? undefined
+                        : `${r.display_name} did not disclose this. A dash means not disclosed, not zero.`
+                    }
+                  >
+                    {row.format(r[row.key] as number | null)}
                   </td>
                 ))}
               </tr>
@@ -67,6 +83,13 @@ export function Compare() {
           </tbody>
         </table>
       </div>
+      {requests.some((r) => !r.disclosed) && (
+        <p className="mt-3 text-xs text-stone-600 dark:text-stone-400">
+          A dash means the retailer disclosed nothing of that kind, which is not
+          the same as a zero. Categories not addressed is counted for every
+          retailer, because that is a finding about them either way.
+        </p>
+      )}
     </Card>
   );
 }

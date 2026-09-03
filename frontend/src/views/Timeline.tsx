@@ -72,6 +72,27 @@ function TimelineBody({
   const { store, setStore, from, setFrom, to, setTo, q, setQ } = controls;
   const { visible, control } = useShowMore(baskets, 25);
 
+  // A retailer that answered with a letter disclosed no purchases at all. The
+  // stat cards used to render that as Visits 0 / Total spend $0.00, which reads
+  // as a fact about the retailer rather than the silence it actually was. Say
+  // what happened instead of showing zeros.
+  if (!stats.disclosed) {
+    return (
+      <Card title="No data to show">
+        <p className="text-sm text-stone-700 dark:text-stone-300">
+          This response contained no purchase data, so there is nothing to plot
+          here. That is not the same as having made no purchases: the retailer
+          did not disclose the specific pieces of personal information it holds.
+        </p>
+        <p className="mt-2 text-sm text-stone-600 dark:text-stone-400">
+          The absence is recorded as a finding in the{" "}
+          <strong>Compliance</strong> view, which is where a response like this
+          is worth reading.
+        </p>
+      </Card>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -98,7 +119,7 @@ function TimelineBody({
         />
       </div>
 
-      {stats.negative_lines > 0 && (
+      {(stats.negative_lines ?? 0) > 0 && (
         <p className="text-xs text-stone-500 dark:text-stone-400">
           {number(stats.negative_lines)} lines carry a negative amount — returns and
           voids. They are kept, because filtering them would overstate what you spent.

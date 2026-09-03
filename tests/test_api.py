@@ -358,3 +358,67 @@ class TestPriceHistory:
             params={"min_observations": 10},
         ).json()
         assert loose["product_count"] > tight["product_count"]
+
+
+class TestDisclosedVersusZero:
+    """A count of zero and a silence are different claims.
+
+    "Identifiers held for you: 0" is a statement about the retailer. A response
+    that disclosed nothing never made that statement, and rendering it as 0 says
+    the opposite of what the whole product is for.
+    """
+
+    @pytest.fixture
+    def letter_only(self, client):
+        response = client.post(
+            "/api/requests",
+            files={"files": ("letter.txt", b"Dear customer, thank you for writing.\n",
+                             "text/plain")},
+            data={"declared_retailer": "Corner Market"},
+        )
+        assert response.status_code == 201
+        return response.json()["request_id"]
+
+    def test_a_letter_reports_not_disclosed_rather_than_zero(self, client, letter_only):
+        stats = client.get(f"/api/requests/{letter_only}/timeline").json()["stats"]
+        assert stats["disclosed"] is False
+        for key in ("basket_count", "total_spend", "distinct_products",
+                    "first_visit", "last_visit", "line_count"):
+            assert stats[key] is None, f"{key} should be null, not zero"
+
+    def test_compare_nulls_the_metrics_it_cannot_support(self, client, uploaded, letter_only):
+        rows = {r["display_name"]: r for r in client.get("/api/compare").json()["requests"]}
+        letter = rows["Corner Market"]
+        assert letter["disclosed"] is False
+        for key in ("visits", "total_spend", "distinct_products",
+                    "identifier_count", "inference_count",
+                    "appended_inference_count"):
+            assert letter[key] is None, f"{key} should be null, not zero"
+
+    def test_what_the_retailer_failed_to_address_is_still_counted(
+        self, client, uploaded, letter_only
+    ):
+        # This one is never nulled: it is a real finding about the retailer, and
+        # it is the entire reason a response like this is worth reading.
+        rows = {r["display_name"]: r for r in client.get("/api/compare").json()["requests"]}
+        assert rows["Corner Market"]["absent_disclosures"] > 0
+
+    def test_a_retailer_that_did_disclose_keeps_its_real_numbers(self, client, uploaded):
+        rows = {r["display_name"]: r for r in client.get("/api/compare").json()["requests"]}
+        kroger = rows["Kroger"]
+        assert kroger["disclosed"] is True
+        assert kroger["visits"] > 100
+        assert kroger["identifier_count"] > 0
+
+    def test_a_genuine_zero_survives_when_data_was_disclosed(self, client, uploaded):
+        """The gate must not swallow real zeros.
+
+        Filtering the timeline to a window with no visits is a true zero, and it
+        has to stay 0 rather than becoming "not disclosed".
+        """
+        data = client.get(
+            f"/api/requests/{uploaded['request_id']}/timeline",
+            params={"date_from": "1990-01-01", "date_to": "1990-12-31"},
+        ).json()
+        assert data["stats"]["disclosed"] is True
+        assert data["filtered_count"] == 0

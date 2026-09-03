@@ -21,6 +21,28 @@ def _rows(conn: sqlite3.Connection, sql: str, params: tuple = ()) -> list[dict[s
     return [dict(r) for r in conn.execute(sql, params)]
 
 
+def disclosed_specific_pieces(conn: sqlite3.Connection, request_id: int) -> bool:
+    """Did this retailer actually disclose the specific pieces of data?
+
+    The distinction this guards is the product's whole thesis. A count of zero
+    means one of two very different things: the retailer told us about this
+    category and the answer is genuinely none, or the retailer said nothing at
+    all. Rendering both as `0` states the first when the truth is the second,
+    which is the opposite of what a compliance tool is for. "Identifiers held
+    for you: 0" reads as a fact about the retailer; what the response actually
+    contained was silence.
+
+    A response with SPECIFIC_PIECES anything other than `provided` disclosed no
+    data, so every data-derived number for it is unknown rather than zero, and
+    the API returns null so the UI can render it as "not disclosed".
+    """
+    row = conn.execute(
+        "SELECT status FROM disclosure WHERE request_id = ? AND category = ?",
+        (request_id, DisclosureCategory.SPECIFIC_PIECES.value),
+    ).fetchone()
+    return bool(row) and row["status"] == DisclosureStatus.PROVIDED.value
+
+
 def _provenance(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "source_document_id": row.pop("source_document_id", None),
@@ -128,6 +150,17 @@ def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
     result["stores"] = stores
     result["zero_value_lines"] = result["zero_value_lines"] or 0
     result["negative_lines"] = result["negative_lines"] or 0
+
+    # Null, not zero, when the retailer disclosed no specific pieces. See
+    # disclosed_specific_pieces().
+    result["disclosed"] = disclosed_specific_pieces(conn, request_id)
+    if not result["disclosed"]:
+        for key in (
+            "basket_count", "total_spend", "total_loyalty_discount", "line_count",
+            "distinct_products", "zero_value_lines", "negative_lines",
+            "first_visit", "last_visit",
+        ):
+            result[key] = None
     return result
 
 
@@ -271,21 +304,33 @@ def compare(conn: sqlite3.Connection) -> dict[str, Any]:
     for request in requests:
         request_id = request["id"]
         summary = stats(conn, request_id)
+        disclosed = summary["disclosed"]
+        request["disclosed"] = disclosed
         request["visits"] = summary["basket_count"]
         request["total_spend"] = summary["total_spend"]
         request["distinct_products"] = summary["distinct_products"]
         request["first_visit"] = summary["first_visit"]
         request["last_visit"] = summary["last_visit"]
-        request["identifier_count"] = conn.execute(
+
+        def count(sql: str, params: tuple, *, known: bool = disclosed) -> int | None:
+            # None, not 0, when nothing was disclosed: "0 identifiers" is a claim
+            # about the retailer, and this response made no such claim.
+            # `known` is bound as a default so the closure does not capture the
+            # loop variable.
+            return conn.execute(sql, params).fetchone()["c"] if known else None
+
+        request["identifier_count"] = count(
             "SELECT COUNT(*) c FROM identity WHERE request_id = ?", (request_id,)
-        ).fetchone()["c"]
-        request["inference_count"] = conn.execute(
+        )
+        request["inference_count"] = count(
             "SELECT COUNT(*) c FROM inference WHERE request_id = ?", (request_id,)
-        ).fetchone()["c"]
-        request["appended_inference_count"] = conn.execute(
+        )
+        request["appended_inference_count"] = count(
             "SELECT COUNT(*) c FROM inference WHERE request_id = ? AND origin = ?",
             (request_id, InferenceOrigin.APPENDED_THIRD_PARTY.value),
-        ).fetchone()["c"]
+        )
+        # Not gated: what a retailer failed to address is a real finding about
+        # that retailer, and it is exactly what this row is worth reading for.
         request["absent_disclosures"] = conn.execute(
             "SELECT COUNT(*) c FROM disclosure WHERE request_id = ? AND status = ?",
             (request_id, DisclosureStatus.ABSENT.value),
