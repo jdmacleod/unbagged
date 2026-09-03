@@ -57,13 +57,35 @@ CI green.
 
 ### The local denylist
 
-Create `tools/denylist.txt` with the literal strings that must never appear in this repo —
-your street, your phone number, your loyalty card number, your report ID. One per line,
-`#` for comments. The scanner picks it up automatically and matches case-insensitively.
+The denylist holds literal strings that must never appear in this repository — your
+street, your phone number, your loyalty card number, your report reference. Build it
+from your own report:
 
-The file is gitignored, because a committed denylist would itself be a PII file. Keep it
-local, and know that it protects only your machine — the pattern rules are what protect
-everyone else's.
+```bash
+python tools/build_denylist.py data/incoming/your-report.pdf
+make check-pii
+```
+
+**It never prints what it finds.** Output is counts and categories only, because a
+tool that echoes your address into a terminal has defeated its own purpose: scrollback
+gets screenshotted and transcripts get pasted into issues. Read
+`tools/denylist.txt` yourself if you want to check it.
+
+Two behaviours worth knowing:
+
+- It asks the adapters for your identifiers first, and only falls back to a regex
+  sweep if none returns any. An adapter that knows the format returns exactly the
+  values the retailer holds about you; a digit-run sweep over a purchase history
+  mostly returns product codes, and a denylist full of UPCs fires on innocent files.
+  A scanner people learn to bypass protects nobody.
+- Candidates that **already appear in committed files** are dropped, and reported.
+  A value sitting in the repository is a format constant or an ordinary word, not
+  your secret. If you think one of them really is your data, it is already in git
+  history — stop and read the top of this file.
+
+The denylist is gitignored and `build_denylist.py` refuses to write anywhere that is
+not. Keep it local, and know that it protects only your machine — the pattern rules
+are what protect everyone else's.
 
 ## Test data
 

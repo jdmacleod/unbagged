@@ -68,7 +68,8 @@ US_STATES = (
 )
 STREET_TYPES = (
     "St|Street|Ave|Avenue|Rd|Road|Blvd|Boulevard|Ln|Lane|Dr|Drive|Ct|Court|Way|Pl|"
-    "Place|Ter|Terrace|Cir|Circle|Hwy|Highway|Pkwy|Parkway|Trl|Trail|Loop"
+    "Place|Ter|Terrace|Cir|Circle|Hwy|Highway|Pkwy|Parkway|Trl|Trail|Loop|Row|Walk|"
+    "Mews|Crescent|Alley|Grove"
 )
 
 

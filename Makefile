@@ -8,7 +8,7 @@ PY := $(shell test -x .venv/bin/python && echo .venv/bin/python || echo $(BOOTST
 COMPOSE := docker compose
 DEV_COMPOSE := docker compose -f docker-compose.yml -f docker-compose.dev.yml
 
-.PHONY: help setup setup-frontend build-frontend serve up dev test lint check-pii check-pii-history fixtures fixtures-check clean
+.PHONY: help setup setup-frontend build-frontend serve up dev test lint denylist check-pii check-pii-history fixtures fixtures-check clean
 
 help:  ## Show this help
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -46,6 +46,10 @@ test:  ## Run the test suite
 
 lint:  ## Lint with ruff
 	$(PY) -m ruff check .
+
+denylist:  ## Build tools/denylist.txt from your own report (REPORT=path)
+	@test -n "$(REPORT)" || { echo "Usage: make denylist REPORT=data/incoming/your-report.pdf"; exit 1; }
+	$(PY) tools/build_denylist.py "$(REPORT)"
 
 check-pii:  ## Scan the working tree for personal data
 	$(PY) tools/scan_pii.py

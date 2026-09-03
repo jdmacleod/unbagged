@@ -13,10 +13,11 @@ Two problems have to be solved before any JSON can be parsed:
 
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass, field
 from typing import Any
+
+from unbagged.jsonscan import iter_json, unparseable_spans, unterminated_span
 
 # A line that is nothing but a small number. Note that this shape also describes
 # a pretty-printed JSON line holding a bare number, which is why matching is not
@@ -173,54 +174,6 @@ def find_sections(text: str) -> list[Section]:
     return sections
 
 
-def _scan_braces(text: str) -> tuple[list[tuple[int, int]], int | None]:
-    """Top-level {...} regions, plus where an unclosed one started.
-
-    Found by brace depth rather than by regex: braces inside JSON strings, and in
-    prose that happens to mention "{}", would otherwise swallow the document.
-
-    The second return value is what makes truncation visible. A report cut off
-    mid-blob has an opening brace that never closes, and reporting "the file ends
-    partway through" is far more use to someone than silently returning three
-    sections where there should be four.
-    """
-    spans: list[tuple[int, int]] = []
-    depth = 0
-    start = -1
-    in_string = False
-    escaped = False
-    for i, ch in enumerate(text):
-        if in_string:
-            if escaped:
-                escaped = False
-            elif ch == "\\":
-                escaped = True
-            elif ch == '"':
-                in_string = False
-            continue
-        if ch == '"':
-            in_string = True
-        elif ch == "{":
-            if depth == 0:
-                start = i
-            depth += 1
-        elif ch == "}" and depth:
-            depth -= 1
-            if depth == 0 and start >= 0:
-                spans.append((start, i + 1))
-                start = -1
-    return spans, (start if depth > 0 and start >= 0 else None)
-
-
-def _json_spans(text: str) -> list[tuple[int, int]]:
-    return _scan_braces(text)[0]
-
-
-def unterminated_span(text: str) -> int | None:
-    """Offset at which an unclosed JSON block begins, if the text is truncated."""
-    return _scan_braces(text)[1]
-
-
 def find_blobs(text: str, sections: list[Section] | None = None) -> list[Blob]:
     """Every parseable top-level JSON document in the text, in order.
 
@@ -229,15 +182,15 @@ def find_blobs(text: str, sections: list[Section] | None = None) -> list[Blob]:
     parse, because one corrupt section must not cost the other three.
     """
     sections = sections if sections is not None else find_sections(text)
-    blobs: list[Blob] = []
-    for start, end in _json_spans(text):
-        raw = text[start:end]
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError:
-            continue
-        blobs.append(Blob(data=data, header=header_for(sections, start), start=start, raw=raw))
-    return blobs
+    return [
+        Blob(
+            data=data,
+            header=header_for(sections, start),
+            start=start,
+            raw=text[start:end],
+        )
+        for start, end, data in iter_json(text)
+    ]
 
 
 def header_for(sections: list[Section], offset: int) -> str:
@@ -260,12 +213,20 @@ def blob_for_header(blobs: list[Blob], *headers: str) -> Blob | None:
     return None
 
 
-def unparseable_spans(text: str) -> list[tuple[int, int]]:
-    """JSON-shaped regions that did not parse, so the adapter can warn about them."""
-    bad = []
-    for start, end in _json_spans(text):
-        try:
-            json.loads(text[start:end])
-        except json.JSONDecodeError:
-            bad.append((start, end))
-    return bad
+__all__ = [
+    "ADVERTISING_HEADER",
+    "Blob",
+    "EMAIL_HEADER",
+    "LOYALTY_HEADER",
+    "PURCHASE_HEADERS",
+    "PageMap",
+    "SECTION_HEADERS",
+    "Section",
+    "blob_for_header",
+    "find_blobs",
+    "find_sections",
+    "header_for",
+    "strip_page_markers",
+    "unparseable_spans",
+    "unterminated_span",
+]
