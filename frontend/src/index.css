@@ -56,3 +56,30 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* Touch targets.
+   Every interactive element sat between 27px and 32px, against a 44px minimum.
+   Raising them everywhere would make a deliberately dense data app sparse on
+   the desktop where that density is the point, so this keys on the pointer
+   rather than the viewport: a narrow window on a laptop keeps the tight layout,
+   a phone or tablet gets targets a thumb can hit. `pointer: coarse` reports the
+   PRIMARY input, so a touchscreen laptop with a trackpad correctly stays fine.
+
+   Note for anyone verifying this: headless Chromium reports the host pointer,
+   not the emulated viewport, so this rule cannot be exercised by resizing the
+   window. It needs a real touch device or DevTools device emulation. */
+@media (pointer: coarse) {
+  button,
+  [role="button"],
+  select,
+  summary,
+  input:not([type="range"]):not([type="checkbox"]):not([type="radio"]) {
+    min-height: 44px;
+  }
+
+  /* Inline links in prose are exempt: a 44px line box inside a paragraph
+     breaks the text, and the surrounding text is the target anyway. */
+  a:not(:where(p, li, td) a) {
+    min-height: 44px;
+  }
+}

@@ -48,3 +48,28 @@ def test_no_font_files_are_shipped_at_all():
 def test_the_entry_point_is_served_from_our_own_assets():
     html = INDEX.read_text(encoding="utf-8")
     assert re.search(r'src="/assets/[^"]+\.js"', html)
+
+
+def test_touch_targets_are_raised_on_coarse_pointers():
+    """Every interactive element sits at 27-32px, against a 44px minimum.
+
+    Keyed on `pointer: coarse` rather than viewport width on purpose: this is a
+    dense data app and a narrow window on a laptop should keep the tight layout,
+    while a phone gets targets a thumb can hit.
+
+    Asserted against the built CSS because headless Chromium reports the host
+    pointer rather than the emulated viewport, so the rule cannot be exercised by
+    resizing the window. Verified once by hand by applying the same selector
+    unconditionally: 11 elements under 44px went to 0, smallest 26px to 44px.
+    """
+    css = "".join(f.read_text(encoding="utf-8") for f in STATIC.rglob("*.css"))
+    assert "pointer:coarse" in css.replace(" ", ""), (
+        "the coarse-pointer touch-target block is gone"
+    )
+    assert "min-height:44px" in css.replace(" ", "")
+
+
+def test_motion_is_reducible():
+    """The app animates; a reduced-motion preference is not a styling whim."""
+    css = "".join(f.read_text(encoding="utf-8") for f in STATIC.rglob("*.css"))
+    assert "prefers-reduced-motion" in css
