@@ -304,12 +304,28 @@ def _inference_blob(rng: random.Random) -> dict:
     }
 
 
-def _email_blob(fake: Faker, rng: random.Random, start: datetime) -> dict:
+# Visits land in opening hours. Times clustered around midnight are an artefact
+# of adding a random hour offset to a date, and they make the timeline view look
+# like a bug rather than a shopping pattern.
+OPENING_HOUR, CLOSING_HOUR = 7, 21
+
+
+def _shopping_time(rng: random.Random, day: datetime) -> datetime:
+    return day.replace(
+        hour=rng.randrange(OPENING_HOUR, CLOSING_HOUR),
+        minute=rng.randrange(0, 60),
+        second=rng.randrange(0, 60),
+    )
+
+
+def _email_blob(fake: Faker, rng: random.Random, start: datetime, address: str) -> dict:
     campaigns = (
         "Weekly Digital Deals", "Fuel Points Reminder", "Personalized Coupons",
         "New Store Opening", "Boost Membership Offer",
     )
     records = []
+    # One address, as a real account has. A different address per campaign would
+    # make the identity graph look like a dozen people.
     for i in range(rng.randrange(8, 14)):
         sent = start + timedelta(days=rng.randrange(0, 700), hours=rng.randrange(0, 24))
         records.append(
@@ -319,7 +335,7 @@ def _email_blob(fake: Faker, rng: random.Random, start: datetime) -> dict:
                 "sentTime": sent.strftime("%H:%M:%S"),
                 "opened": rng.choice(("Y", "N")),
                 "clicked": rng.choice(("Y", "N")),
-                "emailAddress": f"{fake.user_name()}@example.com",
+                "emailAddress": address,
                 "subscriptionStatus": "Subscribed" if i % 7 else "Unsubscribed",
             }
         )
@@ -388,10 +404,10 @@ def _purchase_blob(rng: random.Random, start: datetime, months: int) -> dict:
     index = 1
     end = start + timedelta(days=months * 30)
     while when < end:
-        when += timedelta(days=rng.randrange(2, 11), hours=rng.randrange(-4, 5))
+        when += timedelta(days=rng.randrange(2, 11))
         if when >= end:
             break
-        baskets.append(_basket(rng, when, index, start))
+        baskets.append(_basket(rng, _shopping_time(rng, when), index, start))
         index += 1
     return {"customer": [{"basket": baskets}]}
 
@@ -425,6 +441,9 @@ def build(seed: int = DEFAULT_SEED, *, months: int = 24) -> str:
     def blob(value: dict) -> str:
         return json.dumps(value, indent=2)
 
+    identity = _identity_blob(fake, rng, loyalty)
+    email_address = identity["customer"][0]["emailAddress"]
+
     sections = [
         "KROGER CONSUMER PRIVACY REQUEST RESPONSE",
         "",
@@ -437,7 +456,7 @@ def build(seed: int = DEFAULT_SEED, *, months: int = 24) -> str:
         "",
         "Data we hold related to our Loyalty program:",
         "",
-        blob(_identity_blob(fake, rng, loyalty)),
+        blob(identity),
         "",
         "Data we hold to communicate and advertise to you in a personalized way:",
         "",
@@ -445,7 +464,7 @@ def build(seed: int = DEFAULT_SEED, *, months: int = 24) -> str:
         "",
         "Email Information",
         "",
-        blob(_email_blob(fake, rng, start)),
+        blob(_email_blob(fake, rng, start, email_address)),
         "",
         "Data related to in-store services:",
         "",

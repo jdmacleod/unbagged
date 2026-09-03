@@ -118,6 +118,40 @@ Two things that look like bugs and are not:
   filtered return makes the spend total wrong in the user's favour, which is the
   wrong direction to be wrong in.
 
+## Judgment calls the adapter makes
+
+These are decisions, not readings. Each one could have gone the other way, and a
+future maintainer should be able to see why it did not.
+
+**Timestamps carry no timezone.** The report gives `date` and `time` as a
+store-local wall clock with no zone. The adapter stores `YYYY-MM-DDTHH:MM:SS`
+with no `Z`, because stamping UTC on a 19:30 California purchase would move it to
+the following day in every view. Sorting is unaffected. The canonical schema says
+timestamps are UTC; this is the documented exception, and it is honest about what
+the retailer actually disclosed.
+
+**Channel is left `NULL`.** There is no channel field in the response. Defaulting
+to `in_store` would be a claim the data does not support — and it would hide the
+fact that Kroger holds online order data it did not disclose here.
+
+**Split tenders are joined.** A basket with two `tenders[]` entries becomes
+`"CREDIT + GIFT CARD"` rather than just the first. Dropping the second would
+quietly rewrite the receipt.
+
+**`petOwner` is appended but derivable.** It is classified
+`APPENDED_THIRD_PARTY` like the rest of the demographics block, but flagged
+`derivable_from_txns=True`: pet food appears as line items in these very baskets.
+The two fields answer different questions — where it most likely came from, and
+whether the retailer *could* have worked it out from what it already had.
+
+**`onlineShopperLikelihood` is derivable-unknown.** Kroger holds its own online
+order records, but this report discloses no channel field, so from the data
+provided the question cannot be answered. `NULL`, not `False`. The tri-state
+exists for exactly this.
+
+**The address is household-scoped.** An address describes everyone living there,
+not only the person who enrolled.
+
 ## Coverage window
 
 24 months, stated in the prose. The report directs the requester to email the

@@ -75,7 +75,7 @@ def looks_like_pdf(path: Path) -> bool:
         return False
 
 
-def extract_pdf(path: Path) -> tuple[str, ...]:
+def extract_pdf(path: Path, max_pages: int | None = None) -> tuple[str, ...]:
     try:
         import pdfplumber
     except ImportError as exc:  # pragma: no cover - dependency is declared
@@ -85,7 +85,8 @@ def extract_pdf(path: Path) -> tuple[str, ...]:
 
     try:
         with pdfplumber.open(str(path)) as pdf:
-            return tuple((page.extract_text() or "") for page in pdf.pages)
+            pages = pdf.pages if max_pages is None else pdf.pages[:max_pages]
+            return tuple((page.extract_text() or "") for page in pages)
     except ExtractionError:
         raise
     except Exception as exc:
@@ -105,8 +106,12 @@ def extract_text_file(path: Path) -> tuple[str, ...]:
     return (content,)
 
 
-def extract(document: SourceDocument) -> ExtractedDocument:
-    """Read one stored document into pages of text."""
+def extract(document: SourceDocument, max_pages: int | None = None) -> ExtractedDocument:
+    """Read one stored document into pages of text.
+
+    `max_pages` exists for sniff(): deciding which adapter owns a bundle should
+    not cost a full extraction of a 48-page PDF.
+    """
     if not document.path:
         raise ExtractionError(f"{document.original_filename} has no stored path")
     path = Path(document.path)
@@ -115,7 +120,7 @@ def extract(document: SourceDocument) -> ExtractedDocument:
 
     suffix = path.suffix.lower()
     if suffix == ".pdf" or looks_like_pdf(path):
-        pages = extract_pdf(path)
+        pages = extract_pdf(path, max_pages)
         media_type = "application/pdf"
     elif suffix in TEXT_SUFFIXES or document.media_type == "text/plain":
         pages = extract_text_file(path)
