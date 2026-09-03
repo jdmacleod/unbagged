@@ -114,37 +114,54 @@ function TimelineBody({
           filteredCount !== stats.basket_count ? ` of ${number(stats.basket_count)}` : ""
         })`}
         actions={
-          <div className="flex flex-wrap gap-2">
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="product or UPC"
-              className="w-40 rounded border border-stone-300 px-2 py-1 text-xs dark:border-stone-700 dark:bg-stone-950"
-            />
-            <select
-              value={store}
-              onChange={(e) => setStore(e.target.value)}
-              className="rounded border border-stone-300 px-2 py-1 text-xs dark:border-stone-700 dark:bg-stone-950"
-            >
-              <option value="">every store</option>
-              {stats.stores.map((s) => (
-                <option key={s.store_code} value={s.store_code}>
-                  {s.store_code} ({s.visits})
-                </option>
-              ))}
-            </select>
-            <input
-              type="date"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-              className="rounded border border-stone-300 px-2 py-1 text-xs dark:border-stone-700 dark:bg-stone-950"
-            />
-            <input
-              type="date"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              className="rounded border border-stone-300 px-2 py-1 text-xs dark:border-stone-700 dark:bg-stone-950"
-            />
+          // Every control here was labelled only by its placeholder, and the two
+          // date inputs by nothing at all: a browser format hint is not a label,
+          // and it disappears the moment you type. Nothing said the two dates
+          // were a range. Visible labels, and py-1.5 for a slightly less
+          // hostile touch target.
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex flex-col gap-0.5 text-[11px] text-stone-500 dark:text-stone-400">
+              Search
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="product or UPC"
+                className="w-40 rounded border border-stone-300 px-2 py-1.5 text-xs text-stone-900 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100"
+              />
+            </label>
+            <label className="flex flex-col gap-0.5 text-[11px] text-stone-500 dark:text-stone-400">
+              Store
+              <select
+                value={store}
+                onChange={(e) => setStore(e.target.value)}
+                className="rounded border border-stone-300 px-2 py-1.5 text-xs text-stone-900 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100"
+              >
+                <option value="">every store</option>
+                {stats.stores.map((s) => (
+                  <option key={s.store_code} value={s.store_code}>
+                    {s.store_code} ({s.visits})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-0.5 text-[11px] text-stone-500 dark:text-stone-400">
+              From
+              <input
+                type="date"
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+                className="rounded border border-stone-300 px-2 py-1.5 text-xs text-stone-900 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100"
+              />
+            </label>
+            <label className="flex flex-col gap-0.5 text-[11px] text-stone-500 dark:text-stone-400">
+              To
+              <input
+                type="date"
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+                className="rounded border border-stone-300 px-2 py-1.5 text-xs text-stone-900 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100"
+              />
+            </label>
           </div>
         }
       >
