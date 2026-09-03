@@ -30,8 +30,31 @@ docker compose up
 ```
 
 Then open <http://localhost:8420> and drag the retailer's response onto the upload
-area. Your database and your uploads live in `./data`, on your disk — back the
-whole thing up by copying that directory.
+area.
+
+**The first run builds the app**, which took 75 seconds on a clean machine with
+nothing cached: it pulls two base images, compiles the UI, and installs the
+Python dependencies. There is no prebuilt image to download, deliberately — you
+run what you can read. Later starts are immediate.
+
+Reading a long report takes 10 to 30 seconds. A 116-page PDF is about 14 seconds
+of text extraction, and the page tells you it is working.
+
+Your database and your uploads live in `./data`, on your disk — back the whole
+thing up by copying that directory.
+
+### Running it
+
+| | |
+|---|---|
+| `docker compose up` or `make up` | Start it, on <http://localhost:8420> |
+| `make down` | Stop it and remove the container |
+| `make logs` | Follow the logs |
+| `make reset CONFIRM=yes` | Move `./data` aside to `data.bak-<timestamp>` and start empty. Nothing is deleted; remove the backup yourself when you are sure. |
+
+To use a different port, copy `.env.example` to `.env` and set `UNBAGGED_PORT`.
+The app is only ever published on `127.0.0.1`; that part is not configurable, and
+it is what keeps your report off your local network.
 
 ## What you get
 
@@ -80,10 +103,23 @@ touching any code outside the retailer's own package.
 ```bash
 make setup           # venv, dev deps, git hooks
 make setup-frontend  # npm install
-make dev             # compose + Vite with hot reload
-make test
+make dev             # compose + Vite, on http://localhost:5173
+make test            # fast suite
+make test-container  # slow: builds and runs a real container
 make check-pii       # run this before every commit
 ```
+
+`make dev` serves **one** URL, <http://localhost:5173>, with hot reload for both
+the UI and the backend. The API is proxied at `/api` on that same port. The
+backend's own port is not published in dev, because it would serve the UI bundle
+frozen into the image at build time with no way to tell the difference in a
+browser.
+
+`make test-container` is the tier that runs a real container: effective uid,
+self-healing data permissions, bounded restart, and that the production image is
+the runtime stage. Tests that need real uid semantics skip loudly on Docker
+Desktop, where bind-mount ownership is remapped and they would pass without
+checking anything.
 
 `make help` lists the rest.
 

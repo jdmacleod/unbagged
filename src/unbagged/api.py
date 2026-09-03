@@ -127,7 +127,7 @@ def list_requests(conn: Conn) -> dict[str, Any]:
 
 
 @app.post("/api/requests", status_code=201)
-async def create_request(
+def create_request(
     conn: Conn,
     files: Annotated[list[UploadFile], File()],
     declared_retailer: Annotated[str | None, Form()] = None,
@@ -136,11 +136,21 @@ async def create_request(
 
     The declared retailer is a hint, not an instruction: the adapter is chosen by
     what the documents contain.
+
+    Deliberately `def`, not `async def`. Parsing a real report is around 14
+    seconds of pdfplumber, and on an `async def` endpoint that runs on the event
+    loop, so every other request queues behind it — including the container's own
+    HEALTHCHECK, which then times out and reports the container unhealthy while
+    it is merely busy. A sync endpoint runs in the threadpool instead, so the
+    upload is slow for the person uploading and for nobody else.
+
+    `upload.file.read()` rather than `await upload.read()` for the same reason:
+    it is the synchronous accessor on the same spooled file.
     """
     stored = []
     total = 0
     for upload in files:
-        content = await upload.read()
+        content = upload.file.read()
         total += len(content)
         if total > MAX_UPLOAD_BYTES:
             raise ingest.IngestError(

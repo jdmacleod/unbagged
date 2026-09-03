@@ -104,12 +104,20 @@ class GenericAdapter:
     fallback = True
 
     def sniff(self, bundle: SourceBundle) -> float:
+        """Claim anything that yields text at all.
+
+        Reads the head first, then falls back to the whole document. A report
+        whose first pages are a scanned cover sheet yields nothing from the head
+        and would otherwise be rejected outright, when the text it does contain
+        further in is exactly what this adapter exists to record.
+        """
         for document in bundle.documents:
-            try:
-                if extract(document, max_pages=SNIFF_PAGES).text.strip():
-                    return FALLBACK_CONFIDENCE
-            except Exception:
-                continue
+            for max_pages in (SNIFF_PAGES, None):
+                try:
+                    if extract(document, max_pages=max_pages).text.strip():
+                        return FALLBACK_CONFIDENCE
+                except Exception:
+                    break  # unreadable as a whole; a longer read will not help
         return 0.0
 
     def parse(self, bundle: SourceBundle) -> ParseResult:

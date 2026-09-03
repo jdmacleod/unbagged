@@ -8,7 +8,7 @@ PY := $(shell test -x .venv/bin/python && echo .venv/bin/python || echo $(BOOTST
 COMPOSE := docker compose
 DEV_COMPOSE := docker compose -f docker-compose.yml -f docker-compose.dev.yml
 
-.PHONY: help setup setup-frontend build-frontend serve up dev test lint denylist check-pii check-pii-history fixtures fixtures-check clean
+.PHONY: help setup setup-frontend build-frontend serve up down logs reset dev test test-container lint denylist check-pii check-pii-history fixtures fixtures-check clean
 
 help:  ## Show this help
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -33,16 +33,42 @@ build-frontend:  ## Build the UI into the Python package
 serve:  ## Run the app locally without Docker (needs make build-frontend first)
 	$(PY) -m unbagged.cli serve
 
-up:  ## Start the app (single container)
-	@test -f docker-compose.yml || { echo "Docker packaging lands in M6 (see HANDOFF.md §9)."; exit 1; }
+up:  ## Start the app, then open http://localhost:8420
 	$(COMPOSE) up
 
-dev:  ## Start the app with a Vite dev server and HMR
-	@test -f docker-compose.dev.yml || { echo "Dev overlay lands in M6 (see HANDOFF.md §9)."; exit 1; }
+down:  ## Stop the app and remove its container
+	$(COMPOSE) down
+
+logs:  ## Follow the app's logs
+	$(COMPOSE) logs -f
+
+reset:  ## Move ./data aside and start empty (CONFIRM=yes required)
+	@test "$(CONFIRM)" = "yes" || { \
+		echo "This moves ./data aside — your uploaded reports and your database."; \
+		echo "Nothing is deleted: it is renamed to data.bak-<timestamp>, so you can"; \
+		echo "move it back or remove it yourself once you are sure."; \
+		echo ""; \
+		echo "  make reset CONFIRM=yes"; \
+		exit 1; }
+	$(COMPOSE) down 2>/dev/null || true
+	@if [ -d data ]; then \
+		backup="data.bak-$$(date +%Y%m%d-%H%M%S)"; \
+		mv data "$$backup"; \
+		echo "Moved ./data to ./$$backup — delete it yourself when you are ready:"; \
+		echo "  rm -rf $$backup"; \
+	else \
+		echo "No ./data directory to move."; \
+	fi
+
+dev:  ## Start the dev stack, then open http://localhost:5173
+	@echo "Dev mode serves one URL: http://localhost:5173 (API proxied at /api)."
 	$(DEV_COMPOSE) up
 
-test:  ## Run the test suite
+test:  ## Run the fast test suite
 	$(PY) -m pytest -q
+
+test-container:  ## Run the slow tests that build and run a real container
+	$(PY) -m pytest -q -m container -p no:cacheprovider
 
 lint:  ## Lint with ruff
 	$(PY) -m ruff check .

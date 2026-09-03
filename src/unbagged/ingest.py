@@ -23,6 +23,7 @@ from pathlib import Path
 
 from unbagged import repository
 from unbagged.adapters.registry import Match, registry
+from unbagged.extraction import ExtractionError, extract
 from unbagged.models import AdapterError, ParseResult, SourceBundle, SourceDocument
 
 DEFAULT_INCOMING = Path("data/incoming")
@@ -135,11 +136,7 @@ def ingest(
     bundle = bundle_from(files, declared_retailer)
     match = registry.select(bundle)
     if match is None:
-        raise IngestError(
-            "No adapter recognised this response. If you know which retailer sent "
-            "it, say so on the upload form; otherwise it may need a new adapter — "
-            "see docs/writing-an-adapter.md."
-        )
+        raise IngestError(_why_nothing_matched(bundle))
 
     try:
         result = match.adapter.parse(bundle)
@@ -163,6 +160,52 @@ def ingest(
     )
     request_id = _save(conn, result, documents)
     return IngestResult(request_id=request_id, match=match, result=result)
+
+
+def _why_nothing_matched(bundle: SourceBundle) -> str:
+    """Explain a failed upload using the reason the code already computed.
+
+    Every adapter's `sniff()` swallows extraction failures, because a sniff must
+    not raise. The consequence was that a .zip and a scanned PDF — the two most
+    likely things to arrive after a Kroger PDF — both produced a message telling
+    the user to go read the adapter-authoring guide, while `extraction.py` had
+    already worked out that one needed unzipping and the other had no text layer.
+
+    Re-extracting here is deliberate: a few wasted seconds on a file that was
+    never going to parse, in exchange for telling the person what is actually
+    wrong with it.
+    """
+    reasons: list[str] = []
+    readable = 0
+    for document in bundle.documents:
+        try:
+            extract(document)
+            readable += 1
+        except ExtractionError as exc:
+            message = str(exc)
+            if message not in reasons:
+                reasons.append(message)
+        except Exception:
+            # A malformed file that fails in some other way is still unreadable;
+            # it just has no message worth quoting.
+            pass
+
+    if reasons and not readable:
+        return " ".join(reasons)
+    if reasons:
+        # A mixed bundle: some files read, some did not. Name both halves rather
+        # than picking one and implying the whole upload failed for that reason.
+        return (
+            f"{len(reasons)} of the uploaded files could not be read: "
+            + " ".join(reasons)
+            + " The remaining files were readable but matched no adapter."
+        )
+    # Everything extracted cleanly; the format itself is simply unknown.
+    return (
+        "This file was readable, but no adapter recognised the format. If you "
+        "know which retailer sent it, say so on the upload form; otherwise it "
+        "may need a new adapter — see docs/writing-an-adapter.md."
+    )
 
 
 def _save(conn, result: ParseResult, documents) -> int:

@@ -49,6 +49,12 @@ packages = ["src/unbagged"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src", "."]
+# The container tier builds an image and runs it. Excluded from the default run
+# so `make test` stays a few seconds; `make test-container` opts in.
+addopts = "-m 'not container'"
+markers = [
+    "container: runs a real container (slow, needs Docker)",
+]
 
 [tool.ruff]
 line-length = 100

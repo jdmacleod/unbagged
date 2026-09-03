@@ -3,31 +3,36 @@
 #
 #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 #
-# or just `make dev`.
+# or just `make dev`, which prints the URL.
+#
+# Dev mode publishes ONE port: http://localhost:5173. The API is reachable
+# through it at /api, because Vite proxies to the backend over the compose
+# network. The backend's own port is deliberately not published — it would serve
+# the UI bundle frozen into the image at build time, with no hot reload and no
+# indication that it was stale, and there is no way to tell the two apart from
+# the browser.
 services:
   unbagged:
     build:
       context: .
-      target: runtime
-    command:
-      - uvicorn
-      - unbagged.api:app
-      - --host
-      - 0.0.0.0
-      - --port
-      - "8000"
-      - --reload
+      # The dev stage reinstalls the package editable so /app/src is what gets
+      # imported. Without it, uvicorn --reload restarts and re-imports the same
+      # unchanged copy from site-packages. Environment defaults are inherited
+      # from the runtime stage via `FROM runtime AS dev`.
+      target: dev
+    ports: !override []
     volumes:
       - ./data:/data
       - ./src:/app/src:ro
-    environment:
-      UNBAGGED_DB: /data/db/unbagged.sqlite
-      UNBAGGED_INCOMING: /data/incoming
 
   web:
     image: node:22-slim
     working_dir: /app/frontend
-    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0"
+    # npm ci deletes node_modules before installing, so the named volume below
+    # buys nothing on a re-run and every start pays the full ~9s. npm install is
+    # a no-op when the lockfile already matches what is on disk; --no-audit and
+    # --no-fund drop two network round trips we do not need.
+    command: sh -c "npm install --no-audit --no-fund && npm run dev -- --host 0.0.0.0"
     volumes:
       - ./frontend:/app/frontend
       # Keep the container's node_modules out of the host checkout, so a Linux

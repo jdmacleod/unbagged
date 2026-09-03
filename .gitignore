@@ -10,6 +10,7 @@
 # Nothing under these paths can be re-included: git will not descend into an
 # excluded directory, which is exactly the property we want here.
 /data/
+/data.bak-*/
 /output/
 *.sqlite
 *.sqlite3

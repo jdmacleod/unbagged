@@ -90,14 +90,30 @@ class TestUpload:
         assert any("no adapter recognised" in w["message"].lower()
                    for w in body["warnings"])
 
-    def test_a_file_with_no_readable_text_is_refused(self, client):
-        # Nothing to find a finding in. Distinct from a letter that says nothing.
+    def test_a_scanned_pdf_is_told_it_has_no_text_layer(self, client):
+        """The app already knew this and used to say something else.
+
+        A scanned PDF and a .zip both used to return "may need a new adapter —
+        see docs/writing-an-adapter.md", which a shopper cannot act on, while
+        extraction.py had already worked out the real reason.
+        """
         response = client.post(
             "/api/requests",
             files={"files": ("scan.pdf", b"%PDF-1.4\nnot really\n", "application/pdf")},
         )
         assert response.status_code == 400
-        assert "adapter" in response.json()["detail"].lower()
+        detail = response.json()["detail"].lower()
+        assert "no text" in detail or "ocr" in detail
+        assert "writing-an-adapter" not in detail
+
+    def test_an_archive_is_told_to_unzip_first(self, client):
+        # A zip is what Safeway sends, per HANDOFF.md section 4.
+        response = client.post(
+            "/api/requests",
+            files={"files": ("bundle.zip", b"PK\x03\x04nope", "application/zip")},
+        )
+        assert response.status_code == 400
+        assert "unzip" in response.json()["detail"].lower()
 
     def test_the_same_file_twice_in_one_upload_is_refused(self, client):
         payload = FIXTURE.read_bytes()
