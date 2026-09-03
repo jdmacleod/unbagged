@@ -39,7 +39,7 @@ from unbagged.adapters.base import (
     absent_disclosures,
 )
 from unbagged.adapters.kroger import reader
-from unbagged.extraction import ExtractedDocument, ExtractionError, extract, extract_all
+from unbagged.extraction import ExtractedDocument, extract, extract_all
 
 RETAILER_ID = "kroger"
 DISPLAY_NAME = "Kroger"
@@ -177,7 +177,9 @@ class KrogerAdapter:
                 score = max(score, score + 0.1)
             try:
                 head = extract(document, max_pages=SNIFF_PAGES).text
-            except (ExtractionError, Exception):
+            except Exception:
+                # sniff() must not raise: an unreadable file is simply not a
+                # Kroger report as far as selection is concerned.
                 continue
             if reader.SECTION_HEADERS[0] in head:
                 score += 0.5
@@ -211,6 +213,16 @@ class KrogerAdapter:
             warnings.error(
                 "A JSON block in the report did not parse and was skipped.",
                 locator=f"offset {start}-{end}, page {pages.page_of(start)}",
+            )
+        truncated = reader.unterminated_span(clean)
+        if truncated is not None:
+            # Saying "the file ends partway through, from about page 34" is far
+            # more use than silently returning three sections of four.
+            warnings.error(
+                "The report appears to be truncated: a data section begins and "
+                "never ends. Everything before this point was read; anything "
+                "after it is missing from the file, not from the retailer.",
+                locator=f"offset {truncated}, page {pages.page_of(truncated)}",
             )
         if not sections:
             warnings.error(

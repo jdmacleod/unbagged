@@ -159,6 +159,24 @@ privacy office separately for data back to 2022, which the adapter records as a
 `supplemental_period` follow-up rather than as a compliance failure — see the
 lookback note in `docs/legal-basis.md`.
 
+## Failure modes and what the adapter does about them
+
+| Input | Behaviour |
+|---|---|
+| File truncated mid-blob | Everything before the cut is kept. One ERROR warning naming the page, and saying the data is missing from the *file*, not from the retailer. |
+| One basket malformed | That basket is skipped with a warning; the others parse. |
+| Basket has no date | Skipped — an undated transaction cannot appear on a timeline. |
+| `items` is not a list | The basket survives with no line items, and says so. |
+| Amount is `"$1,234.56"` or `""` or junk | Coerced where possible, `NULL` otherwise. Never guessed. |
+| One JSON blob is corrupt | The other three still parse. |
+| Prose letter, no data at all | Parses to an empty result with all eight disclosures recorded. A retailer that sends no data is itself a finding, not an exception. |
+| Nothing readable in the bundle | `AdapterError` with a message written for the person who uploaded it, mentioning the scanned-PDF case. |
+
+The distinction that matters in the truncation message: a short file is the
+uploader's problem to re-download, while a short *response* is the retailer's
+problem to answer for. Conflating them would put a compliance finding in front of
+someone whose download just failed.
+
 ## The synthetic fixture
 
 `fixtures/synthetic_report.txt`, produced by `fixtures/generate.py` and

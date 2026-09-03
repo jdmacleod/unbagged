@@ -173,11 +173,16 @@ def find_sections(text: str) -> list[Section]:
     return sections
 
 
-def _json_spans(text: str) -> list[tuple[int, int]]:
-    """Offsets of top-level {...} regions, found by brace depth.
+def _scan_braces(text: str) -> tuple[list[tuple[int, int]], int | None]:
+    """Top-level {...} regions, plus where an unclosed one started.
 
-    Braces inside strings do not count; a report that mentions "{}" in prose
-    would otherwise swallow the rest of the document.
+    Found by brace depth rather than by regex: braces inside JSON strings, and in
+    prose that happens to mention "{}", would otherwise swallow the document.
+
+    The second return value is what makes truncation visible. A report cut off
+    mid-blob has an opening brace that never closes, and reporting "the file ends
+    partway through" is far more use to someone than silently returning three
+    sections where there should be four.
     """
     spans: list[tuple[int, int]] = []
     depth = 0
@@ -204,7 +209,16 @@ def _json_spans(text: str) -> list[tuple[int, int]]:
             if depth == 0 and start >= 0:
                 spans.append((start, i + 1))
                 start = -1
-    return spans
+    return spans, (start if depth > 0 and start >= 0 else None)
+
+
+def _json_spans(text: str) -> list[tuple[int, int]]:
+    return _scan_braces(text)[0]
+
+
+def unterminated_span(text: str) -> int | None:
+    """Offset at which an unclosed JSON block begins, if the text is truncated."""
+    return _scan_braces(text)[1]
 
 
 def find_blobs(text: str, sections: list[Section] | None = None) -> list[Blob]:
