@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { api } from "../api";
 import { useAsync } from "../components/useAsync";
 import { Card, Empty, ErrorBox, Spinner } from "../components/ui";
@@ -162,6 +162,37 @@ export function Compliance() {
 function Letter({ requestId }: { requestId: number }) {
   const letter = useAsync(() => api.followUpLetter(requestId), [requestId]);
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
+  const draft = useRef<HTMLTextAreaElement>(null);
+
+  // The Clipboard API rejects more often than it looks: permission denied, the
+  // page not focused, Firefox's stricter policy. And over plain http to a LAN
+  // address — which the README documents as a supported override — the whole
+  // API is undefined, so `navigator.clipboard?.writeText(...)` short-circuits
+  // and nothing happens at all. Both paths used to leave the button reading
+  // "Copy" with no error, no feedback, and an unhandled rejection in the
+  // console. Now the failure selects the draft so it can be copied by hand.
+  function copy() {
+    const text = letter.data?.letter;
+    if (!text) return;
+    const fallback = () => {
+      setCopyFailed(true);
+      draft.current?.focus();
+      draft.current?.select();
+    };
+    if (!navigator.clipboard) {
+      fallback();
+      return;
+    }
+    navigator.clipboard.writeText(text).then(
+      () => {
+        setCopyFailed(false);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      },
+      fallback,
+    );
+  }
 
   if (letter.error) return <ErrorBox error={letter.error} />;
   if (!letter.data) return <Spinner label="Drafting" />;
@@ -170,6 +201,7 @@ function Letter({ requestId }: { requestId: number }) {
     <div className="mt-3">
       <p className="mb-2 text-xs text-amber-800 dark:text-amber-300">{letter.data.note}</p>
       <textarea
+        ref={draft}
         readOnly
         value={letter.data.letter}
         rows={18}
@@ -177,18 +209,15 @@ function Letter({ requestId }: { requestId: number }) {
       />
       <div className="mt-2 flex items-center gap-3">
         <button
-          onClick={() => {
-            void navigator.clipboard?.writeText(letter.data!.letter).then(() => {
-              setCopied(true);
-              setTimeout(() => setCopied(false), 2000);
-            });
-          }}
+          onClick={copy}
           className="rounded border border-stone-300 px-3 py-1 text-xs dark:border-stone-700"
         >
           {copied ? "Copied" : "Copy"}
         </button>
         <span className="text-xs text-stone-500 dark:text-stone-400">
-          You send this yourself. unbagged never contacts anyone on your behalf.
+          {copyFailed
+            ? "Your browser would not let the page copy for you. The draft is selected — copy it yourself."
+            : "You send this yourself. unbagged never contacts anyone on your behalf."}
         </span>
       </div>
     </div>
