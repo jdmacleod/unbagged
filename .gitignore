@@ -26,6 +26,11 @@
 # The PII scanner's literal denylist is itself a PII file.
 tools/denylist.txt
 
+# gstack tool output: QA reports, design audits, screenshots. Artifacts about
+# the project, not part of it, and they would otherwise land as untracked files
+# in a repo whose whole posture is that stray files are a hazard.
+/.gstack/
+
 # Local overrides
 *.local.*
 .env
