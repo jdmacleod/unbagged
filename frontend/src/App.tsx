@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "./api";
 import { useAsync } from "./components/useAsync";
 import { Upload } from "./components/Upload";
@@ -19,13 +19,53 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]["id"];
 
+const TAB_IDS = TABS.map((t) => t.id) as readonly string[];
+
+/** Which view the URL is asking for. Falls back to the default on anything
+ *  unrecognised, so a hand-edited or stale link still lands somewhere sane. */
+function readUrl(): { tab: TabId; request: number | null } {
+  const params = new URLSearchParams(window.location.search);
+  const tab = params.get("tab");
+  const request = Number(params.get("r"));
+  return {
+    tab: (TAB_IDS.includes(tab ?? "") ? tab : "timeline") as TabId,
+    request: Number.isFinite(request) && request > 0 ? request : null,
+  };
+}
+
 export default function App() {
-  const [tab, setTab] = useState<TabId>("timeline");
-  const [selected, setSelected] = useState<number | null>(null);
+  // View state lives in the URL. Without it the tabs were pure React state, so
+  // the browser back button walked out of the app entirely rather than to the
+  // previous view, a reload always dumped you back on Timeline, and there was
+  // no way to bookmark or send someone a link to the compliance matrix.
+  const [{ tab, request: selected }, setView] = useState(readUrl);
+
+  function go(next: Partial<{ tab: TabId; request: number | null }>) {
+    const merged = { tab, request: selected, ...next };
+    const params = new URLSearchParams();
+    params.set("tab", merged.tab);
+    if (merged.request !== null) params.set("r", String(merged.request));
+    window.history.pushState(merged, "", `?${params}`);
+    setView(merged);
+  }
+
+  useEffect(() => {
+    // Back and forward restore a view instead of leaving the app.
+    const onPop = () => setView(readUrl());
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
   const requests = useAsync(() => api.requests(), []);
 
   const rows = requests.data?.requests ?? [];
-  const current = selected ?? rows[0]?.id ?? null;
+  // A bookmarked ?r= can outlive the response it names — `make reset` is the
+  // obvious way. Falling back to whatever is loaded beats showing "No request
+  // with id 999" beside a retailer selector confidently displaying a different
+  // one. Putting view state in the URL is what made stale links possible, so
+  // handling them is part of the same change.
+  const known = rows.some((r) => r.id === selected);
+  const current = (known ? selected : null) ?? rows[0]?.id ?? null;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
@@ -42,7 +82,7 @@ export default function App() {
           {TABS.map((t) => (
             <button
               key={t.id}
-              onClick={() => setTab(t.id)}
+              onClick={() => go({ tab: t.id })}
               title={t.hint}
               className={`rounded-full px-3 py-1.5 text-sm transition ${
                 tab === t.id
@@ -61,7 +101,7 @@ export default function App() {
               title="Which retailer's response to show"
               className="ml-auto rounded-md border border-stone-300 bg-white px-2 py-1.5 text-sm dark:border-stone-700 dark:bg-stone-900"
               value={current ?? ""}
-              onChange={(e) => setSelected(Number(e.target.value))}
+              onChange={(e) => go({ request: Number(e.target.value) })}
             >
               {rows.map((r) => (
                 <option key={r.id} value={r.id}>
