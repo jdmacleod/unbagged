@@ -316,15 +316,40 @@ class TestCompare:
         assert len(data["requests"]) == 1
 
     def test_two_retailers_compare(self, client, uploaded):
-        with FIXTURE.open("rb") as fh:
-            client.post("/api/requests", files={"files": ("second.txt", fh, "text/plain")})
+        """Two retailers means two different responses.
+
+        This used to create its second retailer by re-uploading the identical
+        fixture, which only worked because of the bug fixed in ISSUE-002: the
+        same report could be ingested twice as two indistinguishable requests.
+        That is not what two retailers looks like, and the assertion that both
+        columns held identical counts was really asserting the duplicate.
+
+        Updated by /qa on 2026-09-03 rather than deleted: the intent, that
+        Compare works with more than one response, is preserved and now tested
+        against a genuinely different second response.
+        """
+        client.post(
+            "/api/requests",
+            files={"files": ("letter.txt", b"Dear customer, we do not sell data.\n",
+                             "text/plain")},
+            data={"declared_retailer": "Corner Market"},
+        )
         data = client.get("/api/compare").json()
         assert data["comparable"] is True
         assert len(data["requests"]) == 2
-        for request in data["requests"]:
-            assert request["identifier_count"] > 0
-            assert request["appended_inference_count"] > 0
-            assert request["absent_disclosures"] == 7
+
+        by_name = {r["display_name"]: r for r in data["requests"]}
+        kroger = by_name["Kroger"]
+        assert kroger["identifier_count"] > 0
+        assert kroger["appended_inference_count"] > 0
+        assert kroger["absent_disclosures"] == 7
+
+        # The second retailer disclosed nothing, so its metrics are null rather
+        # than zero, and its absent count is still a real finding.
+        letter = by_name["Corner Market"]
+        assert letter["disclosed"] is False
+        assert letter["identifier_count"] is None
+        assert letter["absent_disclosures"] > 0
 
 
 class TestPriceHistory:
