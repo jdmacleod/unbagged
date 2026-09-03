@@ -17,6 +17,14 @@ from typing import Any
 from unbagged.models import DisclosureCategory, DisclosureStatus, InferenceOrigin
 
 
+def _escape_like(value: str) -> str:
+    """Neutralise LIKE's wildcards so a search matches what was typed.
+
+    Backslash first, or it would escape the escapes added after it.
+    """
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def _rows(conn: sqlite3.Connection, sql: str, params: tuple = ()) -> list[dict[str, Any]]:
     return [dict(r) for r in conn.execute(sql, params)]
 
@@ -83,11 +91,18 @@ def timeline(
         where.append("t.occurred_at <= ?")
         params.append(f"{date_to}T23:59:59" if len(date_to) == 10 else date_to)
     if query:
+        # Escaped, because LIKE treats % and _ as wildcards and the search box
+        # feeds it raw user input. Typing "%" used to return every basket and
+        # "_" matched any single character, so a product code containing an
+        # underscore silently over-matched with nothing to explain why.
+        # (Injection was never possible; the value has always been bound.)
+        pattern = f"%{_escape_like(query)}%"
         where.append(
             "EXISTS (SELECT 1 FROM txn_item i WHERE i.txn_id = t.id"
-            " AND (i.description_raw LIKE ? OR i.upc LIKE ?))"
+            " AND (i.description_raw LIKE ? ESCAPE '\\'"
+            " OR i.upc LIKE ? ESCAPE '\\'))"
         )
-        params.extend([f"%{query}%", f"%{query}%"])
+        params.extend([pattern, pattern])
 
     clause = " AND ".join(where)
     baskets = _rows(

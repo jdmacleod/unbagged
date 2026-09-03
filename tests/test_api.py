@@ -465,3 +465,53 @@ class TestDuplicateAcrossRequests:
                 "/api/requests", files={"files": ("again.txt", fh, "text/plain")}
             )
         assert again.status_code == 201
+
+
+class TestSearchWildcards:
+    """Regression: ISSUE-001 — LIKE wildcards leaked from the search box
+    Found by /qa on 2026-09-03
+    Report: .gstack/qa-reports/qa-report-localhost8420-2026-09-03.md
+
+    The search fed raw input into a LIKE pattern. "%" returned every basket and
+    "_" matched any single character, so a product code containing an underscore
+    silently over-matched with nothing on screen to explain why. The value was
+    always bound, so injection was never possible — this is a correctness bug,
+    not a security one.
+    """
+
+    def test_a_percent_matches_a_literal_percent_not_everything(self, client, uploaded):
+        rid = uploaded["request_id"]
+        everything = client.get(f"/api/requests/{rid}/timeline").json()["filtered_count"]
+        percent = client.get(
+            f"/api/requests/{rid}/timeline", params={"q": "%"}
+        ).json()
+        assert percent["filtered_count"] < everything, "% still behaves as a wildcard"
+        # The fixture carries "SIMPLE TRUTH 2% MILK", so a literal match is expected.
+        assert percent["filtered_count"] > 0
+        detail = client.get(f"/api/transactions/{percent['baskets'][0]['id']}").json()
+        assert any("%" in i["description_raw"] for i in detail["items"])
+
+    def test_an_underscore_matches_a_literal_underscore(self, client, uploaded):
+        rid = uploaded["request_id"]
+        everything = client.get(f"/api/requests/{rid}/timeline").json()["filtered_count"]
+        under = client.get(
+            f"/api/requests/{rid}/timeline", params={"q": "_"}
+        ).json()["filtered_count"]
+        assert under < everything, "_ still behaves as a single-character wildcard"
+
+    def test_ordinary_searches_are_unaffected(self, client, uploaded):
+        rid = uploaded["request_id"]
+        hits = client.get(
+            f"/api/requests/{rid}/timeline", params={"q": "BANANA"}
+        ).json()
+        assert hits["filtered_count"] > 0
+        detail = client.get(f"/api/transactions/{hits['baskets'][0]['id']}").json()
+        assert any("BANANA" in i["description_raw"] for i in detail["items"])
+
+    def test_a_backslash_does_not_break_the_query(self, client, uploaded):
+        # The escape character itself has to survive being searched for.
+        response = client.get(
+            f"/api/requests/{uploaded['request_id']}/timeline", params={"q": "back\\slash"}
+        )
+        assert response.status_code == 200
+        assert response.json()["filtered_count"] == 0
