@@ -25,9 +25,12 @@ class TestMigrations:
     def test_schema_creates_cleanly(self, conn):
         assert table_names(conn) >= EXPECTED_TABLES
 
-    def test_migration_is_recorded(self, conn):
-        rows = list(conn.execute("SELECT version, name FROM schema_migration"))
-        assert [r["version"] for r in rows] == [1]
+    def test_every_migration_is_recorded(self, conn):
+        rows = list(conn.execute("SELECT version, name FROM schema_migration ORDER BY version"))
+        # Asserting the shape rather than a fixed list, so adding a migration
+        # does not mean editing this test.
+        assert [r["version"] for r in rows] == [v for v, _ in db.available_migrations()]
+        assert [r["version"] for r in rows] == list(range(1, len(rows) + 1))
         assert rows[0]["name"] == "001_initial.sql"
 
     def test_migrating_twice_is_a_no_op(self, tmp_path):
