@@ -20,13 +20,17 @@ classifiers = [
 # Runtime dependencies are added by the milestone that first needs them, so the
 # safeguard tooling stays installable and fast in CI. fastapi/uvicorn arrive at M4.
 dependencies = [
-    "pdfplumber>=0.11",   # text extraction, page by page
-    "pypdf>=4",           # structure: page count, metadata
+    "pdfplumber>=0.11",        # text extraction, page by page
+    "pypdf>=4",                # structure: page count, metadata
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9", # multipart upload parsing
 ]
 
 [project.optional-dependencies]
 dev = [
     "faker>=30",
+    "httpx>=0.27",   # fastapi's TestClient
     "pytest>=8.0",
     "pre-commit>=3.7",
     "ruff>=0.5",

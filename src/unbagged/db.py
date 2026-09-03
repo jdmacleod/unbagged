@@ -39,7 +39,18 @@ def connect(path: Path | str | None = None) -> sqlite3.Connection:
     target = Path(path) if path is not None else db_path()
     if str(target) != ":memory:":
         target.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(target, isolation_level=None)
+    # check_same_thread=False, deliberately. FastAPI resolves a sync dependency
+    # and calls a sync endpoint on different threadpool workers, so a connection
+    # created while resolving would be unusable by the handler. The guard it
+    # removes is not protecting anything here: api.py hands out one connection
+    # per request and never shares it, so no two threads ever touch the same
+    # connection at once.
+    #
+    # The timeout is a short wait rather than an immediate "database is locked":
+    # one user with two browser tabs is a realistic amount of concurrency.
+    conn = sqlite3.connect(
+        target, isolation_level=None, timeout=10.0, check_same_thread=False
+    )
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")

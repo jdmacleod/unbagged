@@ -23,7 +23,30 @@ def main(argv: list[str] | None = None) -> int:
     san.add_argument("file", type=Path)
     san.add_argument("-o", "--output", type=Path, help="default: stdout")
 
+    serve = sub.add_parser("serve", help="run the local web app")
+    # 127.0.0.1, not 0.0.0.0. The alternative is publishing two years of someone's
+    # groceries to their LAN, which has to be a deliberate choice.
+    serve.add_argument("--host", default="127.0.0.1",
+                       help="default 127.0.0.1; use 0.0.0.0 only if you mean it")
+    serve.add_argument("--port", type=int, default=8000)
+    serve.add_argument("--reload", action="store_true")
+
     args = parser.parse_args(argv)
+
+    if args.command == "serve":
+        import uvicorn
+
+        if args.host not in ("127.0.0.1", "localhost", "::1"):
+            print(
+                f"unbagged: binding to {args.host}. Anyone who can reach this "
+                "machine on the network can read your report.",
+                file=sys.stderr,
+            )
+        uvicorn.run(
+            "unbagged.api:app", host=args.host, port=args.port, reload=args.reload,
+            log_level="info",
+        )
+        return 0
 
     if args.command == "sanitize":
         try:
