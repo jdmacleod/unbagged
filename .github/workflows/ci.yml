@@ -118,8 +118,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -e ".[dev]"
+      - run: pip install -e ".[dev,browser]"
+      # Chromium for the layout regression test. Keyed on the lockfile so the
+      # ~350MB download happens once per dependency change rather than per run.
+      - name: Cache the browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}
+      - run: playwright install --with-deps chromium
       # Linux runners have real uid semantics, so the bind-mount ownership tests
       # that skip on Docker Desktop actually run here. This is the only place
-      # the Linux first-run path is covered.
+      # the Linux first-run path is covered — and the only place a browser
+      # asserts that no view scrolls the page sideways.
       - run: pytest -q -m container

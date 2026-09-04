@@ -136,6 +136,7 @@ make dev             # compose + Vite, on http://localhost:5173
 make test            # fast suite
 make test-frontend   # UI unit tests (vitest)
 make test-container  # slow: builds and runs a real container
+make setup-browser   # once, if you want the layout test to run rather than skip
 make check-pii       # run this before every commit
 ```
 
@@ -146,8 +147,11 @@ frozen into the image at build time with no way to tell the difference in a
 browser.
 
 `make test-container` is the tier that runs a real container: effective uid,
-self-healing data permissions, bounded restart, and that the production image is
-the runtime stage. Tests that need real uid semantics skip loudly on Docker
+self-healing data permissions, bounded restart, that the production image is the
+runtime stage, and that no view scrolls the page sideways at any width from
+320px up. The last one drives a real browser, because horizontal overflow is a
+statement about rendered boxes that no amount of grepping can check; it skips
+with a visible reason unless you have run `make setup-browser`. Tests that need real uid semantics skip loudly on Docker
 Desktop, where bind-mount ownership is remapped and they would pass without
 checking anything.
 
