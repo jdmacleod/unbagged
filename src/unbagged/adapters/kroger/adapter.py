@@ -43,7 +43,14 @@ from unbagged.extraction import ExtractedDocument, extract, extract_all
 
 RETAILER_ID = "kroger"
 DISPLAY_NAME = "Kroger"
-SCHEMA_VERSION = 1
+
+# 2: the loyalty amount is a price, not a discount. Version 1 subtracted it from
+# the shelf amount, so an item bought at its ordinary price came out free. The
+# stored rows are unaffected — raw values were always kept verbatim — but a
+# report parsed by version 1 carries `adapter_schema_version = 1` in the
+# database, which is how a reader can tell that what they are looking at
+# predates the correction.
+SCHEMA_VERSION = 2
 
 # Pages of a PDF read during sniff(). Deciding which adapter owns a bundle must
 # not cost a full extraction of a 48-page report.

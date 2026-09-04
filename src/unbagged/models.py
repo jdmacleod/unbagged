@@ -177,12 +177,30 @@ class TxnItem:
     `description_raw` is stored exactly as it appeared. Adapters never mutate
     values; category assignment happens in a separate enrichment pass so the
     original is always recoverable.
+
+    **`loyalty_amt` is a price, not a discount.** It is what the line cost under
+    the loyalty programme — the amount paid — and it is less than or equal to
+    `retail_amt`, never subtracted from it. The saving is the difference between
+    the two.
+
+    This is worth stating plainly because reading it the other way is silent and
+    catastrophic. In one real Kroger response, 517 of 790 lines carried a
+    `loyalty_amt` exactly equal to `retail_amt` — ordinary items at their
+    ordinary price. Treated as a discount those lines are 100% off, so "you
+    paid" renders as $0.00 on two thirds of a shopping history and the totals
+    collapse to a fraction of the truth. Nothing errors; the numbers are simply
+    wrong, in a direction anyone would like.
+
+    An adapter whose retailer really does disclose a discount must convert it to
+    a price before constructing this record.
     """
 
     description_raw: str
     upc: str | None = None
     quantity: float | None = None
+    #: The shelf amount for the line, before any loyalty pricing.
     retail_amt: float | None = None
+    #: What the line actually cost under the loyalty programme. A price. See above.
     loyalty_amt: float | None = None
     category: str | None = None
     category_confidence: float | None = None

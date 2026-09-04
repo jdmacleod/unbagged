@@ -112,8 +112,12 @@ def timeline(
                t.channel, t.tender_type, t.total_pre_discount,
                t.source_document_id, t.page, t.locator,
                COUNT(i.id) AS item_count,
-               COALESCE(SUM(i.retail_amt), 0) AS items_total,
-               COALESCE(SUM(i.loyalty_amt), 0) AS loyalty_total
+               COALESCE(SUM(i.retail_amt), 0) AS shelf_total,
+               -- A line with no loyalty price disclosed cost its shelf price:
+               -- no loyalty price is no loyalty saving. COALESCE rather than
+               -- SUM(loyalty_amt), which silently drops those lines from the
+               -- total and understates what the basket cost.
+               COALESCE(SUM(COALESCE(i.loyalty_amt, i.retail_amt)), 0) AS paid_total
         FROM txn t LEFT JOIN txn_item i ON i.txn_id = t.id
         WHERE {clause}
         GROUP BY t.id
@@ -123,9 +127,40 @@ def timeline(
     )
     for basket in baskets:
         basket["provenance"] = _provenance(basket)
+        _settle(basket)
 
     return {"stats": stats(conn, request_id), "filtered_count": len(baskets),
             "baskets": baskets}
+
+
+def _settle(basket: dict[str, Any]) -> dict[str, Any]:
+    """Turn a basket's two disclosed amounts into the three a receipt has.
+
+    Both amounts are **prices**. `retail_amt` is the shelf price and
+    `loyalty_amt` is what the line actually cost under the loyalty programme;
+    the saving is the difference. `loyalty_amt` is not a discount to subtract —
+    see `models.TxnItem`, where reading it the wrong way is spelled out, because
+    the wrong reading produces a plausible-looking number rather than an error.
+
+    So `paid_total` here is summed, not derived: it is what the retailer
+    disclosed the basket cost. `saved_total` is the derived one.
+    """
+    shelf, paid = basket["shelf_total"], basket["paid_total"]
+    basket["shelf_total"] = round(shelf, 2)
+    basket["paid_total"] = round(paid, 2)
+    basket["saved_total"] = round(shelf - paid, 2)
+
+    # The retailer states its own pre-discount basket total. Comparing it to the
+    # summed shelf lines is the only check available on whether this parse read
+    # the basket whole. A gap is reported, never silently absorbed — but it is
+    # not necessarily a parse fault: a stated total may also carry tax or fees
+    # that the itemised lines never break out. Either way the reader should see
+    # it. None when the retailer stated no total to check against.
+    stated = basket.get("total_pre_discount")
+    basket["stated_pre_discount_delta"] = (
+        None if stated is None else round(basket["shelf_total"] - stated, 2)
+    )
+    return basket
 
 
 def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
@@ -136,6 +171,12 @@ def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
     export is full of placeholder rows naming no product at zero cost; counting
     them as products would inflate the number, and hiding them would conceal a
     fact about the quality of the disclosure.
+
+    There is no `total_spend` here on purpose. The name has one obvious meaning
+    to a reader — what left my account — and the only number this view used to
+    put behind it was the summed shelf amount, which is larger by every loyalty
+    saving the shopper earned. `total_shelf` and `total_paid` each say which one
+    they are, and `total_saved` is the difference between them.
     """
     row = conn.execute(
         """
@@ -143,8 +184,10 @@ def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
                MIN(t.occurred_at) AS first_visit,
                MAX(t.occurred_at) AS last_visit,
                COALESCE(SUM(CASE WHEN i.retail_amt IS NOT NULL THEN i.retail_amt END), 0)
-                   AS total_spend,
-               COALESCE(SUM(i.loyalty_amt), 0) AS total_loyalty_discount,
+                   AS total_shelf,
+               -- See the same COALESCE in timeline(): loyalty_amt is the price
+               -- paid, and a line without one cost its shelf price.
+               COALESCE(SUM(COALESCE(i.loyalty_amt, i.retail_amt)), 0) AS total_paid,
                COUNT(i.id) AS line_count,
                COUNT(DISTINCT CASE WHEN i.retail_amt <> 0 THEN i.upc END)
                    AS distinct_products,
@@ -156,6 +199,9 @@ def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
         (request_id,),
     ).fetchone()
     result = dict(row)
+    result["total_shelf"] = round(result["total_shelf"], 2)
+    result["total_paid"] = round(result["total_paid"], 2)
+    result["total_saved"] = round(result["total_shelf"] - result["total_paid"], 2)
     stores = _rows(
         conn,
         "SELECT store_code, COUNT(*) AS visits FROM txn WHERE request_id = ?"
@@ -171,8 +217,8 @@ def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
     result["disclosed"] = disclosed_specific_pieces(conn, request_id)
     if not result["disclosed"]:
         for key in (
-            "basket_count", "total_spend", "total_loyalty_discount", "line_count",
-            "distinct_products", "zero_value_lines", "negative_lines",
+            "basket_count", "total_shelf", "total_paid", "total_saved",
+            "line_count", "distinct_products", "zero_value_lines", "negative_lines",
             "first_visit", "last_visit",
         ):
             result[key] = None
@@ -182,8 +228,11 @@ def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
 def transaction_detail(conn: sqlite3.Connection, txn_id: int) -> dict[str, Any] | None:
     """One basket with its line items, for the drill-down.
 
-    Both amounts travel together so the discount delta is visible per line, which
-    is the thing a receipt never shows you.
+    All three amounts travel together so the discount delta is visible per line,
+    which is the thing a receipt never shows you, and the basket totals are
+    summed from these same lines so the drill-down foots to the row that opened
+    it. Those two numbers came from different queries before and disagreed by
+    the loyalty discount, with nothing on screen to explain the gap.
     """
     row = conn.execute("SELECT * FROM txn WHERE id = ?", (txn_id,)).fetchone()
     if row is None:
@@ -198,8 +247,21 @@ def transaction_detail(conn: sqlite3.Connection, txn_id: int) -> dict[str, Any] 
     )
     for item in items:
         retail, loyalty = item.get("retail_amt"), item.get("loyalty_amt")
-        item["net_amt"] = None if retail is None else round(retail - (loyalty or 0), 2)
+        # loyalty_amt is the price paid, not a discount. A line with no loyalty
+        # price cost its shelf price. `net_amt` used to be retail − loyalty,
+        # which on a full-price line — two thirds of a real response — rendered
+        # $0.00 under a column headed "You paid".
+        item["paid_amt"] = retail if loyalty is None else loyalty
+        item["saved_amt"] = (
+            None
+            if retail is None or item["paid_amt"] is None
+            else round(retail - item["paid_amt"], 2)
+        )
     basket["items"] = items
+    basket["item_count"] = len(items)
+    basket["shelf_total"] = sum(i["retail_amt"] or 0 for i in items)
+    basket["paid_total"] = sum(i["paid_amt"] or 0 for i in items)
+    _settle(basket)
     return basket
 
 
@@ -322,7 +384,11 @@ def compare(conn: sqlite3.Connection) -> dict[str, Any]:
         disclosed = summary["disclosed"]
         request["disclosed"] = disclosed
         request["visits"] = summary["basket_count"]
-        request["total_spend"] = summary["total_spend"]
+        # Paid, not shelf. Comparing two retailers on pre-discount totals ranks
+        # them by who lists higher prices, not by who cost you more.
+        request["total_paid"] = summary["total_paid"]
+        request["total_shelf"] = summary["total_shelf"]
+        request["total_saved"] = summary["total_saved"]
         request["distinct_products"] = summary["distinct_products"]
         request["first_visit"] = summary["first_visit"]
         request["last_visit"] = summary["last_visit"]
@@ -367,9 +433,19 @@ def price_history(
 ) -> dict[str, Any]:
     """What each product cost you over the coverage window.
 
-    A personal inflation series, which the data contains for free. Returns and
-    voids are excluded here — a negative amount is a refund, not a price — but
-    they remain in the transaction record.
+    A personal inflation series, which two years of itemised baskets contains
+    for free — but only for the products whose amounts are actually a price.
+
+    **A line carries an amount, never a quantity and never a weight.** Two cans
+    of tomatoes bought together arrive as one line at twice the price of one
+    can, and chicken thighs sold by weight arrive at a different amount every
+    trip for reasons that have nothing to do with the price changing. Charting
+    those as a price series reports a two-can trip as a 100% rise. So each
+    product is classified by the shape of its own amounts, and the ones the
+    response cannot price are named rather than drawn.
+
+    Classification is stated as suspicion, never as fact. The response does not
+    say, and neither should the app.
     """
     rows = _rows(
         conn,
@@ -390,38 +466,379 @@ def price_history(
             {"upc": row["upc"], "descriptions": defaultdict(int), "points": []},
         )
         entry["descriptions"][row["description_raw"]] += 1
+        retail = row["retail_amt"]
+        # loyalty_amt is the price paid. No loyalty price means the shelf price.
+        paid = retail if row["loyalty_amt"] is None else row["loyalty_amt"]
         entry["points"].append(
-            {"date": row["on_date"], "retail_amt": row["retail_amt"],
-             "loyalty_amt": row["loyalty_amt"]}
+            {
+                "date": row["on_date"],
+                "retail_amt": retail,
+                "paid_amt": paid,
+                "saved_amt": round(retail - paid, 2),
+            }
         )
 
     products = []
     for entry in series.values():
         points = entry["points"]
+        # One line is one purchase. An earlier version grouped by day and
+        # reported a separate line count, on the belief that buying three of
+        # something arrived as three lines; across a real response that happened
+        # on 0 of 762 product-days. The idea came from the synthetic fixture,
+        # whose generator picks products with replacement.
         if len(points) < min_observations:
             continue
-        first, last = points[0]["retail_amt"], points[-1]["retail_amt"]
+        points.sort(key=lambda p: p["date"])
+
+        shape = _price_shape([p["retail_amt"] for p in points])
+        for point, multiple in zip(points, shape["multiples"], strict=True):
+            point["multiple_of"] = multiple
+
+        # Only amounts that look like a single unit can carry a price change.
+        singles = [p for p, m in zip(points, shape["multiples"], strict=True) if not m]
+        change = None
+        if shape["kind"] == "unit" and len(singles) >= 2:
+            first, last = singles[0]["retail_amt"], singles[-1]["retail_amt"]
+            change = round((last - first) / first * 100, 1) if first else None
+
         products.append(
             {
                 "upc": entry["upc"],
                 # The description can vary between visits; the commonest one is
                 # the honest label, and the raw values stay reachable per point.
                 "description": max(entry["descriptions"].items(), key=lambda kv: kv[1])[0],
-                "observations": len(points),
+                "purchases": len(points),
+                # "unit"     — amounts look like one item at a stable-ish price
+                # "multiple" — some amounts are near-exact integer multiples of
+                #              the commonest one, so those trips probably bought
+                #              more than one
+                # "weight"   — amounts never repeat and range widely, which is
+                #              what a per-pound item does
+                "shape": shape["kind"],
+                "base_price": shape["base"],
+                "multiple_count": sum(1 for m in shape["multiples"] if m),
+                "priceable": shape["kind"] == "unit",
                 "first_seen": points[0]["date"],
                 "last_seen": points[-1]["date"],
-                "first_price": first,
-                "last_price": last,
+                "first_price": singles[0]["retail_amt"] if singles else points[0]["retail_amt"],
+                "last_price": singles[-1]["retail_amt"] if singles else points[-1]["retail_amt"],
                 "min_price": min(p["retail_amt"] for p in points),
                 "max_price": max(p["retail_amt"] for p in points),
-                "change_pct": round((last - first) / first * 100, 1) if first else None,
+                "change_pct": change,
                 "points": points,
             }
         )
 
-    products.sort(key=lambda p: (-p["observations"], p["description"]))
+    # Priceable products first: those are the ones the view can actually plot.
+    products.sort(key=lambda p: (not p["priceable"], -p["purchases"], p["description"]))
     return {
         "min_observations": min_observations,
         "product_count": len(products),
+        "priceable_count": sum(1 for p in products if p["priceable"]),
+        # Kroger's export carries no quantity field on a line. Stated once here
+        # so the view can say so rather than implying a quantity it never got.
+        "quantity_disclosed": _quantity_disclosed(conn, request_id),
         "products": products[:limit],
     }
+
+
+# Two amounts within this of each other are treated as the same price. Prices
+# drift over two years, so exact repetition is too strict to find the base.
+SAME_PRICE = 0.03
+# How close to a whole number a ratio must sit before it reads as a multiple.
+MULTIPLE_TOLERANCE = 0.02
+# How far either side of a candidate multiple counts as "on the way there".
+DRIFT_MARGIN = 0.15
+
+
+def _price_shape(amounts: list[float]) -> dict[str, Any]:
+    """Guess whether a product's amounts are a unit price, multiples, or weight.
+
+    The base is the amount the product sits at most often, not the cheapest: a
+    product always bought in twos would otherwise have its pair price treated as
+    the unit and every single purchase read as a half-price sale.
+
+    Every output here is a suspicion. The response states no quantity and no
+    weight, so nothing in this function can be verified from it, and the view is
+    expected to say "consistent with" rather than "is".
+    """
+    if not amounts:
+        return {"kind": "unit", "base": None, "multiples": []}
+
+    # Cluster amounts that are within SAME_PRICE of each other; the biggest
+    # cluster is the product's ordinary price.
+    clusters: list[list[float]] = []
+    for amount in sorted(amounts):
+        for cluster in clusters:
+            if abs(amount - cluster[0]) / cluster[0] <= SAME_PRICE:
+                cluster.append(amount)
+                break
+        else:
+            clusters.append([amount])
+    biggest = max(clusters, key=lambda c: (len(c), -c[0]))
+    base = round(sum(biggest) / len(biggest), 2)
+
+    # The commonest amount is not always one item. A product usually bought in
+    # twos makes the pair the base, and the single purchase then reads as a
+    # half-price sale rather than as the unit. If some amount divides the base a
+    # whole number of times, that amount is the better unit.
+    for candidate in sorted(set(amounts)):
+        if candidate <= 0 or candidate >= base:
+            continue
+        ratio = base / candidate
+        if abs(ratio - round(ratio)) <= MULTIPLE_TOLERANCE * round(ratio) and round(ratio) >= 2:
+            base = round(candidate, 2)
+            break
+
+    def multiple_of(amount: float) -> int | None:
+        """Is this amount more than one item, or just a price that drifted up?
+
+        Both look like `2 x base`. The difference is the ground in between: a
+        price that doubles over two years is observed at the values on the way,
+        while a second item appears from nowhere at exactly twice. So a multiple
+        is only claimed when the range between the two is empty.
+
+        Without that check a product whose price genuinely doubled came out as a
+        quantity buy, which is the same failure as the one this whole function
+        exists to prevent, pointed the other way.
+        """
+        if base <= 0:
+            return None
+        ratio = amount / base
+        nearest = round(ratio)
+        if nearest < 2 or abs(ratio - nearest) > MULTIPLE_TOLERANCE:
+            return None
+        between = [
+            a for a in amounts
+            if base * (1 + DRIFT_MARGIN) < a < base * (nearest - DRIFT_MARGIN)
+        ]
+        return None if len(between) >= 2 else nearest
+
+    multiples = [multiple_of(a) for a in amounts]
+    spread = max(amounts) / min(amounts) if min(amounts) > 0 else 1.0
+
+    if any(multiples):
+        kind = "multiple"
+    elif len(biggest) == 1 and len(amounts) >= 4 and spread > 1.4 and not _trending(amounts):
+        # Nothing ever repeats, the range is wide, and it goes up and down at
+        # random: what a per-pound item does. A price that simply climbed also
+        # never repeats and also spreads wide, so the direction test is what
+        # keeps a genuine two-year rise out of this bucket.
+        kind = "weight"
+    else:
+        kind = "unit"
+    return {"kind": kind, "base": base, "multiples": multiples}
+
+
+# How much of a series has to move the same way before it reads as a trend
+# rather than as noise.
+TREND_SHARE = 0.75
+
+
+def _trending(amounts: list[float]) -> bool:
+    """Does this series mostly move one way? Amounts arrive in date order."""
+    steps = [b - a for a, b in zip(amounts, amounts[1:], strict=False) if b != a]
+    if len(steps) < 3:
+        return False
+    up = sum(1 for s in steps if s > 0)
+    return max(up, len(steps) - up) / len(steps) >= TREND_SHARE
+
+
+def _quantity_disclosed(conn: sqlite3.Connection, request_id: int) -> bool:
+    """Did any line in this response carry a quantity?
+
+    `txn_item.quantity` exists because a retailer might disclose one. Kroger
+    does not: every line is a description, a UPC and two amounts, so a product
+    bought twice on one trip is two lines and nothing distinguishes that from
+    two trips. Absence of the field is a gap in the disclosure, and this view
+    names it rather than presenting a line count as a quantity.
+    """
+    row = conn.execute(
+        "SELECT COUNT(i.quantity) AS c FROM txn_item i JOIN txn t ON t.id = i.txn_id"
+        " WHERE t.request_id = ?",
+        (request_id,),
+    ).fetchone()
+    return row["c"] > 0
+
+
+# --------------------------------------------------------------------------
+# Product index
+# --------------------------------------------------------------------------
+
+# Size is quantised onto this absolute ladder rather than scaled continuously
+# between the smallest and largest count. Three things follow from that, and
+# all three were bugs in the continuous version:
+#
+#   1. The encoding becomes *ordinal*, which is the only claim a portrait
+#      should make. On a continuous ramp, 28.3% of comparable pairs painted
+#      more ink for the smaller number, because a long name at a small size
+#      out-inks a short name at a large one. Quantised, that figure is 0%.
+#   2. The tiers are absolute, so there is no min/max to normalise against and
+#      therefore no division to guard. A filter matching one product, or
+#      matching only single-purchase products, is no longer a special case.
+#   3. Five steps map onto the type ladder DESIGN.md already defines, so the
+#      view invents no sizes of its own.
+#
+# (tier, minimum purchases). Highest first; a product takes the first tier it
+# reaches. The frontend maps tier -> px; the API never sends a pixel size.
+PURCHASE_TIERS: tuple[tuple[int, int], ...] = ((5, 12), (4, 7), (3, 4), (2, 2), (1, 1))
+
+# How long a product has to have been absent, before the end of the coverage
+# window, before the view will say out loud that you stopped buying it.
+STALE_AFTER_DAYS = 180
+
+# A cap that discloses, rather than a silent truncation. `price_history` already
+# caps at 200; one rule for the whole app, not two.
+INDEX_LIMIT = 2000
+
+
+def _tier(purchases: int) -> int:
+    return next(tier for tier, floor in PURCHASE_TIERS if purchases >= floor)
+
+
+def product_index(
+    conn: sqlite3.Connection,
+    request_id: int,
+    *,
+    query: str | None = None,
+    min_purchases: int = 1,
+    limit: int = INDEX_LIMIT,
+) -> dict[str, Any]:
+    """Every product you bought, by name, sized by how often.
+
+    Not a ranking. The order is alphabetical, which is the one order that is not
+    a ranking, and it is what keeps this a portrait of a vocabulary rather than
+    a worse version of the Prices table — which already sorts by purchases and
+    answers "what do I buy most" precisely.
+
+    **What counts as a purchase.** The same predicate `price_history` uses: a
+    line with a UPC and a positive amount. That excludes the export's zero-value
+    placeholder rows, which name no product, and the negative lines, which are
+    returns and would otherwise let a refund create an index entry for something
+    you gave back. Three different predicates for "a purchase" existed in this
+    module and the choice moves the headline figure, so the index and Prices are
+    deliberately pinned to the same one.
+    """
+    rows = _rows(
+        conn,
+        """
+        SELECT i.upc, i.description_raw, COUNT(*) AS purchases,
+               MIN(substr(t.occurred_at, 1, 10)) AS first_seen,
+               MAX(substr(t.occurred_at, 1, 10)) AS last_seen
+        FROM txn_item i JOIN txn t ON t.id = i.txn_id
+        WHERE t.request_id = ? AND i.upc IS NOT NULL AND i.retail_amt > 0
+        GROUP BY i.upc, i.description_raw
+        """,
+        (request_id,),
+    )
+
+    # Fold the per-description groups into one entry per product. The retailer
+    # spells the same UPC differently between visits; the commonest spelling is
+    # the honest label, which is the rule `price_history` already follows.
+    merged: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        entry = merged.setdefault(
+            row["upc"],
+            {
+                "upc": row["upc"],
+                "names": defaultdict(int),
+                "purchases": 0,
+                "first_seen": row["first_seen"],
+                "last_seen": row["last_seen"],
+            },
+        )
+        entry["names"][row["description_raw"]] += row["purchases"]
+        entry["purchases"] += row["purchases"]
+        entry["first_seen"] = min(entry["first_seen"], row["first_seen"])
+        entry["last_seen"] = max(entry["last_seen"], row["last_seen"])
+
+    coverage_end = max((e["last_seen"] for e in merged.values()), default=None)
+    stale_before = _minus_days(coverage_end, STALE_AFTER_DAYS) if coverage_end else None
+
+    products = []
+    for entry in merged.values():
+        name = max(entry["names"].items(), key=lambda kv: kv[1])[0]
+        products.append(
+            {
+                "upc": entry["upc"],
+                "description": name,
+                "purchases": entry["purchases"],
+                "tier": _tier(entry["purchases"]),
+                "first_seen": entry["first_seen"],
+                "last_seen": entry["last_seen"],
+                # Bought more than once and then not again for half a year
+                # before the window closed. The second-purchase condition is
+                # what keeps this an observation about a habit rather than a
+                # label slapped on every product anyone ever tried once — and
+                # two thirds of them were tried once.
+                "stopped": bool(
+                    stale_before
+                    and entry["purchases"] >= 2
+                    and entry["last_seen"] < stale_before
+                ),
+            }
+        )
+
+    total_products = len(products)
+    bought_once_total = sum(1 for p in products if p["purchases"] == 1)
+
+    if query:
+        # Matched in Python rather than in SQL, because the counts have already
+        # been aggregated and re-running the group with a LIKE would change
+        # which rows form the totals. Substring matching on a list this size is
+        # free, and it sidesteps LIKE's wildcards entirely rather than escaping
+        # them: there is no pattern here for "%" or "_" to be special in, so
+        # typing either matches products containing that character, which is
+        # what someone typing it into a search box meant.
+        needle = query.strip().lower()
+        products = [
+            p
+            for p in products
+            if needle in p["description"].lower() or needle in p["upc"].lower()
+        ]
+    if min_purchases > 1:
+        products = [p for p in products if p["purchases"] >= min_purchases]
+
+    # Alphabetical, with the UPC breaking ties so the order is total and the
+    # same filter always renders the same page.
+    products.sort(key=lambda p: (p["description"], p["upc"]))
+
+    return {
+        "disclosed": disclosed_specific_pieces(conn, request_id),
+        # Unfiltered, because the headline figure is a fact about the response
+        # and not about whatever is currently typed in the filter box.
+        "total_products": total_products,
+        "bought_once_total": bought_once_total,
+        "product_count": len(products),
+        "bought_once": sum(1 for p in products if p["purchases"] == 1),
+        "min_purchases": min_purchases,
+        "coverage_end": coverage_end,
+        "stale_before": stale_before,
+        "stopped_count": sum(1 for p in products if p["stopped"]),
+        # Populations per tier, so the legend can say what a size means without
+        # the frontend recomputing it.
+        "tiers": [
+            {
+                "tier": tier,
+                "min_purchases": floor,
+                "count": sum(1 for p in products if p["tier"] == tier),
+            }
+            for tier, floor in PURCHASE_TIERS
+        ],
+        "truncated": len(products) > limit,
+        "limit": limit,
+        "products": products[:limit],
+    }
+
+
+def _minus_days(iso_date: str, days: int) -> str:
+    """`YYYY-MM-DD` minus n days, without dragging in a timezone.
+
+    Dates in this response are store-local wall clock with no offset, so they
+    are compared as strings everywhere else in this module and are handled the
+    same way here.
+    """
+    from datetime import date, timedelta
+
+    year, month, day = (int(part) for part in iso_date.split("-"))
+    return (date(year, month, day) - timedelta(days=days)).isoformat()

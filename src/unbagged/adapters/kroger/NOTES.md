@@ -166,7 +166,21 @@ practice.
 `total_amount_prior_to_discounts`, `tenders[]`, and `items[]`. Items carry
 `purchasedescription`, `productupc`, `retailamt`, `customerloyamt`.
 
-Two things that look like bugs and are not:
+**There is no quantity field.** A line is a description, a UPC and two amounts,
+and nothing else. Buying three cans of the same thing on one trip arrives as
+three lines identical but for their amounts, indistinguishable from three
+separate visits. `TxnItem.quantity` is read from the line anyway — a future
+retailer may disclose one — and for Kroger it is always `NULL`.
+
+This is a disclosure gap, not a parsing problem, and it has to be said rather
+than papered over. The price history counts *days a product was bought* and
+reports the raw line count beside it, because a line count presented on its own
+reads as a quantity the response never gave. Lines sharing a date are averaged
+into one observation of that day's price: plotting them separately put several
+points on one date, so the series doubled back on itself and the endpoints —
+hence the reported price change — fell to whichever line happened to sort first.
+
+Two more things that look like bugs and are not:
 
 - **`UNKNOWN` placeholder rows.** A `purchasedescription` of `"UNKNOWN"` with zero
   amounts and the constant UPC `00010000080000`, <!-- pii-scan: allow placeholder UPC, not an identifier -->
@@ -225,6 +239,60 @@ was fixed. Both halves are parsed.
 
 **Amounts arrive as strings.** `"12.34"`, not `12.34`. Coerced, and left `NULL`
 when they cannot be.
+
+**`customerloyamt` is a price, not a discount.** It is what the line cost under
+the loyalty programme. It is never subtracted from `retailamt`; the saving is
+the difference between the two.
+
+This was read the wrong way round for a while, and the wrong way round is
+silent. Measured across one real response:
+
+| | lines |
+|---|---|
+| `customerloyamt` == `retailamt` (ordinary item, no promotion) | 517 |
+| `customerloyamt` < `retailamt` (on promotion) | 271 |
+| `customerloyamt` > `retailamt` | 0 |
+| `customerloyamt` == 0 with `retailamt` > 0 | 35 |
+
+Two thirds of lines are full price, and read as a discount every one of them is
+100% off: "you paid" renders `$0.00` and the basket total collapses. Across that
+response the summed `customerloyamt` was 88% of the summed `retailamt` — a
+loyalty saving of about 12%, which is what a supermarket card is worth. Treating
+it as a discount put the reported spend at 14% of the truth. Nothing errors, and
+a smaller number does not look wrong.
+
+The distribution is the tell, and it is worth re-running against any new
+response: a discount field is zero most of the time and clusters near the
+bottom; a price field is never zero, never exceeds the shelf amount, and
+clusters just under it.
+
+**`retailamt` is the shelf amount.** Summing it across a basket reproduces the
+basket's own `total_amount_prior_to_discounts`, which is what proves it — in 34
+of 54 baskets exactly.
+
+**The other 20 do not reconcile, and the response is what does not reconcile.**
+Spot-checked by hand against the source: the lines are read correctly and the
+stated totals are read correctly, and the two simply disagree in the document as
+supplied. Not a parsing fault, and nothing a reader can correct.
+
+Two shapes, and the sign tells them apart:
+
+- **Lines exceed the stated total.** Seen where the basket carries an itemised
+  statutory fee, a bag charge, which the stated total then leaves out. The gap
+  equalled the fee to the cent. Only two baskets carried such a line, and both
+  failed to reconcile while none of the 34 reconciling baskets had one.
+- **Lines fall short of the stated total.** The remaining 18, by a median 3% of
+  the basket. No itemised line accounts for the difference. Tax is the obvious
+  guess and the response gives no way to confirm it.
+
+Keep the comparison. It is the only check available on whether a basket was read
+whole, and it earned its keep immediately: a basket that will not add up by hand
+is otherwise indistinguishable from a reading error, and the reader would blame
+the tool. The UI marks these quietly rather than as a warning — the numbers are
+small, the cause is the retailer's, and there is no action to offer.
+
+For a retailer whose own totals are internally inconsistent, this is also worth
+reading as a disclosure-quality signal in its own right.
 
 ## Coverage window
 

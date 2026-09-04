@@ -2,9 +2,16 @@
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.version]
+path = "VERSION"
+pattern = "^(?P<version>.+)$"
+
 [project]
 name = "unbagged"
-version = "0.0.0"
+# Read from the VERSION file at the repo root, which is the single source of
+# truth and the thing a release bumps. Keeping a literal here as well means one
+# of the two is always the stale one.
+dynamic = ["version"]
 description = "Read what the grocery store knows about you."
 readme = "README.md"
 license = { file = "LICENSE" }
