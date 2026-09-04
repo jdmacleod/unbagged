@@ -98,6 +98,10 @@ jobs:
         working-directory: frontend
       - run: npm run build
         working-directory: frontend
+      # The UI unit tests cover the pure functions behind what the reader sees:
+      # the chart's scale, the gauge width, the footing check, the colour hash.
+      - run: npm test
+        working-directory: frontend
       # The zero-external-request guarantee is asserted against the built output,
       # so the build has to happen before the tests that check it.
       - uses: actions/setup-python@v5
