@@ -27,6 +27,34 @@ from a specific response. See `CONTRIBUTING.md`.
 
 ### Security
 
+- **The runtime dependencies are pinned and hashed.** The Dockerfile ran
+  `pip install .`, resolving 29 packages fresh at every build with no pins and no
+  hashes, into the container that reads people's reports; a compromised release
+  anywhere in that graph executed at build time and then ran against the data.
+  `frontend/package-lock.json` already gave the UI this guarantee. The Python
+  half is now `docker/requirements.txt`, installed with `--require-hashes` —
+  which is all-or-nothing, so the build cannot silently fall back to a
+  floor-based resolve. `make lock` regenerates it inside `python:3.12-slim` on
+  linux/amd64, because hashes are per-wheel and a lock compiled in a macOS venv
+  pins wheels the image cannot install. The contributor path is unchanged:
+  `pip install -e ".[dev]"` still resolves floors on whatever platform you are
+  on, which is why the lock lives in `docker/` and not at the root. Proved
+  load-bearing by corrupting a hash and watching the build refuse it.
+  `tools/check_lock.py` runs in CI and fails when the lock stops covering what
+  `pyproject.toml` declares; Dependabot has a `/docker` entry so the pins do not
+  decay into unpatched dependencies.
+
+- **`unbagged sanitize` no longer publishes identifiers that appear as keys.**
+  The skeleton kept object keys on the reasoning that keys are the retailer's
+  schema. True for field names, and false for a map keyed by the user's data —
+  and the counterexample was already in this repository, asserted by a test: a
+  Kroger identity blob keys `loyaltyCards` by the card number. The skeleton
+  published those numbers while faithfully masking everything they pointed at,
+  and `CONTRIBUTING.md` tells people to attach the output to a public issue. A
+  key matching a long digit run, a UUID or an email address is now masked to
+  `<key:len=N>`; the length is kept so the shape of the map stays readable, and
+  every field name survives.
+
 - **A real report could be committed into a `fixtures/` directory and pass every
   safeguard in the project.** The one hole in `.gitignore` is its re-inclusion of
   fixture directories, and `tools/scan_pii.py` stands its address-shaped rules

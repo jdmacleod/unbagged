@@ -27,6 +27,13 @@ The skeleton keeps object keys, replaces string values with `<str:len=N>`, bucke
 to their order of magnitude, and coarsens dates to the month. That is enough to debug a
 parser and not enough to identify you. Read the output before you attach it.
 
+Keys are kept because keys are the retailer's schema, with one exception: a key that is
+*itself* an identifier is masked to `<key:len=N>`. That is not a hypothetical. A Kroger
+identity blob keys `loyaltyCards` by the card number, so the old skeleton published the
+numbers while faithfully masking everything they pointed at. Long digit runs, UUIDs and
+email addresses are masked when they appear as keys; `loyaltyCards`, `productupc`, `2024`
+and every other field name survives.
+
 ## The CHANGELOG is public and permanent
 
 `CHANGELOG.md` describes what changed in the software. It never describes what
@@ -67,6 +74,7 @@ it will not catch a date you happened to shop on, so this one is on you.
 | `tools/no_data_dir.py` | Pre-commit hook that hard-fails any staged path under `data/` or `output/`. |
 | `tools/scan_pii.py` | Scans for emails, phone numbers, addresses, ZIPs, Luhn-valid card numbers, SSNs, loyalty-length digit runs, and UUIDs. Also fails on any committed file in a `fixtures/` directory it cannot read. |
 | `tools/make_fixtures.py --check` | Regenerates every fixture from a fixed seed and fails on any difference **and on any committed file no generator produces**. |
+| `docker/requirements.txt` | The shipped image's runtime lock: every package pinned and hashed, installed with `--require-hashes`. `tools/check_lock.py` fails when it stops covering what `pyproject.toml` declares. |
 | `gitleaks` | Credentials, which are a different problem with the same blast radius. |
 | `check-added-large-files` | A 5 MB PDF appearing in a diff is a red flag. |
 | CI | Runs all of the above against the checkout *and* against the PR's commits, so an amended-away mistake is still caught. Actions are pinned to commit SHAs. |
