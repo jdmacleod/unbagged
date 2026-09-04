@@ -8,7 +8,7 @@ PY := $(shell test -x .venv/bin/python && echo .venv/bin/python || echo $(BOOTST
 COMPOSE := docker compose
 DEV_COMPOSE := docker compose -f docker-compose.yml -f docker-compose.dev.yml
 
-.PHONY: help setup setup-frontend build-frontend serve up down logs reset dev test test-frontend test-container lint denylist check-pii check-pii-history fixtures fixtures-check clean
+.PHONY: help setup setup-frontend build-frontend serve up down logs reset dev test test-frontend test-container setup-browser lint denylist check-pii check-pii-history fixtures fixtures-check clean
 
 help:  ## Show this help
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -71,7 +71,11 @@ test-frontend:  ## Run the UI unit tests (vitest)
 	cd frontend && npm test
 
 test-container:  ## Run the slow tests that build and run a real container
-	$(PY) -m pytest -q -m container -p no:cacheprovider
+	$(PY) -m pytest -q -m container
+
+setup-browser:  ## Install Chromium for the layout regression test
+	$(PY) -m pip install -e ".[browser]"
+	$(PY) -m playwright install chromium -p no:cacheprovider
 
 lint:  ## Lint with ruff
 	$(PY) -m ruff check .

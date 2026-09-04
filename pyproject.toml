@@ -44,6 +44,14 @@ dev = [
     "ruff>=0.5",
 ]
 
+# A browser, only for the layout regression test. Its own group because it
+# pulls a 350MB Chromium: `make test` must stay a few seconds and must not
+# require one. The container job installs `.[dev,browser]`; everything else
+# installs `.[dev]` and the layout test skips with a visible reason.
+browser = [
+    "playwright>=1.49",
+]
+
 [project.scripts]
 unbagged = "unbagged.cli:main"
 
