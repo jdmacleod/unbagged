@@ -5,6 +5,7 @@ consequence line in this repository is a port binding in a YAML file, and a
 review will not catch it going missing during an unrelated edit.
 """
 
+import re
 from pathlib import Path
 
 import pytest
@@ -173,3 +174,57 @@ class TestImageShape:
         published = [p for s in dev.values() for p in (s.get("ports") or [])]
         assert len(published) == 1, f"dev should publish one URL, got {published}"
         assert "5173" in str(published[0])
+
+
+class TestVersionIsOneNumber:
+    """`VERSION` and what the app reports must be the same string.
+
+    The footer exists for one reason: with no telemetry, no crash reporting and
+    no update check, a person filing an issue has no other way to say what they
+    are running. A footer that reports a stale number is worse than no footer,
+    because it is confidently wrong and it sends the maintainer to the wrong
+    commit.
+
+    Nothing asserted this, and it went wrong the first time it could: bumping
+    `VERSION` to 0.10.0 left a running dev server reporting 0.9.0, because
+    `__version__` reads install-time metadata rather than the file. Nothing in
+    the suite noticed.
+    """
+
+    def test_the_package_reports_the_version_file(self):
+        from unbagged import __version__
+
+        declared = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        assert __version__ == declared, (
+            f"VERSION says {declared} but the package reports {__version__}."
+        )
+
+    def test_the_version_file_wins_over_stale_install_metadata(self):
+        """The file is authoritative in a checkout, so a bump takes effect
+        immediately. This used to require `pip install -e .`, and forgetting it
+        left the footer reporting the previous release."""
+        from unbagged import _read_version
+
+        original = (ROOT / "VERSION").read_text(encoding="utf-8")
+        try:
+            (ROOT / "VERSION").write_text("9.9.9\n", encoding="utf-8")
+            assert _read_version() == "9.9.9"
+        finally:
+            (ROOT / "VERSION").write_text(original, encoding="utf-8")
+
+    def test_the_api_reports_the_same_version(self):
+        """The footer reads /api/health. A person filing a bug quotes what the
+        footer says, so it has to be the same string as everything else."""
+        from unbagged import __version__, api
+
+        declared = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        assert api.app.version == declared == __version__
+
+    def test_the_version_file_is_a_bare_semver_string(self):
+        """The Dockerfile and pyproject both read this file directly, so a
+        stray comment or a `v` prefix breaks the image build rather than a
+        test."""
+        declared = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        assert re.fullmatch(r"\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", declared), (
+            f"VERSION is {declared!r}; expected a bare semver like 0.10.0"
+        )
