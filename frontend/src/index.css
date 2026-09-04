@@ -140,11 +140,11 @@ body {
   overflow-x: auto;
 }
 
-/* The app animates: the upload indicator bounces, rows and pills transition,
-   and Recharts animates on mount. None of it respected a reduced-motion
-   preference, which for a vestibular disorder is not a preference. Motion that
-   communicates state is kept as an instant change rather than removed, so
-   nothing becomes invisible. */
+/* Motion that communicates state is kept as an instant change rather than
+   removed, so nothing becomes invisible. For a vestibular disorder this is not
+   a preference. (The list this comment used to give — bouncing indicators,
+   transitioning pills, Recharts animating on mount — describes an app that no
+   longer exists: Recharts was removed and the chart is hand-drawn SVG.) */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "./api";
 import { useAsync } from "./components/useAsync";
 import { RemoveRequest } from "./components/RemoveRequest";
+import { StaleReading } from "./components/StaleReading";
 import { Upload } from "./components/Upload";
 import { ErrorBox, Spine, Spinner } from "./components/ui";
 import { Compare } from "./views/Compare";
@@ -195,6 +196,12 @@ export default function App() {
             </select>
           )}
         </nav>
+      )}
+
+      {/* A caveat about the reading, not about the retailer, so it sits above
+          the views rather than inside any one of them. */}
+      {current !== null && rows.find((r) => r.id === current) && (
+        <StaleReading request={rows.find((r) => r.id === current)!} />
       )}
 
       <main>

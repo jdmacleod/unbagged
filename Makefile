@@ -8,7 +8,7 @@ PY := $(shell test -x .venv/bin/python && echo .venv/bin/python || echo $(BOOTST
 COMPOSE := docker compose
 DEV_COMPOSE := docker compose -f docker-compose.yml -f docker-compose.dev.yml
 
-.PHONY: help setup setup-frontend build-frontend serve up down logs reset dev test test-container lint denylist check-pii check-pii-history fixtures fixtures-check clean
+.PHONY: help setup setup-frontend build-frontend serve up down logs reset dev test test-frontend test-container lint denylist check-pii check-pii-history fixtures fixtures-check clean
 
 help:  ## Show this help
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -66,6 +66,9 @@ dev:  ## Start the dev stack, then open http://localhost:5173
 
 test:  ## Run the fast test suite
 	$(PY) -m pytest -q
+
+test-frontend:  ## Run the UI unit tests (vitest)
+	cd frontend && npm test
 
 test-container:  ## Run the slow tests that build and run a real container
 	$(PY) -m pytest -q -m container -p no:cacheprovider

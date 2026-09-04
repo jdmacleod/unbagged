@@ -40,8 +40,16 @@ export type Basket = {
   /** shelf_total − paid_total. The derived one. */
   saved_total: number;
   /** shelf_total − total_pre_discount. Non-zero means the summed lines disagree
-   *  with the retailer's own stated total, so the parse lost a line. Null when
-   *  the retailer stated no total to check against. */
+   *  with the total the retailer states for the basket.
+   *
+   *  **Not a parse fault.** Checked by hand against a real response: of 20
+   *  baskets that did not foot, 2 exceeded the stated total by exactly an
+   *  itemised statutory fee the total omits, and 18 fell short by a median 3%
+   *  with no line accounting for the difference. The discrepancy is in the
+   *  response as supplied. Saying "the parse lost a line" here told the reader
+   *  the tool was broken when the retailer's arithmetic was.
+   *
+   *  Null when the retailer stated no total to check against. */
   stated_pre_discount_delta: number | null;
   provenance: Provenance;
 };
@@ -74,7 +82,9 @@ export type Stats = {
   last_visit: string | null;
   /** Summed shelf amounts, before loyalty pricing. Not what was spent. */
   total_shelf: number | null;
-  /** What actually left the account: the summed loyalty prices. */
+  /** The summed loyalty prices: what the retailer disclosed the baskets cost.
+   *  Not necessarily what left the account — the tender rows are a separate
+   *  disclosure and this figure is not reconciled against them. */
   total_paid: number | null;
   /** total_shelf − total_paid. */
   total_saved: number | null;
@@ -284,4 +294,13 @@ export type ProductIndex = {
   truncated: boolean;
   limit: number;
   products: IndexEntry[];
+};
+
+/** One adapter the build knows about, and the reading it currently produces.
+ *  `schema_version` is compared against a request's `adapter_schema_version`
+ *  to tell whether a stored report predates a correction. */
+export type AdapterInfo = {
+  retailer_id: string;
+  display_name: string;
+  schema_version: number;
 };

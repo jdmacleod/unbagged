@@ -1,4 +1,5 @@
 import type {
+  AdapterInfo,
   Compare,
   Compliance,
   BasketDetail,
@@ -48,6 +49,7 @@ async function detail(response: Response): Promise<string> {
 
 export const api = {
   health: () => get<{ status: string; version: string }>("/health"),
+  adapters: () => get<{ adapters: AdapterInfo[] }>("/adapters"),
   requests: () => get<{ requests: RequestMeta[] }>("/requests"),
   request: (id: number) =>
     get<RequestMeta & { warnings: unknown[]; documents: unknown[] }>(`/requests/${id}`),

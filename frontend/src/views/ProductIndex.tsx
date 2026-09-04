@@ -169,11 +169,17 @@ function IndexBody({
       {data.product_count === 0 ? (
         <Spine>
           <Empty>
-            {minPurchases > 1 && q
-              ? `No product name contains “${q}” and was bought at least ${minPurchases} times.`
-              : minPurchases > 1
-                ? `No product was bought at least ${number(minPurchases)} times.`
-                : `No product name contains “${q}”.`}
+            {/* The fourth case is not "no match", it is "nothing to match
+                against": no filter is set and the response still disclosed no
+                products. Falling through to the q branch printed
+                `No product name contains ""`. */}
+            {q && minPurchases > 1
+              ? `No product name contains “${q}” and was bought at least ${number(minPurchases)} times.`
+              : q
+                ? `No product name contains “${q}”.`
+                : minPurchases > 1
+                  ? `No product was bought at least ${number(minPurchases)} times.`
+                  : "This response disclosed no products."}
           </Empty>
         </Spine>
       ) : (

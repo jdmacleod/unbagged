@@ -208,8 +208,9 @@ function Derived({ inference }: { inference: Inference }) {
   );
 }
 
-/** Only ordinal scales carry a position worth drawing. */
-function gaugeWidth(inference: Inference): number | null {
+/** Only ordinal scales carry a position worth drawing.
+ *  Exported for `gaugeWidth.test.ts`. */
+export function gaugeWidth(inference: Inference): number | null {
   if (inference.value_num === null || !inference.scale) return null;
   const match = /(\d+)[–-](\d+)/.exec(inference.scale);
   if (!match) return null;
