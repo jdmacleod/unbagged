@@ -4,6 +4,7 @@ import type {
   BasketDetail,
   FollowUpLetter,
   PriceHistory,
+  ProductIndex,
   Profile,
   RequestMeta,
   Timeline,
@@ -46,6 +47,7 @@ async function detail(response: Response): Promise<string> {
 }
 
 export const api = {
+  health: () => get<{ status: string; version: string }>("/health"),
   requests: () => get<{ requests: RequestMeta[] }>("/requests"),
   request: (id: number) =>
     get<RequestMeta & { warnings: unknown[]; documents: unknown[] }>(`/requests/${id}`),
@@ -61,6 +63,10 @@ export const api = {
     get<PriceHistory>(`/requests/${id}/price-history`, {
       min_observations: minObservations,
     }),
+  productIndex: (
+    id: number,
+    filters: { q?: string; min_purchases?: number } = {},
+  ) => get<ProductIndex>(`/requests/${id}/product-index`, filters),
   followUpLetter: (id: number) => get<FollowUpLetter>(`/requests/${id}/follow-up-letter`),
 
   async upload(files: File[], declaredRetailer?: string): Promise<UploadResult> {

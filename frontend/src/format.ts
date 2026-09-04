@@ -34,3 +34,38 @@ export const humanise = (label: string) => {
     .trim();
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 };
+
+/** Stable categorical colour for a key.
+ *
+ *  Identity, not severity: which store, which series, which product group. The
+ *  same key always gets the same hue across views and across reloads, because
+ *  recognition is the whole point — you should be able to learn that your
+ *  Tuesday store is the green one. See DESIGN.md on what colour may mean.
+ *
+ *  Hashed rather than index-assigned so a store keeps its colour when the list
+ *  it sits in is filtered or reordered.
+ */
+export const CATEGORY_COUNT = 6;
+
+export function categoryIndex(key: string): number {
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) {
+    hash = (hash * 31 + key.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash) % CATEGORY_COUNT;
+}
+
+/** Tailwind text colour class for a key's category hue. */
+export function categoryText(key: string): string {
+  // Written out rather than interpolated: Tailwind scans source for whole class
+  // names, and a template literal produces nothing at build time.
+  return [
+    "text-cat-1", "text-cat-2", "text-cat-3",
+    "text-cat-4", "text-cat-5", "text-cat-6",
+  ][categoryIndex(key)];
+}
+
+/** The raw CSS variable, for SVG stroke and fill where a class will not do. */
+export function categoryVar(key: string): string {
+  return `var(--cat-${categoryIndex(key) + 1})`;
+}
