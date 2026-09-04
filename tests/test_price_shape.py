@@ -14,6 +14,8 @@ Nothing here is provable from the response. The classifier states a suspicion
 and the view is expected to word it as one.
 """
 
+import random
+
 import pytest
 
 from unbagged.views import _price_shape
@@ -94,3 +96,103 @@ class TestDegenerate:
         shape = _price_shape([2.50, 2.50, 2.50, 2.50])
         assert shape["kind"] == "unit"
         assert shape["base"] == pytest.approx(2.50)
+
+
+class TestScoredAgainstGroundTruth:
+    """Score the classifier, do not just exercise it.
+
+    Every other test in this file asserts a behaviour on a hand-built series,
+    which proves the function does what its author expected on cases its author
+    thought of. It cannot tell you the classifier was calling 88% of
+    weight-priced products a price, which is what it was doing.
+
+    So this builds series from the SAME pricing model the fixture generator
+    uses — trend, per-visit jitter, a 12% promotion, and then either a
+    per-pound multiplier or a quantity multiple — and keeps the label it drew
+    from. That label is ground truth, not an opinion, and it costs nothing.
+
+    The bounds sit below the measured figures on purpose. They are a regression
+    gate, not a target: they catch the thresholds drifting back, and they do not
+    fail because a tune moved a number by a point.
+    """
+
+    ANNUAL_DRIFT = 0.061
+
+    def _series(self, rng, kind, n, years=2.0):
+        """Returns (amounts, realised label).
+
+        A series drawn as `multiple` whose 6% dice never landed contains no
+        multiple, so it is a unit series. Labelling it otherwise would score the
+        classifier against something that is not in the data.
+        """
+        base = rng.uniform(0.79, 16.99)
+        amounts, multiplied = [], False
+        for i in range(n):
+            years_in = years * i / max(n - 1, 1)
+            trend = base * (1 + self.ANNUAL_DRIFT * years_in)
+            jitter = rng.uniform(0.96, 1.06)
+            if rng.random() < 0.12:
+                jitter *= rng.uniform(0.70, 0.85)
+            amount = trend * jitter
+            if kind == "weight":
+                amount *= rng.uniform(0.55, 1.75)
+            elif kind == "multiple" and rng.random() < 0.06:
+                amount *= rng.choice((2, 2, 2, 3))
+                multiplied = True
+            amounts.append(round(max(amount, 0.10), 2))
+        realised = kind if kind != "multiple" else ("multiple" if multiplied else "unit")
+        return amounts, realised
+
+    def _score(self, trials=3000, floor=4, seed=11):
+        rng = random.Random(seed)
+        tally = {k: {"tp": 0, "fp": 0, "fn": 0} for k in ("weight", "multiple", "unit")}
+        for _ in range(trials):
+            drawn = rng.choice(("weight", "multiple", "unit"))
+            amounts, true = self._series(rng, drawn, rng.randint(floor, 22))
+            predicted = _price_shape(amounts)["kind"]
+            for kind in tally:
+                if predicted == kind and true == kind:
+                    tally[kind]["tp"] += 1
+                elif predicted == kind:
+                    tally[kind]["fp"] += 1
+                elif true == kind:
+                    tally[kind]["fn"] += 1
+        out = {}
+        for kind, v in tally.items():
+            precision = v["tp"] / (v["tp"] + v["fp"]) if v["tp"] + v["fp"] else 0.0
+            recall = v["tp"] / (v["tp"] + v["fn"]) if v["tp"] + v["fn"] else 0.0
+            out[kind] = (precision, recall)
+        return out
+
+    def test_weight_is_actually_detected(self):
+        """The one that was broken. Recall was 0.12 because the rule required
+        the largest cluster to hold exactly one amount, which is true of 12% of
+        weight series."""
+        precision, recall = self._score()["weight"]
+        assert recall >= 0.70, f"weight recall {recall:.3f}"
+        assert precision >= 0.78, f"weight precision {precision:.3f}"
+
+    def test_a_unit_price_is_rarely_called_something_else(self):
+        """The expensive error in the other direction: refusing to chart a
+        product whose amounts really are a price."""
+        precision, recall = self._score()["unit"]
+        assert recall >= 0.95, f"unit recall {recall:.3f}"
+        assert precision >= 0.70, f"unit precision {precision:.3f}"
+
+    def test_a_claimed_multiple_is_almost_always_real(self):
+        """Recall here is low and that is the conservative direction: an
+        undetected multiple falls through to weight or unit, and both of those
+        are stated as suspicion. A false multiple would put a number on the
+        screen that is not there."""
+        precision, _ = self._score()["multiple"]
+        assert precision >= 0.90, f"multiple precision {precision:.3f}"
+
+    def test_the_committed_fixture_still_classifies_sanely(self):
+        """A smoke test, not a gate. The fixture has only a handful of
+        weight-priced products with enough observations to judge, so its
+        precision and recall are too noisy to assert on."""
+        rng = random.Random(3)
+        for kind in ("weight", "unit"):
+            amounts, true = self._series(rng, kind, 12)
+            assert _price_shape(amounts)["kind"] in {"weight", "multiple", "unit"}
+            assert len(_price_shape(amounts)["multiples"]) == len(amounts)
