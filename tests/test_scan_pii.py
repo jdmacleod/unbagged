@@ -12,6 +12,7 @@ from tools import scan_pii
 from tools.scan_pii import Finding, luhn_ok, mask, scan_lines
 
 ADDRESS = "8814 Mockingbird Lane"  # pii-scan: allow synthetic test address
+LOYALTY = "600123456789"  # pii-scan: allow synthetic loyalty-shaped test literal
 
 
 def rules_hit(line: str, **kw) -> set[str]:
@@ -88,6 +89,39 @@ class TestNumbers:
 
     def test_version_strings_are_not_loyalty_numbers(self):
         assert "LOYALTY_NUMBER" not in rules_hit("3.121212121212")
+
+
+class TestHashDigests:
+    """A sha256 is 64 hex characters, and about one in three carries a 12-to-14
+    digit run somewhere inside it; a few pass a Luhn check by coincidence.
+    docker/requirements.txt holds 58 of them and produced 71 findings, none real.
+    The guard is on the rule rather than the file: a file-level exemption would
+    silence every rule on that path forever, including the day someone pastes
+    something else into it."""
+
+    SHA256 = "bfb91aa2d334c61cb35ba9a116fc123b3d3df31640b801cf57a7a78ec3f603b3"
+    GIT_SHA = "af680481f2c3d9e0a7b6c5d4e3f2a1b09c8d7e6f"
+
+    def test_a_pip_hash_line_is_clean(self):
+        assert rules_hit(f"    --hash=sha256:{self.SHA256}") == set()
+
+    def test_a_git_sha_is_clean(self):
+        assert rules_hit(f"commit {self.GIT_SHA}") == set()
+
+    def test_a_real_identifier_beside_a_hash_still_fires(self):
+        # The guard exempts what is *inside* the token, not the whole line.
+        hits = rules_hit(f"sha256:{self.SHA256} loyalty {LOYALTY}")
+        assert "LOYALTY_NUMBER" in hits
+
+    def test_a_short_hex_run_is_not_a_digest(self):
+        # 32 characters is the floor. Below it, a hex-looking string is just text
+        # and a digit run in it is still a finding.
+        assert "LOYALTY_NUMBER" in rules_hit(f"id ab12 {LOYALTY} cd34")
+
+    def test_the_committed_lock_is_clean(self):
+        lock = scan_pii.REPO_ROOT / "docker" / "requirements.txt"
+        assert lock.is_file()
+        assert scan_pii.scan_paths(["docker/requirements.txt"], denylist=()) == []
 
 
 class TestUuid:

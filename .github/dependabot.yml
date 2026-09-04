@@ -22,6 +22,18 @@ updates:
     commit-message:
       prefix: "deps"
 
+  # docker/requirements.txt is the shipped image's hash-pinned runtime lock. It
+  # is the entry that matters most: the root entry above covers pyproject's
+  # floors, which the image no longer installs from. A pin nobody bumps decays
+  # into an unpatched dependency, and `make lock` needs Docker, so leaving this
+  # to a human means it does not happen.
+  - package-ecosystem: pip
+    directory: /docker
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "deps"
+
   - package-ecosystem: npm
     directory: /frontend
     schedule:

@@ -152,7 +152,31 @@ def _phone_is_real(m: re.Match[str]) -> bool:
 
 def _card_is_real(m: re.Match[str]) -> bool:
     digits = re.sub(r"\D", "", m.group(0))
-    return 13 <= len(digits) <= 19 and luhn_ok(digits)
+    return 13 <= len(digits) <= 19 and luhn_ok(digits) and _not_inside_hash(m)
+
+
+HEX_RUN = re.compile(r"[0-9a-fA-F]{32,}")
+
+
+def _not_inside_hash(m: re.Match[str]) -> bool:
+    """False when the match sits inside a long hex token — a digest, not a number.
+
+    A sha256 is 64 hex characters, and roughly one in three contains a 12-to-14
+    digit run somewhere in the middle; a few of those pass a Luhn check by
+    coincidence. docker/requirements.txt carries 58 of them and produced 71
+    findings, none real.
+
+    The fix is a guard rather than a per-file exemption because a file-level
+    escape hatch is exactly what this scanner must not have: it would silence
+    every rule on the one file, forever, including the day someone pastes
+    something else into it. A digit run inside a 32-plus-character hex token is
+    not a card number in any file, so the rule is the right place for it.
+    """
+    text = m.string
+    return not any(
+        run.start() <= m.start() and m.end() <= run.end()
+        for run in HEX_RUN.finditer(text)
+    )
 
 
 RULES: tuple[Rule, ...] = (
@@ -208,6 +232,7 @@ RULES: tuple[Rule, ...] = (
         pattern=re.compile(r"(?<![\d.])\d{12,14}(?![\d.])"),
         hint="Loyalty-card-length digit run. Move it into a fixture, or suppress "
              "it inline if it is a UPC or other non-identifying code.",
+        accept=_not_inside_hash,
         applies_in_fixtures=False,
     ),
     Rule(
