@@ -20,9 +20,10 @@ from typing import Protocol
 
 
 class DisclosureCategory(StrEnum):
-    """The CCPA/CPRA disclosure obligations, one column of the compliance matrix
-    each. Keys are stable: `docs/legal-basis.md` maps them to their citations, and
-    the matrix columns are generated from this enum."""
+    """The CCPA/CPRA disclosure obligations, one row of the compliance view each.
+
+    Keys are stable: `docs/legal-basis.md` maps them to their citations, and the
+    view's rows are generated from this enum, in this order."""
 
     CATEGORIES_COLLECTED = "CATEGORIES_COLLECTED"
     SOURCES = "SOURCES"
