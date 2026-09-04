@@ -77,4 +77,24 @@ target-version = "py312"
 src = ["src", "tools", "tests"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM"]
+# S is flake8-bandit. It was not selected before, which meant the `# noqa: S608`
+# already sitting in ingest.py silenced a rule that had never been running —
+# the suppression looked like a reviewed decision and was inert. Selecting it
+# makes every such marker mean what it appears to mean.
+select = ["E", "F", "I", "UP", "B", "SIM", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests assert, and a test that cannot use `assert` is a test nobody writes.
+# The container tier drives `docker` and `playwright` by name and opens
+# http://127.0.0.1 URLs it built itself: test infrastructure, no untrusted input.
+# Seeded PRNGs in the scoring tests are reproducibility, not cryptography.
+"tests/**" = ["S101", "S311"]
+"tests/container/**" = ["S101", "S310", "S603", "S607"]
+"tests/test_build_denylist.py" = ["S101", "S603", "S607"]
+# The safeguard tooling shells out to git by name, on argument lists it builds
+# itself from literals and repo-relative paths. Resolving an absolute git path
+# would only move the trust, and there is no untrusted input on these calls.
+"tools/**" = ["S603", "S607"]
+# Fixture generators are seeded PRNGs on purpose: reproducibility is the point,
+# and `secrets` would defeat `make fixtures-check`.
+"src/unbagged/adapters/*/fixtures/generate.py" = ["S311"]

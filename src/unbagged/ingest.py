@@ -222,9 +222,11 @@ def _why_nothing_matched(bundle: SourceBundle) -> str:
             message = str(exc)
             if message not in reasons:
                 reasons.append(message)
-        except Exception:
+        except Exception:  # noqa: S110 - the swallow is the behaviour, see below
             # A malformed file that fails in some other way is still unreadable;
-            # it just has no message worth quoting.
+            # it just has no message worth quoting. Deliberately not logged: this
+            # runs only to explain a failed upload, and the caller already reports
+            # the outcome to the person who is standing there.
             pass
 
     if reasons and not readable:
@@ -259,7 +261,9 @@ def _save(conn, result: ParseResult, documents) -> int:
         with repository.transaction(conn):
             for table in ("identity", "txn", "inference", "disclosure"):
                 conn.execute(
-                    f"UPDATE {table} SET source_document_id = ? WHERE request_id = ?",
+                    # `table` comes from the literal tuple on the line above,
+                    # never from a caller. Both values are bound.
+                    f"UPDATE {table} SET source_document_id = ? WHERE request_id = ?",  # noqa: S608
                     (first, request_id),
                 )
     return request_id

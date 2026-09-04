@@ -76,8 +76,12 @@ class TestFiles:
             sanitize_file(pdf)
 
     def test_roundtrip_leaks_nothing(self, tmp_path):
-        secret = "shopper@gmail.com"  # pii-scan: allow test literal
+        # example.com is reserved by RFC 2606 and cannot be registered. The
+        # literal here used to be a gmail.com address, which is deliverable to
+        # whoever holds it — not something to publish in a repository whose
+        # subject is other people's personal data.
+        identifier = "shopper@example.com"
         src = tmp_path / "report.json"
-        # pii-scan: allow test literal
-        src.write_text(json.dumps({"email": secret, "street": "1428 Elm Street"}))
-        assert secret not in json.dumps(sanitize_file(src))
+        street = "1428 Elm Street"  # pii-scan: allow fictional address, not a real one
+        src.write_text(json.dumps({"email": identifier, "street": street}))
+        assert identifier not in json.dumps(sanitize_file(src))

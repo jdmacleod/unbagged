@@ -101,7 +101,7 @@ def migrate(conn: sqlite3.Connection) -> list[int]:
         script = "\n".join([
             "BEGIN;",
             path.read_text(encoding="utf-8"),
-            f"INSERT INTO schema_migration (version, name) "
+            f"INSERT INTO schema_migration (version, name) "  # noqa: S608
             f"VALUES ({version}, '{path.name}');",
             "COMMIT;",
         ])

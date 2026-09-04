@@ -39,7 +39,12 @@ ComposeLoader.add_constructor(
 
 
 def services(path: Path) -> dict:
-    return yaml.load(path.read_text(encoding="utf-8"), Loader=ComposeLoader)["services"]
+    # ComposeLoader subclasses yaml.SafeLoader (see above); the rule matches on
+    # the loader's name, not its base class.
+    return yaml.load(
+        path.read_text(encoding="utf-8"),
+        Loader=ComposeLoader,  # noqa: S506 - ComposeLoader subclasses SafeLoader
+    )["services"]
 
 
 class TestPortBinding:
