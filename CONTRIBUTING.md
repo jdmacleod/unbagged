@@ -31,7 +31,22 @@ parser and not enough to identify you. Read the output before you attach it.
 
 `CHANGELOG.md` describes what changed in the software. It never describes what
 was in a report. No dates lifted from a shopping history, no product
-descriptions, no UPCs, no counts drawn from one person's response.
+descriptions, no UPCs, no amounts, no store numbers.
+
+**Aggregates are allowed, and they are the point.** A ratio or a count taken
+over a whole response describes the *shape* of a format, not a person: *0 of 762
+product-days carried a repeated UPC*, *68% of products were bought exactly
+once*, *20 of 54 baskets did not foot*. Every one of those is a fact about
+Kroger's export that a reader can weigh, and none of them narrows down who
+shopped. This rule used to ban "counts drawn from one person's response"
+outright, which forbade the only evidence that makes a claim about a format
+checkable — and which the adapter notes and this changelog had already, rightly,
+been relying on.
+
+The line is identifiability, not arithmetic. A count over hundreds of rows is
+safe. A count small enough to be about one visit is not: *the basket on the 14th
+had 3 items* names a trip. If a number could be paired with a date, a shop or a
+product to single out an event, leave it out.
 
 Worth stating separately because a changelog is exactly where the urge to be
 concrete bites hardest. "Corrected a misread field" wants an example, and the

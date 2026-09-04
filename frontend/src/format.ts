@@ -55,16 +55,6 @@ export function categoryIndex(key: string): number {
   return Math.abs(hash) % CATEGORY_COUNT;
 }
 
-/** Tailwind text colour class for a key's category hue. */
-export function categoryText(key: string): string {
-  // Written out rather than interpolated: Tailwind scans source for whole class
-  // names, and a template literal produces nothing at build time.
-  return [
-    "text-cat-1", "text-cat-2", "text-cat-3",
-    "text-cat-4", "text-cat-5", "text-cat-6",
-  ][categoryIndex(key)];
-}
-
 /** The raw CSS variable, for SVG stroke and fill where a class will not do. */
 export function categoryVar(key: string): string {
   return `var(--cat-${categoryIndex(key) + 1})`;

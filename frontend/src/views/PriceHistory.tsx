@@ -205,8 +205,10 @@ function QuantityNote() {
 const PLOT_W = 800;
 const PLOT_H = 116;
 
-/** Points at their true position in time, which is the whole point. */
-function scale(points: PricePoint[]) {
+/** Points at their true position in time, which is the whole point.
+ *  Exported for `scale.test.ts`: it is the arithmetic behind every plotted
+ *  point and nothing else checked it. */
+export function scale(points: PricePoint[]) {
   const t = points.map((p) => Date.parse(p.date));
   const [t0, t1] = [Math.min(...t), Math.max(...t)];
   const span = t1 - t0 || 1;

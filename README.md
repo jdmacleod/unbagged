@@ -134,6 +134,7 @@ make setup           # venv, dev deps, git hooks
 make setup-frontend  # npm install
 make dev             # compose + Vite, on http://localhost:5173
 make test            # fast suite
+make test-frontend   # UI unit tests (vitest)
 make test-container  # slow: builds and runs a real container
 make check-pii       # run this before every commit
 ```
