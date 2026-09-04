@@ -762,8 +762,11 @@ class TestDuplicateAcrossRequests:
     The in-upload duplicate check only covered one request. Dropping the same
     file again — what people do when a 13-second parse shows no progress —
     produced a second request identical to the first: same retailer, same
-    reference, indistinguishable in the selector, a duplicate column in Compare,
-    and no way to delete either from the UI.
+    reference, indistinguishable in the selector, and a duplicate column in
+    Compare. The message told the reader to remove the existing one, which was
+    not possible from the UI until /devex-review added the control on
+    2026-09-04; `test_reloading_after_deleting_the_original_works` below is the
+    other half of that instruction.
     """
 
     def test_the_same_report_cannot_be_loaded_twice(self, client, uploaded):

@@ -526,7 +526,13 @@ function BasketRow({
         <button
           onClick={onToggle}
           aria-expanded={open}
-          className={`flex w-full items-baseline gap-3 py-2.5 text-left ${
+          // Wraps to two lines when the row cannot hold one. Measured at 375px
+          // on a single line, the store column was squeezed to 0px and the page
+          // scrolled sideways: 160px of that row is two fixed-width money
+          // columns, so the only flexible thing on it absorbed the entire
+          // shortfall. What you bought where is the point of the row, so the
+          // amounts move to their own line rather than the store disappearing.
+          className={`flex w-full flex-wrap items-baseline gap-x-2 gap-y-1 py-2.5 text-left md:gap-x-3 ${
             // Marked, not tinted. A fifth of these rows carry it, and tinting a
             // fifth of a long list makes the list look broken rather than
             // making the rows findable. Quiet on purpose: the difference is the
@@ -554,30 +560,55 @@ function BasketRow({
                 title={`store ${basket.store_code}`}
               />
             )}
+            {/* Where and how you paid. The item count used to live here too,
+                which made this the longest string on the row and the thing that
+                got clipped: at 375px "store 00318 · GIFT CARD · 22 items" wants
+                215px and has 151. It is a quantity, so it sits with the other
+                quantities now. `truncate` stays as the guard for a tender
+                longer than any this format has produced. */}
             <span className="truncate">
               store {basket.store_code ?? "—"}
-              {basket.tender_type ? ` · ${basket.tender_type}` : ""} ·{" "}
+              {basket.tender_type ? ` · ${basket.tender_type}` : ""}
+            </span>
+          </span>
+
+          {/* Below `md` the amounts take a line of their own: `basis-full`
+              rather than a shrink hint, because the store column carries
+              `min-w-0` for its truncation and will therefore collapse to zero
+              before a shrink-driven wrap ever triggers. That is exactly how it
+              reached 0px. `flex-wrap` inside handles the widest case, an
+              unreconciled row whose "over by" note joins the two amounts.
+
+              `md`, not `sm`. Measured across the fixture: at 640px the one-line
+              row leaves the store column 75px against the 153px the longest
+              tender needs, and all 25 rows clip; at 700px, 8 still clip; at
+              768px, none do. The breakpoint is where the content fits, not
+              where the default scale happens to put it. */}
+          <span className="flex basis-full flex-wrap items-baseline justify-end gap-x-3 gap-y-1 md:ml-auto md:basis-auto md:flex-nowrap">
+            {unreconciled && (
+              <span
+                className="shrink-0 text-muted underline decoration-dotted underline-offset-2"
+                title="These line items do not add up to the total the retailer stated for this basket. The difference is in the response as supplied, not in how it was read."
+              >
+                {(basket.stated_pre_discount_delta ?? 0) > 0 ? "over" : "under"} by{" "}
+                {money(Math.abs(basket.stated_pre_discount_delta ?? 0))}
+              </span>
+            )}
+            <span className="num shrink-0 text-muted">
               {number(basket.item_count)} items
             </span>
-          </span>
-          {unreconciled && (
-            <span
-              className="shrink-0 text-muted underline decoration-dotted underline-offset-2"
-              title="These line items do not add up to the total the retailer stated for this basket. The difference is in the response as supplied, not in how it was read."
-            >
-              {(basket.stated_pre_discount_delta ?? 0) > 0 ? "over" : "under"} by{" "}
-              {money(Math.abs(basket.stated_pre_discount_delta ?? 0))}
+            {/* w-16 below sm: the widest amount here is about 53px of Iosevka,
+                so 80px was reserving space this row cannot spare on a phone. */}
+            <span className="num w-16 shrink-0 text-right text-muted md:w-20">
+              {basket.saved_total > 0 ? `−${money(basket.saved_total)}` : ""}
             </span>
-          )}
-          <span className="num w-20 shrink-0 text-right text-muted">
-            {basket.saved_total > 0 ? `−${money(basket.saved_total)}` : ""}
-          </span>
-          <span className="num w-20 shrink-0 text-right font-semibold">
-            {money(basket.paid_total)}
-          </span>
-          {/* Below lg the margin collapses, so the citation comes inline. */}
-          <span className="lg:hidden">
-            <Cite provenance={basket.provenance} />
+            <span className="num w-16 shrink-0 text-right font-semibold md:w-20">
+              {money(basket.paid_total)}
+            </span>
+            {/* Below lg the margin collapses, so the citation comes inline. */}
+            <span className="lg:hidden">
+              <Cite provenance={basket.provenance} />
+            </span>
           </span>
         </button>
 

@@ -140,7 +140,16 @@ function PriceBody({
 
       {current && (
         <Spine margin={<Aside>{current.upc}</Aside>}>
-          <Series series={current} />
+          {/* The view promises not to claim a price change for a product whose
+              amounts are not a unit price, and then drew one anyway: selecting a
+              row from the unpriceable table below rendered a full series,
+              complete with a line through amounts the classifier had just said
+              were not a price. */}
+          {current.priceable ? (
+            <Series series={current} />
+          ) : (
+            <Unpriced series={current} />
+          )}
         </Spine>
       )}
 
@@ -296,8 +305,13 @@ function Series({ series }: { series: PriceSeries }) {
               strokeWidth={1.5}
               vectorEffect="non-scaling-stroke"
             />
-            {pts.map((p) => (
-              <g key={p.date}>
+            {/* Keyed on date AND index. A product bought twice on one day gives
+                two points the same date, and React then treats them as one
+                element: the second silently replaces the first. The response
+                puts a repeat purchase on one line so this is rare, but "rare"
+                is not "impossible" and the failure is invisible. */}
+            {pts.map((p, i) => (
+              <g key={`${p.date}-${i}`}>
                 {p.multiple_of ? (
                   // Hollow: the amount is there, but it is probably more than
                   // one item, so it is not a point on a price line.
@@ -349,6 +363,69 @@ function Series({ series }: { series: PriceSeries }) {
   );
 }
 
+/**
+ * What is shown instead of a series, when there is no unit price to draw.
+ *
+ * Not an empty state: the product was bought, the amounts are real, and the
+ * dates are real. What cannot be drawn is a line through them, because a line
+ * asserts that the movement between two points is a price change. So the
+ * amounts are listed and the reason is named.
+ */
+function Unpriced({ series }: { series: PriceSeries }) {
+  const hue = categoryVar(series.upc);
+  return (
+    <div>
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h3 className="font-serif text-[17px] font-semibold" style={{ color: hue }}>
+          {series.description}
+        </h3>
+        <span className="num text-[11.5px] text-faint">{series.upc}</span>
+      </div>
+      <p className="num mt-1 text-[11.5px] text-faint">
+        bought {series.purchases} times · {series.first_seen} → {series.last_seen}
+      </p>
+      <p className="mt-3 max-w-[62ch] text-muted">
+        {series.shape === "weight" ? (
+          <>
+            The amounts for this product never settle and range too widely to be
+            one item at a price: that is what a per-pound product weighed at the
+            till looks like. No price series is drawn, because a line between two
+            of these points would assert a price change that the response does
+            not support.
+          </>
+        ) : (
+          <>
+            {series.multiple_count} of these amounts sit at a near-exact multiple
+            of the usual one, which is consistent with buying more than one
+            rather than with the price changing. A line through them would report
+            a fuller trolley as inflation, so none is drawn.
+          </>
+        )}
+      </p>
+      <div className="mt-4 border-t border-rule">
+        <div className="grid grid-cols-[minmax(0,1fr)_6rem] gap-3 py-1.5 text-[11.5px] tracking-[0.05em] text-muted uppercase">
+          <span>Date</span>
+          <span className="text-right">Amount</span>
+        </div>
+        {series.points.map((point, i) => (
+          <div
+            key={`${point.date}-${i}`}
+            className="grid grid-cols-[minmax(0,1fr)_6rem] gap-3 border-t border-rule py-1.5"
+          >
+            <span className="num text-[12.5px]">{point.date}</span>
+            <span className="num text-right text-[12.5px]">
+              {money(point.paid_amt)}
+              {point.multiple_of ? (
+                <span className="ml-1.5 text-faint">×{point.multiple_of}?</span>
+              ) : null}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Table({
   products,
   current,
@@ -360,7 +437,11 @@ function Table({
 }) {
   const cols = "grid-cols-[minmax(0,1fr)_4.5rem_5rem_5rem_4.5rem]";
   return (
-    <div className="border-t border-rule">
+    // Four fixed columns plus their gaps need more than a 327px phone measure,
+    // so the table scrolls inside its own box rather than dragging the page
+    // sideways. Same treatment Compare and the receipt table already use.
+    <div className="scroll-x border-t border-rule">
+      <div className="min-w-[26rem]">
       <div
         className={`grid ${cols} gap-3 py-1.5 text-[11.5px] tracking-[0.05em] text-muted uppercase`}
       >
@@ -399,6 +480,7 @@ function Table({
           </span>
         </button>
       ))}
+      </div>
     </div>
   );
 }
@@ -433,7 +515,8 @@ function Unpriceable({
         like the price of one item. Shown so the gap is visible rather than
         silently dropped, with no price change claimed for any of them.
       </p>
-      <div className="border-t border-rule">
+      <div className="scroll-x border-t border-rule">
+        <div className="min-w-[24rem]">
         <div
           className={`grid ${cols} gap-3 py-1.5 text-[11.5px] tracking-[0.05em] text-muted uppercase`}
         >
@@ -470,6 +553,7 @@ function Unpriceable({
             </span>
           </button>
         ))}
+        </div>
       </div>
     </div>
   );

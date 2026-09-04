@@ -33,15 +33,44 @@ export function ErrorBox({ error }: { error: string }) {
  */
 export function Spine({
   margin,
+  marginFirst,
   children,
 }: {
   margin?: ReactNode;
+  /** Put the margin ahead of the content in the DOM, and therefore ahead of it
+   *  in the tab order, while it still renders on the right.
+   *
+   *  Only worth setting when the margin holds something focusable. It holds a
+   *  jump rail on the product index, and rendering that after the content put
+   *  it 400 tab stops past the entries it exists to skip — the navigation
+   *  behind the thing being navigated. Explicit column placement does the job
+   *  without a positive `tabindex`, which would be a worse cure. */
+  marginFirst?: boolean;
   children: ReactNode;
 }) {
+  const content = (
+    <div className={`min-w-0 ${marginFirst ? "lg:col-start-1 lg:row-start-1" : ""}`}>
+      {children}
+    </div>
+  );
+  const aside = (
+    <div className={`hidden lg:block ${marginFirst ? "lg:col-start-2 lg:row-start-1" : ""}`}>
+      {margin}
+    </div>
+  );
   return (
     <div className="grid gap-x-12 gap-y-3 lg:grid-cols-[minmax(0,var(--measure-read))_var(--spacing-margin)]">
-      <div className="min-w-0">{children}</div>
-      <div className="hidden lg:block">{margin}</div>
+      {marginFirst ? (
+        <>
+          {aside}
+          {content}
+        </>
+      ) : (
+        <>
+          {content}
+          {aside}
+        </>
+      )}
     </div>
   );
 }

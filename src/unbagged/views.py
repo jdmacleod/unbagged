@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections import defaultdict
+from statistics import median
 from typing import Any
 
 from unbagged.models import DisclosureCategory, DisclosureStatus, InferenceOrigin
@@ -112,12 +113,25 @@ def timeline(
                t.channel, t.tender_type, t.total_pre_discount,
                t.source_document_id, t.page, t.locator,
                COUNT(i.id) AS item_count,
-               COALESCE(SUM(i.retail_amt), 0) AS shelf_total,
+               -- Shelf and paid are summed over the SAME lines. Written as two
+               -- independent SUMs, a line with a loyalty amount and no retail
+               -- amount landed in `paid_total` and not in `shelf_total`, so the
+               -- basket reported a saving it never had and the two columns
+               -- described different sets of rows. Whichever amount is present
+               -- stands in for the missing one, so the pair is always consistent
+               -- and no line is silently dropped from the totals.
+               COALESCE(SUM(
+                   CASE WHEN i.retail_amt IS NOT NULL OR i.loyalty_amt IS NOT NULL
+                        THEN COALESCE(i.retail_amt, i.loyalty_amt) END
+               ), 0) AS shelf_total,
                -- A line with no loyalty price disclosed cost its shelf price:
                -- no loyalty price is no loyalty saving. COALESCE rather than
                -- SUM(loyalty_amt), which silently drops those lines from the
                -- total and understates what the basket cost.
-               COALESCE(SUM(COALESCE(i.loyalty_amt, i.retail_amt)), 0) AS paid_total
+               COALESCE(SUM(
+                   CASE WHEN i.retail_amt IS NOT NULL OR i.loyalty_amt IS NOT NULL
+                        THEN COALESCE(i.loyalty_amt, i.retail_amt) END
+               ), 0) AS paid_total
         FROM txn t LEFT JOIN txn_item i ON i.txn_id = t.id
         WHERE {clause}
         GROUP BY t.id
@@ -494,11 +508,18 @@ def price_history(
         for point, multiple in zip(points, shape["multiples"], strict=True):
             point["multiple_of"] = multiple
 
-        # Only amounts that look like a single unit can carry a price change.
+        # Only amounts that look like a single unit can carry a price change,
+        # and the change is measured on what you PAID.
+        #
+        # It used to be measured on the shelf amount while the chart drew paid as
+        # the heavy line and shelf as the light one, so the "Change" column and
+        # the line the eye follows were answering different questions. The tab is
+        # called "what things cost you"; paid is the figure that means that, and
+        # First and Latest move with it so all three agree.
         singles = [p for p, m in zip(points, shape["multiples"], strict=True) if not m]
         change = None
         if shape["kind"] == "unit" and len(singles) >= 2:
-            first, last = singles[0]["retail_amt"], singles[-1]["retail_amt"]
+            first, last = singles[0]["paid_amt"], singles[-1]["paid_amt"]
             change = round((last - first) / first * 100, 1) if first else None
 
         products.append(
@@ -520,8 +541,8 @@ def price_history(
                 "priceable": shape["kind"] == "unit",
                 "first_seen": points[0]["date"],
                 "last_seen": points[-1]["date"],
-                "first_price": singles[0]["retail_amt"] if singles else points[0]["retail_amt"],
-                "last_price": singles[-1]["retail_amt"] if singles else points[-1]["retail_amt"],
+                "first_price": singles[0]["paid_amt"] if singles else points[0]["paid_amt"],
+                "last_price": singles[-1]["paid_amt"] if singles else points[-1]["paid_amt"],
                 "min_price": min(p["retail_amt"] for p in points),
                 "max_price": max(p["retail_amt"] for p in points),
                 "change_pct": change,
@@ -551,6 +572,25 @@ MULTIPLE_TOLERANCE = 0.02
 DRIFT_MARGIN = 0.15
 
 
+def _near_multiple(ratio: float) -> int | None:
+    """The whole number this ratio sits on, if it sits close enough to one.
+
+    Tolerance is proportional to the multiple. A 3x line carries three times the
+    accumulated jitter of a 1x line, so a fixed absolute window is simultaneously
+    too tight at the top of the range and too loose at the bottom.
+
+    This exists because two call sites disagreed. Choosing a better base tested
+    `abs(ratio - round(ratio)) <= MULTIPLE_TOLERANCE * round(ratio)` while
+    `multiple_of` tested `abs(ratio - nearest) > MULTIPLE_TOLERANCE`, so a
+    candidate could be accepted as the unit by the first rule and then explain
+    none of the amounts under the second: the base moved and nothing was marked.
+    """
+    nearest = round(ratio)
+    if nearest < 2:
+        return None
+    return nearest if abs(ratio - nearest) <= MULTIPLE_TOLERANCE * nearest else None
+
+
 def _price_shape(amounts: list[float]) -> dict[str, Any]:
     """Guess whether a product's amounts are a unit price, multiples, or weight.
 
@@ -562,20 +602,35 @@ def _price_shape(amounts: list[float]) -> dict[str, Any]:
     weight, so nothing in this function can be verified from it, and the view is
     expected to say "consistent with" rather than "is".
     """
-    if not amounts:
-        return {"kind": "unit", "base": None, "multiples": []}
+    # A non-positive amount is not a price. Zeros are the export's placeholder
+    # rows and negatives are returns; both are filtered before this function is
+    # reached through `price_history`, but it is a pure function with its own
+    # tests and callers, and clustering divided by `cluster[0]` — so a single
+    # 0.00 raised ZeroDivisionError. The returned `multiples` list still lines up
+    # with the input, because the caller zips the two with strict=True.
+    priced = [a for a in amounts if a > 0]
+    if not priced:
+        return {"kind": "unit", "base": None, "multiples": [None] * len(amounts)}
 
     # Cluster amounts that are within SAME_PRICE of each other; the biggest
     # cluster is the product's ordinary price.
     clusters: list[list[float]] = []
-    for amount in sorted(amounts):
+    for amount in sorted(priced):
         for cluster in clusters:
             if abs(amount - cluster[0]) / cluster[0] <= SAME_PRICE:
                 cluster.append(amount)
                 break
         else:
             clusters.append([amount])
-    biggest = max(clusters, key=lambda c: (len(c), -c[0]))
+
+    # Ties break toward the middle of the range, not the bottom. When nothing
+    # repeats every cluster has one member, and `-c[0]` picked the CHEAPEST
+    # amount as the base — the exact reading the docstring above rules out, and
+    # the one that makes every other amount look like a large multiple of it.
+    # With no repetition there is no "most often", so "most typical" is the
+    # honest fallback.
+    typical = median(priced)
+    biggest = max(clusters, key=lambda c: (len(c), -abs(c[0] - typical)))
     base = round(sum(biggest) / len(biggest), 2)
 
     # The commonest amount is not always one item. A product usually bought in
@@ -585,8 +640,7 @@ def _price_shape(amounts: list[float]) -> dict[str, Any]:
     for candidate in sorted(set(amounts)):
         if candidate <= 0 or candidate >= base:
             continue
-        ratio = base / candidate
-        if abs(ratio - round(ratio)) <= MULTIPLE_TOLERANCE * round(ratio) and round(ratio) >= 2:
+        if _near_multiple(base / candidate):
             base = round(candidate, 2)
             break
 
@@ -602,33 +656,57 @@ def _price_shape(amounts: list[float]) -> dict[str, Any]:
         quantity buy, which is the same failure as the one this whole function
         exists to prevent, pointed the other way.
         """
-        if base <= 0:
+        if base <= 0 or amount <= 0:
             return None
-        ratio = amount / base
-        nearest = round(ratio)
-        if nearest < 2 or abs(ratio - nearest) > MULTIPLE_TOLERANCE:
+        nearest = _near_multiple(amount / base)
+        if nearest is None:
             return None
         between = [
-            a for a in amounts
+            a for a in priced
             if base * (1 + DRIFT_MARGIN) < a < base * (nearest - DRIFT_MARGIN)
         ]
-        return None if len(between) >= 2 else nearest
+        # One amount on the way is enough. This asked for two, which cannot
+        # exist at the smallest series the API allows: `min_observations` floors
+        # at 2, and two observations leave no room for two intermediates, so the
+        # escape hatch could never fire exactly where a doubling is least
+        # distinguishable from a two-buy.
+        return None if len(between) >= 1 else nearest
 
     multiples = [multiple_of(a) for a in amounts]
-    spread = max(amounts) / min(amounts) if min(amounts) > 0 else 1.0
+    spread = max(priced) / min(priced)
 
     if any(multiples):
         kind = "multiple"
-    elif len(biggest) == 1 and len(amounts) >= 4 and spread > 1.4 and not _trending(amounts):
-        # Nothing ever repeats, the range is wide, and it goes up and down at
+    elif (
+        len(biggest) / len(priced) <= REPEAT_SHARE
+        and len(priced) >= 4
+        and spread > WEIGHT_SPREAD
+        and not _trending(priced)
+    ):
+        # Amounts rarely repeat, the range is wide, and it goes up and down at
         # random: what a per-pound item does. A price that simply climbed also
-        # never repeats and also spreads wide, so the direction test is what
+        # rarely repeats and also spreads wide, so the direction test is what
         # keeps a genuine two-year rise out of this bucket.
         kind = "weight"
     else:
         kind = "unit"
     return {"kind": kind, "base": base, "multiples": multiples}
 
+
+# What a weight-priced series looks like, measured rather than guessed. Across
+# the fixture generator's own pricing model, with the label taken from the draw:
+#
+#                       largest cluster    spread       trending
+#   sold by weight           18%            2.83           4%
+#   sold by the unit         33%            1.39          11%
+#
+# The test used to be "the largest cluster holds exactly one amount", which is
+# true of only 12% of weight series and capped recall at 0.12 — 88% of
+# weight-priced products were charted as if their amounts were prices, which is
+# the single failure the Prices view exists to prevent. Swept over the two
+# thresholds, 0.25 and 1.8 maximise F1 at 0.839 (precision 0.874, recall 0.807).
+REPEAT_SHARE = 0.25
+WEIGHT_SPREAD = 1.8
 
 # How much of a series has to move the same way before it reads as a trend
 # rather than as noise.

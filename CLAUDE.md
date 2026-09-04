@@ -18,9 +18,13 @@ without exception.
 
 ## Project shape
 
-Implementation follows the milestones in `HANDOFF.md` §9, in order. M0 (safeguards and
-scaffolding) is complete. Do not reorder milestones — the safeguards exist so that later
-milestones can be developed against real reports locally without risk to the repo.
+All eight milestones in `HANDOFF.md` §9 are complete; that section is now a record, not
+a plan. Current work is tracked in `CHANGELOG.md` and `TODOS.md`.
+
+`HANDOFF.md` §§0-7 remain the live contract — the adapter rules in §4 and the schema in
+§5 are cited from `adapters/base.py`, `models.py`, `db.py` and the tests. **§8 and §9 are
+historical**: `DESIGN.md` is the authority for anything the user sees, and it departs from
+§8 deliberately in three places.
 
 - `src/unbagged/adapters/` — one adapter per retailer, behind the `RetailerAdapter`
   protocol. Core code never branches on retailer identity.

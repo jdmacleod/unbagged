@@ -5,6 +5,7 @@ domains only. The full synthetic Kroger report arrives with the generator in M2;
 this is the smallest thing that exercises every table.
 """
 
+from unbagged.adapters.kroger.adapter import SCHEMA_VERSION as KROGER_SCHEMA_VERSION
 from unbagged.models import (
     Channel,
     Disclosure,
@@ -48,7 +49,11 @@ def sample_result(doc_id: int | None = 1) -> ParseResult:
             statute="CCPA",
             period_start="2024-02-01T00:00:00Z",
             period_end="2026-01-31T00:00:00Z",
-            adapter_schema_version=1,
+            # Read from the adapter, not pinned. A literal here says "this
+            # fixture was parsed by version 1" forever, so the day the adapter
+            # bumps, every test built on this factory quietly asserts against a
+            # reading that no longer exists.
+            adapter_schema_version=KROGER_SCHEMA_VERSION,
         ),
         identities=(
             # pii-scan: allow synthetic loyalty number, generated not observed
@@ -69,8 +74,18 @@ def sample_result(doc_id: int | None = 1) -> ParseResult:
                 provenance=Provenance(source_document_id=doc_id, page=5,
                                       locator="$.customer[0].basket[0]"),
                 items=(
+                    # `loyalty_amt` is the PRICE the line cost, not a discount.
+                    # This was 2.49 / 0.30, which read as a price is an 88%-off
+                    # banana, so every assertion built on it was checking the
+                    # arithmetic against a purchase nobody made. 2.49 shelf,
+                    # 2.29 paid, 0.20 saved.
                     TxnItem("ORGANIC BANANAS", upc="00000004011", quantity=1.0,
-                            retail_amt=2.49, loyalty_amt=0.30),
+                            retail_amt=2.49, loyalty_amt=2.29),
+                    # A full-price line: most lines are, and `loyalty_amt`
+                    # equalling `retail_amt` is the case that broke when the
+                    # field was read as a discount.
+                    TxnItem("WHOLE MILK GAL", upc="00011110002", quantity=1.0,
+                            retail_amt=4.19, loyalty_amt=4.19),
                     # The placeholder row Kroger emits constantly. It is kept, not
                     # filtered, so the count of real products stays honest.
                     # pii-scan: allow known placeholder UPC, not an identifier

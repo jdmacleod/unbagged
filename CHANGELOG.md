@@ -23,6 +23,49 @@ from a specific response. See `CONTRIBUTING.md`.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/
 
+## [Unreleased]
+
+### Added
+
+- **A response can be removed.** The endpoint and its client wrapper had existed
+  from the start with no call site, so a report could be loaded and never taken
+  back; the only remedy was `make reset`, which moves the whole data directory
+  aside. The control sits at the foot of the page and confirms by naming the
+  retailer and its coverage window. It also makes the duplicate-upload error
+  actionable, which told people to "remove the existing one first".
+- The synthetic report is named in the README as something you can drop in
+  before your own response arrives, which takes weeks.
+
+### Changed
+
+- Red now has two documented call sites instead of one: a delete confirmation
+  and a failed request. The file said "exactly one" and named a control that did
+  not exist, while the only real use was the error box.
+- The A-Z rail on Products is reachable by keyboard before the products it
+  skips, not after all 399 of them.
+- Basket rows wrap to two lines on a narrow screen instead of squeezing the
+  store column to nothing.
+- `HANDOFF.md` §8 and §9 are marked historical, with a table of what shipped
+  against what was asked for. §§0-7 stay authoritative; the adapter rules and
+  the schema are cited from source.
+- The upload prompt no longer offers to read a zip, which was never supported.
+
+### Fixed
+
+- Compare and Timeline scrolled the page sideways on a phone. Compare's cause
+  was an absolutely positioned screen-reader label escaping a `static` scroll
+  container and counting toward the document's own width.
+- A skip link that scrolled but did not move keyboard focus, so it was
+  decoration.
+- `unbagged sanitize` reported ".pdf is not supported" for a path that did not
+  exist, because the suffix was checked before the file.
+- The version in the footer is asserted against the `VERSION` file. It silently
+  reported 0.9.0 through the entire 0.10.0 bump.
+- Documentation that described a UI that had been replaced: the compliance
+  matrix, and a price history counting "days a product was bought". The second
+  was also wrong about the data — the format puts a repeat purchase on one line,
+  measured at 0 of 762 product-days.
+
 ## [0.10.0] - 2026-09-04
 
 ### Added

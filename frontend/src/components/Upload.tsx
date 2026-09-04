@@ -84,14 +84,23 @@ export function Upload({
   return (
     <Spine margin={prominent ? undefined : <span />}>
       {prominent && (
-        <div className="mb-5">
+        <div className="mt-8 mb-5">
+          {/* `mt-8` because the heading had none: it sat 0px under the page's
+              intro paragraph and 4px above its own, so it read as the tail of
+              the header rather than as the start of this section. A heading
+              belongs to what follows it. */}
           <h2 className="font-serif text-[17px] font-semibold">
             Start with a retailer&rsquo;s response
           </h2>
+          {/* Said "The PDF or zip". The app reads PDF and text and nothing
+              else — `extraction.py` answers a zip with "unzip an archive
+              first" — so the first screen was inviting the one action that
+              cannot work. */}
           <p className="mt-1 max-w-[62ch] text-muted">
-            The PDF or zip a retailer sent back when you filed a right-to-know
-            request. It is read here, on this machine, and nothing is uploaded
-            anywhere.
+            The PDF or text file a retailer sent back when you filed a
+            right-to-know request. If it arrived as a zip, unzip it first and
+            drop what was inside. It is read here, on this machine, and nothing
+            is uploaded anywhere.
           </p>
         </div>
       )}
@@ -125,6 +134,11 @@ export function Upload({
           ref={input}
           type="file"
           multiple
+          // Mirrors extraction.py's TEXT_SUFFIXES plus PDF. Only filters the
+          // picker — a drop still accepts anything and the server still
+          // explains what it could not read — but it stops the file dialog
+          // offering the zip the reader was told not to use.
+          accept=".pdf,.txt,.text,.json,.csv,.md,application/pdf,text/plain"
           disabled={busy}
           className="hidden"
           onChange={(e) => void send(Array.from(e.target.files ?? []))}
@@ -136,6 +150,12 @@ export function Upload({
             <span className="font-medium">Drop it here</span>
             <span className="mt-1 block text-muted">
               PDF or text. Or click to choose a file.
+            </span>
+            {/* What happens next, and roughly how long. A long report is tens
+                of seconds of text extraction, and a reader with no estimate
+                assumes it has hung. */}
+            <span className="mt-1 block text-[11.5px] text-faint">
+              A long report takes 10 to 30 seconds to read.
             </span>
           </>
         ) : (

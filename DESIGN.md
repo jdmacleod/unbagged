@@ -58,24 +58,25 @@ Three voices. Two come from the system stack and ship no bytes.
   a row in a table.
 - **Interface:** the existing system sans stack. Labels, column headers,
   buttons, tabs. No personality that competes with the serif.
-- **Data:** **Iosevka** (SIL OFL 1.1), vendored, subset to Latin plus figures
-  and currency. The one font file this project ships. Every numeral that sits in
-  a column: prices, dates, counts, UPCs, identifiers, locators.
+- **Data:** the system monospace stack — `ui-monospace, SFMono-Regular, "SF
+  Mono", Menlo, Consolas, "Liberation Mono", monospace`. Every numeral that sits
+  in a column: prices, dates, counts, UPCs, identifiers, locators.
+  **No font file ships.** See the decisions log: vendoring Iosevka was planned,
+  written up here as though done, and never carried out.
 
 **The numeral rule.** Numerals in running prose stay in the serif or sans with
-`font-variant-numeric: tabular-nums`. Numerals in any aligned context are
-Iosevka. That is the whole rule.
+`font-variant-numeric: tabular-nums`. Numerals in any aligned context are set in
+the mono stack, via the `.num` class. That is the whole rule.
 
-**Why one vendored face, and only one.** `index.css` used to say shipping no
-font files is the cheapest way to keep "no external requests" true forever, and
-that reasoning still holds for the serif and the sans. It does not hold for the
-data face: Iosevka is materially narrower than any system monospace, and that
-narrowness is what lets five numeric columns fit without truncating. It buys
-something measurable that the system stack cannot. Nothing else does.
+**Why no font file.** Shipping none is the cheapest way to keep "no external
+requests" true forever: there is no file to get wrong, no licence to track, and
+nothing to load. A narrower face would let more numeric columns fit, which is a
+real gain and the reason vendoring Iosevka was considered — but it is a gain
+measured against a constraint the app has not yet hit.
 
-**Licensing.** Iosevka is OFL 1.1 and redistributable inside an MIT repo. If a
-custom build is used, ship it under its own family name and keep the OFL notice
-alongside it.
+**If a face is ever vendored**, it needs its own licence notice in the repo and
+its own family name if it is a custom build, and the no-font-files test below
+becomes a one-font allowlist rather than being deleted.
 
 **Scale.** 11px is retired — it is why the app read as a spreadsheet.
 
@@ -83,7 +84,7 @@ alongside it.
 |---|---|
 | Marginalia, captions | 11.5px |
 | UI labels, column headers | 13px, +0.015em tracking |
-| Data in columns | 12.5–14px Iosevka, tabular |
+| Data in columns | 12.5–14px mono, tabular |
 | Prose | 15px / 1.55 serif |
 | Section heads | 17–20px serif |
 | Hanging display figures | 32–56px serif |
@@ -100,34 +101,34 @@ terminal: no hue shift toward blue anywhere.
 
 | Token | Hex | Use |
 |---|---|---|
-| `--desk` | `#E9E6DE` | the surface the page sits on |
-| `--page` | `#FBFAF7` | the page |
-| `--sunken` | `#F2EFE9` | zebra rows, inset panels |
-| `--text` | `#1E1C19` | ink, ~16:1 |
-| `--text-muted` | `#5C574F` | ~7:1 |
-| `--text-faint` | `#78716A` | ~4.9:1, still AA |
-| `--rule` | `#D8D2C7` | hairlines |
-| `--line-ui` | `#8A8378` | ~3.1:1, carets, chart axes, control borders |
-| `--accent` | `#0F5257` | ~9:1, links, selection, focus |
+| `--paper-desk` | `#E9E6DE` | the surface the page sits on |
+| `--paper-page` | `#FBFAF7` | the page |
+| `--paper-sunken` | `#F2EFE9` | zebra rows, inset panels |
+| `--ink` | `#1E1C19` | ink, ~16:1 |
+| `--ink-muted` | `#5C574F` | ~7:1 |
+| `--ink-faint` | `#78716A` | ~4.9:1, still AA |
+| `--ink-rule` | `#D8D2C7` | hairlines |
+| `--ink-line` | `#8A8378` | ~3.1:1, carets, chart axes, control borders |
+| `--ink-accent` | `#0F5257` | ~9:1, links, selection, focus |
 | `--foreign-ink` | `#8A5A1E` | on `#F5EEE1`, ~5.2:1 |
-| `--foreign-bg` | `#F5EEE1` | the other paper |
-| `--danger` | `#8C2F22` | exactly one call site |
+| `--foreign-paper` | `#F5EEE1` | the other paper |
+| `--ink-danger` | `#8C2F22` | exactly one call site |
 
 ### Dark
 
 | Token | Hex |
 |---|---|
-| `--desk` | `#0E0D0C` |
-| `--page` | `#1E1D1B` |
-| `--sunken` | `#121110` |
-| `--text` | `#EDE8DF` |
-| `--text-muted` | `#A29B90` |
-| `--text-faint` | `#8B8478` |
-| `--rule` | `#302E2B` |
-| `--line-ui` | `#6E675D` |
-| `--accent` | `#4FB3A6` |
+| `--paper-desk` | `#0E0D0C` |
+| `--paper-page` | `#1E1D1B` |
+| `--paper-sunken` | `#121110` |
+| `--ink` | `#EDE8DF` |
+| `--ink-muted` | `#A29B90` |
+| `--ink-faint` | `#8B8478` |
+| `--ink-rule` | `#302E2B` |
+| `--ink-line` | `#6E675D` |
+| `--ink-accent` | `#4FB3A6` |
 | `--foreign-ink` | `#D9A25A` on `#241F17` |
-| `--danger` | `#D9705F` |
+| `--ink-danger` | `#D9705F` |
 
 ### What color is allowed to mean
 
@@ -153,10 +154,14 @@ Three things, and nothing else.
 categorical palette does not loosen this: adding hues for identity is not the
 same as adding hues for judgement, and the second is what made red meaningless.
 
-**Red is retired** to exactly one call site: confirming deletion of an imported
-report. It previously fired thirty times in a single column, which is how it
+**Red is retired** to two call sites, and it means *this is not recoverable*:
+confirming deletion of an imported report, and a request that failed. Nothing
+else, ever. It previously fired thirty times in a single column, which is how it
 stopped meaning anything. The fix was never a different hue — it was deleting
 the severity. Grocery prices rising is the subject matter, not an alarm.
+
+Count them before adding a third. Two is already a claim about scarcity that the
+next person will test.
 
 **Green is retired** entirely. A loyalty saving is a leading minus sign in ink,
 in its own right-aligned column. The minus sign has done that job for four
@@ -174,7 +179,7 @@ and words. "Not answered" is a phrase, not a pill.
   independently, so the spine only ever has to hold tabular rows. Set at a 76ch
   prose measure first, which truncated the timeline's store column.
 - **The margin has a job.** Surplus width becomes a fixed outer margin (11rem)
-  carrying marginalia in Iosevka: page references, `source_document_id`,
+  carrying marginalia in the mono stack: page references, `source_document_id`,
   locators, section counts as large hanging serif numerals. Footnotes belong in
   the margin.
 - **No cards.** Every container is defined by a hairline rule and whitespace.
@@ -207,8 +212,9 @@ is a regression.
   a request to a third party tells that third party you are reading a report
   about yourself right now.
 - **No remote `url()`** in CSS.
-- **Only one font file may ship** — the Iosevka subset. The existing
-  no-font-files test becomes a one-font allowlist; it does not get deleted.
+- **No font file ships at all**, asserted by
+  `test_no_font_files_are_shipped_at_all`. If that ever changes it becomes a
+  one-font allowlist; it does not get deleted.
 - **Coarse-pointer targets** stay at a 44px minimum.
 - **`prefers-reduced-motion`** stays honoured.
 - **WCAG AA** on text; **3:1** on UI components such as carets, icons and chart
@@ -232,4 +238,7 @@ is a regression.
 | 2026-09-04 | Margin 15rem → 11rem, so the 92ch measure is actually delivered | The declared measure was arithmetic that did not close: 92ch + gap-12 + 15rem asks 946px of a 928px shell, and `minmax(0, …)` absorbed the difference in silence. The spine was delivering 640px and basket rows 540px (~75ch) — the width the 76ch→92ch row above was written to escape. A declared measure is a claim about arithmetic, not a setting |
 | 2026-09-04 | Display serif varies by operating system; accepted | `ui-serif, Georgia, …` is Georgia on macOS and Windows and the browser's generic serif on most Linux desktops. That face carries the product's voice, so a Linux reader gets a materially different document. Accepted rather than fixed: the only fix is a second font file, and zero-third-party-requests plus the one-font allowlist outrank it. Recorded because the file previously described a face some readers never see |
 | 2026-09-04 | Product index: size is quantised, ordinal, and never colour | Five absolute tiers off the existing ladder. Continuous sizing put 28.3% of comparable pairs backwards, because a long name at a small size out-inks a short name at a large one; absolute tiers take that to 0% and remove the degenerate min==max case with it. Colour encodes nothing on that screen: 353 products against six identity hues is noise wearing a palette |
+| 2026-09-04 | Iosevka is NOT vendored; the data face is the system mono stack | This file described a vendored Iosevka subset as "the one font file this project ships" and named it in six more places. No such file exists, `--font-mono` is the system stack, and `test_no_font_files_are_shipped_at_all` asserts zero font files. The plan was written up as though executed. Corrected to describe what ships; vendoring stays available and would need the allowlist change named in the constraints |
+| 2026-09-04 | Colour tokens renamed to the ones the CSS declares | 11 of the 14 tokens named here did not exist: the tables said `--desk`, `--text`, `--rule`, `--accent`, `--danger`, while `index.css` declares `--paper-desk`, `--ink`, `--ink-rule`, `--ink-accent`, `--ink-danger`. A design system that names variables the code does not have cannot be checked against the code |
+| 2026-09-04 | Red goes from one call site to two: delete confirmation, and a failed request | The file said "exactly one call site: confirming deletion of an imported report" and that control did not exist, so the one documented use of red was fiction while the only actual use was `ErrorBox`. Building the delete control made the count real. Both surviving uses mean the same thing — this is not recoverable — which is a meaning worth a colour; severity and sentiment stay banned |
 | 2026-09-04 | Index entries are links in a list, never buttons | The coarse-pointer rule sets `button { min-height: 44px }`, with an exemption for `a` inside `p`/`li`/`td`. At 353 entries that choice is the difference between a ~4,300px page and a ~16,700px one on a phone, and links are the correct semantics anyway: they navigate, and they want a real href |

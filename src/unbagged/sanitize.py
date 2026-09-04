@@ -118,6 +118,14 @@ def _looks_like_csv(text: str) -> bool:
 
 
 def sanitize_file(path: Path) -> dict[str, Any]:
+    # Existence first. Checking the suffix first meant a typo'd path was
+    # reported as ".pdf input is not supported yet", which names a problem the
+    # caller does not have and a fix that will not work — they go extracting
+    # text from a file that was never there.
+    if not path.exists():
+        raise FileNotFoundError(f"no such file: {path}")
+    if path.is_dir():
+        raise IsADirectoryError(f"{path} is a directory; pass one report file")
     if path.suffix.lower() in {".pdf", ".zip"}:
         raise ValueError(
             f"{path.suffix} input is not supported yet — extract the text or the "

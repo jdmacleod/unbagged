@@ -50,30 +50,6 @@ are about to send in your own name should be shown in full.
 
 **Depends on:** Nothing.
 
-## DESIGN.md: the display serif is unspecified in practice
-
-**What:** Add a decisions-log row recording that the display voice varies by
-operating system, and state which variance is accepted.
-
-**Why:** `ui-serif, Georgia, "Iowan Old Style", "Palatino Linotype", serif`
-resolves to Georgia on macOS and Windows and to the browser's generic serif on
-most Linux desktops, commonly Liberation Serif or DejaVu Serif. Those are
-materially different in colour and width. DESIGN.md calls this face "what makes
-a $43.11 grocery trip read as a page rather than a row in a table", which makes
-it the product's character voice, and a Linux reader gets a different product.
-
-**Pros:** Makes an existing tradeoff explicit instead of leaving the document
-describing a face some readers never see. Costs nothing at runtime.
-
-**Cons:** None, unless the conclusion is to ship a second font file, which the
-one-font allowlist test in `tests/test_frontend_build.py` forbids and which the
-zero-third-party-request constraint outranks anyway.
-
-**Context:** Raised during /plan-design-review on 2026-09-04, Pass 5. This is a
-documentation fix, not a code fix: the constraint that produced it is correct.
-
-**Depends on:** Nothing.
-
 ## Product index: export the portrait as an image
 
 **What:** Let the reader save the index as an image.
@@ -85,3 +61,38 @@ carried forward here unchanged.
 zero-external-requests rule has to be weighed first.
 
 **Depends on:** The index shipping.
+
+---
+
+## Resolved
+
+*Four findings were logged here by /devex-review on 2026-09-04 and fixed the
+same day. Kept as a record of what changed and why, not as open work.*
+
+- **No way to remove an imported report.** `DELETE /api/requests/{id}` and
+  `api.ts`'s `deleteRequest` both existed with zero call sites, so a response
+  could be added and never taken back and the only remedy was `make reset`.
+  `components/RemoveRequest.tsx` is the control: a quiet text button that opens
+  a confirmation naming the retailer and its coverage window, saying plainly
+  that there is no undo and that the uploaded file stays on disk. This is now
+  the single call site for red that `DESIGN.md` always reserved and nothing
+  occupied. It also makes the duplicate-upload error actionable — that message
+  told people to "remove the existing one first", which was impossible.
+- **The Products jump rail sat 400 tab stops into the page.** `Spine` gained a
+  `marginFirst` option that places the margin ahead of the content in the DOM
+  while explicit grid columns keep it on the right. Measured: the first rail
+  anchor moved from tab stop 408 to 8, ahead of the entries at 27, with no
+  positive `tabindex` and no visual change.
+- **Nothing asserted the footer's version.** `TestVersionIsOneNumber` in
+  `tests/test_packaging.py` compares `VERSION` to `unbagged.__version__` and
+  fails with an instruction to reinstall. Verified against a deliberately
+  mismatched `VERSION` before being kept.
+- **The display serif's OS variance was undocumented.** Already closed before
+  this pass: `DESIGN.md`'s decisions log carries the row dated 2026-09-04. The
+  entry here was itself stale and has been removed.
+- **`HANDOFF.md` §8 described a UI that no longer exists.** §8 and §9 are now
+  marked historical, with a table of what shipped against what the brief asked
+  for and why each departure was made. §§0-7 stay authoritative, because
+  `adapters/base.py`, `models.py`, `db.py` and four test modules cite §4 and §5
+  as the live contract — which is why marking the whole file historical would
+  have been wrong. `CLAUDE.md` now says which half is which.

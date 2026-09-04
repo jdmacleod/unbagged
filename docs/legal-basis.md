@@ -1,4 +1,4 @@
-# Legal basis for the compliance matrix
+# Legal basis for the compliance view
 
 > **This tool reports observations, not conclusions.** It records what a retailer's
 > response contained and what it did not. It does not determine whether a retailer
@@ -11,7 +11,7 @@
 
 ## Where the categories come from
 
-The compliance matrix has one column per disclosure obligation in the California
+The compliance view has one row per disclosure obligation in the California
 Consumer Privacy Act as amended by the California Privacy Rights Act. The keys below
 are stable identifiers used in the `disclosure.category` column and generated into
 the UI; they are not quotations of the statute.

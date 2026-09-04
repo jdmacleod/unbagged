@@ -141,11 +141,13 @@ def ingest(
         # identical to the first: same retailer, same reference, same everything.
         # The selector then showed two options with the same label and no way to
         # tell them apart, Compare grew a duplicate column, and nothing in the UI
-        # could delete either one.
+        # could delete either one. The removal control this message points at
+        # now exists, at the foot of the page beside the upload box.
         raise IngestError(
             f"You have already loaded this response, as {already}. Loading it "
             "again would create a second copy you could not tell apart from the "
-            "first. If you meant to replace it, remove the existing one first."
+            "first. If you meant to replace it, remove the existing one from the "
+            "foot of the page first."
         )
 
     bundle = bundle_from(files, declared_retailer)

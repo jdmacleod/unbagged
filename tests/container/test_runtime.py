@@ -12,6 +12,7 @@ import time
 import pytest
 
 from tests.container.conftest import (
+    REPO_ROOT,
     docker,
     requires_docker,
     requires_real_uids,
@@ -153,3 +154,58 @@ class TestServing:
         assert declared == "False", (
             "create_request is async again; a slow parse will block the event loop"
         )
+
+
+class TestVersionReachesTheImage:
+    """The last link in the version chain.
+
+    `tests/test_packaging.py` pins `VERSION` to `__version__` to `app.version`,
+    all inside one interpreter reading one checkout. None of that proves the
+    number survives a Docker build, and the image is what a user actually runs:
+    it installs the package non-editable, so `__version__` falls through to the
+    dist-info written during `pip install`, which is a different code path from
+    the one the unit tests exercise.
+
+    Both instances serving real data during one review session reported 0.9.0
+    while VERSION said 0.10.0, and nothing in the suite noticed.
+    """
+
+    def test_the_running_image_reports_the_version_file(self, run_container):
+        name = run_container()
+        declared = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        # Asked of the app inside the container, not of the host's checkout.
+        result = docker(
+            "exec", name, "python", "-c",
+            "from unbagged import __version__; print(__version__)",
+        )
+        reported = result.stdout.strip()
+        assert reported == declared, (
+            f"VERSION says {declared}, the image reports {reported}. "
+            "The build did not carry the version through."
+        )
+
+    def test_the_health_endpoint_agrees(self, run_container):
+        """What the footer shows. It reads /api/health, so this is the string a
+        person quotes in a bug report.
+
+        `run_container` waits for the container to be Running, which is not the
+        same as uvicorn having bound its port — asking immediately raced startup
+        and failed with a connection error, not a version mismatch. So this
+        polls, and a timeout here means the app never came up at all.
+        """
+        name = run_container()
+        declared = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        probe = (
+            "import json,urllib.request;"
+            "print(json.load(urllib.request.urlopen("
+            "'http://127.0.0.1:8000/api/health'))['version'])"
+        )
+        reported = None
+        for _ in range(60):
+            result = docker("exec", name, "python", "-c", probe, check=False)
+            if result.returncode == 0 and result.stdout.strip():
+                reported = result.stdout.strip()
+                break
+            time.sleep(0.5)
+        assert reported is not None, f"the app never served /api/health in {name}"
+        assert reported == declared

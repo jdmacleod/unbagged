@@ -13,8 +13,9 @@ three things:
 2. **What they infer** — modeled and appended attributes, separated by likely origin. The
    demographic and household-composition attributes are usually not derivable from your
    baskets, which means they were bought from somewhere the report does not name.
-3. **What they didn't tell you** — a compliance matrix against the CCPA/CPRA disclosure
-   categories, per retailer. Absence is recorded as a finding, not as a blank.
+3. **What they didn't tell you** — each of the eight CCPA/CPRA disclosure categories,
+   per retailer, with the retailer's own words where it answered and a blank rule where
+   it did not. Absence is recorded as a finding, not as a blank.
 
 Point 3 is the part nothing else does. Existing open-source tooling covers request
 *generation* and company-side request *fulfillment*. Nothing reads the response back.
@@ -43,6 +44,18 @@ of text extraction, and the page tells you it is working.
 Your database and your uploads live in `./data`, on your disk — back the whole
 thing up by copying that directory.
 
+**No response yet?** A request takes weeks to come back, so the repo ships a
+synthetic one you can drop in immediately to see what the views do:
+
+```
+src/unbagged/adapters/kroger/fixtures/synthetic_report.txt
+```
+
+It is generated, not anyone's shopping — `make fixtures` rebuilds it from
+`tools/make_fixtures.py`, and a test fails if the committed file is not exactly
+what the generator produces. It reproduces the quirks of the real Kroger format
+on purpose, including the ones that look like bugs.
+
 ### Running it
 
 | | |
@@ -60,12 +73,12 @@ it is what keeps your report off your local network.
 
 **Timeline** — every visit over the coverage window, with the header numbers
 (what you paid, baskets, distinct products, window) above it. Click a basket to
-expand the line items, with the shelf price and the loyalty discount side by
-side, which is the one thing a receipt never shows you. What you paid is the
-shelf amount minus the discount, and both halves stay on screen: the response
-discloses no field for the amount actually charged, so that subtraction is
-shown rather than asserted. Each basket is also checked against the total the
-retailer states for it, and says so when the two disagree.
+expand the line items, with the shelf price and the price you actually paid side
+by side, which is the one thing a receipt never shows you. `customerloyamt` is
+the amount the line cost, not a discount to subtract, so what you paid is that
+figure and the saving is the difference between the two. Both halves stay on
+screen so the subtraction is checkable. Each basket is also checked against the
+total the retailer states for it, and says so when the two disagree.
 
 **Profile** — the identifiers the retailer holds for you, and the attributes it
 has inferred, split by where they came from. Scores it modelled from your own
@@ -73,15 +86,25 @@ baskets sit in one column; attributes it obtained somewhere it does not name sit
 in the other. Anything describing your *household* rather than you is called out,
 because those describe people who never signed up for anything.
 
-**Compliance** — retailers as rows, the eight CCPA/CPRA disclosure categories as
-columns, and a "draft a follow-up" action that writes a supplemental request
+**Compliance** — the eight CCPA/CPRA disclosure categories read down the page per
+retailer, with the answer quoted where there is one and a blank rule where there
+is not. A column of blank rules states the finding without a single coloured
+badge. There is a "draft a follow-up" action that writes a supplemental request
 naming what went unanswered. You read it and send it yourself.
 
 **Compare** and **Prices** — two retailers side by side once a second response
 arrives, and a personal inflation series per product, which two years of itemised
-baskets contains for free. Kroger discloses no quantity on a line, so Prices
-counts the days a product was bought and reports the raw line count beside it
-rather than presenting either as a quantity.
+baskets contains for free. A line carries an amount and nothing else: no quantity
+and no weight. So Prices classifies each product by the shape of its own amounts
+and only draws a series for the ones that behave like a unit price. The rest are
+listed with what their amounts actually look like, and no price change is claimed
+for them.
+
+**Products** — every product the response discloses, set as a typographic index:
+alphabetical, sized by how often you bought it, with an A-Z rail to jump by
+letter. Not a ranking, which is what Prices is for. It is the vocabulary the
+retailer files your shopping under, several hundred names at once, and clicking
+one opens the visits that contained it.
 
 ## Status
 
@@ -100,7 +123,7 @@ touching any code outside the retailer's own package.
 | M2 | Synthetic fixture generator | done |
 | M3 | Kroger adapter | done |
 | M4 | Read API | done |
-| M5 | UI — timeline, profile, compliance, compare, prices | done |
+| M5 | UI — timeline, profile, compliance, compare, prices, products | done |
 | M6 | Docker packaging | done |
 | M7 | Adapter authoring guide, fallback, stubs | done |
 
@@ -155,7 +178,7 @@ checking anything.
 ## What this is not
 
 - **Not a request generator.** Use [Datenanfragen](https://www.datarequests.org/) to file.
-- **Not legal advice.** The compliance matrix reports observations. It never concludes
+- **Not legal advice.** The compliance view reports observations. It never concludes
   that a retailer broke the law.
 - **Not a hosted service**, and not a general data-takeout viewer. Scope is legally
   compelled access responses.
