@@ -38,8 +38,8 @@ class TestRoundTrip:
     def test_line_items_stay_with_their_basket(self, conn):
         request_id = repository.save_parse_result(conn, sample_result(doc_id=None))
         loaded = repository.load_parse_result(conn, request_id)
-        assert [len(t.items) for t in loaded.transactions] == [2, 1]
-        assert loaded.item_count() == 3
+        assert [len(t.items) for t in loaded.transactions] == [3, 1]
+        assert loaded.item_count() == 4
 
     def test_negative_amounts_are_not_filtered(self, conn):
         # Returns and voids are real transactions (HANDOFF.md section 4).
@@ -118,7 +118,7 @@ class TestMultipleRequests:
         repository.delete_request(conn, first)
         assert repository.load_parse_result(conn, first) is None
         assert repository.load_parse_result(conn, second) is not None
-        assert conn.execute("SELECT count(*) c FROM txn_item").fetchone()["c"] == 3
+        assert conn.execute("SELECT count(*) c FROM txn_item").fetchone()["c"] == 4
 
     def test_loading_an_unknown_request_returns_none(self, conn):
         assert repository.load_parse_result(conn, 999) is None

@@ -28,7 +28,7 @@ META = RequestMeta(retailer_id="kroger", display_name="Kroger")
 
 class TestEnums:
     def test_disclosure_categories_match_the_documented_set(self):
-        # The compliance matrix columns are generated from this enum, so the keys
+        # The compliance view's rows are generated from this enum, so the keys
         # are an interface. Changing one is a schema change, not a rename.
         assert [c.value for c in DisclosureCategory] == [
             "CATEGORIES_COLLECTED",
