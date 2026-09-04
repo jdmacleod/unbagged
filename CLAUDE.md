@@ -36,6 +36,22 @@ milestones can be developed against real reports locally without risk to the rep
 - No outbound network calls from the application at runtime. No telemetry, no CDN
   requests, no update checks.
 
+## Design System
+
+Read `DESIGN.md` before making any visual or UI decision. Typography, colour,
+spacing, layout and motion are defined there, along with the reasoning.
+
+The rules most often broken by accident:
+
+- Colour means provenance, interaction or quantity. Never good/bad, never
+  severity, never sentiment. Red has exactly one call site in the whole app.
+- No cards. Containers are hairline rules and whitespace, never a border on all
+  four sides, never a shadow.
+- Every numeral in an aligned column is set in the vendored mono.
+
+Do not deviate without saying so and adding a row to the decisions log. In QA
+or review mode, flag code that contradicts `DESIGN.md`.
+
 ## Escape hatch for the PII scanner
 
 If `make check-pii` flags something genuinely benign, add an inline suppression on the

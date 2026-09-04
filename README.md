@@ -59,9 +59,13 @@ it is what keeps your report off your local network.
 ## What you get
 
 **Timeline** — every visit over the coverage window, with the header numbers
-(spend, baskets, distinct products, window) above it. Click a basket to expand the
-line items, with the shelf price and the loyalty discount side by side, which is
-the one thing a receipt never shows you.
+(what you paid, baskets, distinct products, window) above it. Click a basket to
+expand the line items, with the shelf price and the loyalty discount side by
+side, which is the one thing a receipt never shows you. What you paid is the
+shelf amount minus the discount, and both halves stay on screen: the response
+discloses no field for the amount actually charged, so that subtraction is
+shown rather than asserted. Each basket is also checked against the total the
+retailer states for it, and says so when the two disagree.
 
 **Profile** — the identifiers the retailer holds for you, and the attributes it
 has inferred, split by where they came from. Scores it modelled from your own
@@ -75,7 +79,9 @@ naming what went unanswered. You read it and send it yourself.
 
 **Compare** and **Prices** — two retailers side by side once a second response
 arrives, and a personal inflation series per product, which two years of itemised
-baskets contains for free.
+baskets contains for free. Kroger discloses no quantity on a line, so Prices
+counts the days a product was bought and reports the raw line count beside it
+rather than presenting either as a quantity.
 
 ## Status
 
