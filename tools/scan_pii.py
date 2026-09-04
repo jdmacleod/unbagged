@@ -54,6 +54,18 @@ SKIP_SUFFIXES = {
     ".sqlite3", ".db", ".lock",
 }
 
+# Suffixes that may legitimately sit in a fixtures directory while being
+# unreadable to this scanner. Everything else unreadable is a finding there —
+# see OPAQUE_FIXTURE_HINT.
+FIXTURE_ASSET_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico"}
+
+OPAQUE_FIXTURE_HINT = (
+    "Unreadable file committed in a fixtures directory. .gitignore re-includes "
+    "these directories and several address rules stand down inside them, so a "
+    "file this scanner cannot read is reviewed by nothing. Commit fixtures as "
+    "text, and generate them — see tools/make_fixtures.py."
+)
+
 # Email domains that cannot belong to a real person.
 ALLOWED_EMAIL_DOMAINS = {
     "example.com", "example.org", "example.net", "localhost",
@@ -246,6 +258,20 @@ def is_generated_fixture(path: str) -> bool:
     return (REPO_ROOT / p.parent / GENERATOR_NAME).is_file()
 
 
+def opaque_in_fixtures(path: str) -> bool:
+    """True for a fixture file this scanner cannot read and cannot vouch for.
+
+    A binary that a person can look at — an icon, a screenshot — is fine. A PDF,
+    a zip or a spreadsheet is the shape a real report arrives in, and inside a
+    fixtures directory it is exempt from .gitignore's denials and from the rules
+    that would otherwise catch an address. Nothing reads it, so nothing clears it.
+    """
+    p = Path(path)
+    if "fixtures" not in p.parts:
+        return False
+    return p.suffix.lower() not in FIXTURE_ASSET_SUFFIXES
+
+
 def suppressed(line: str, preceding: str = "") -> bool:
     """A marker on this line, or the line directly above it, silences findings here.
 
@@ -332,6 +358,10 @@ def scan_paths(paths: Iterable[str], denylist: Sequence[str]) -> list[Finding]:
     for rel in paths:
         path = (REPO_ROOT / rel).resolve()
         if not is_scannable(path):
+            if path.is_file() and opaque_in_fixtures(rel):
+                findings.append(
+                    Finding(rel, 1, "OPAQUE_FIXTURE", path.name, OPAQUE_FIXTURE_HINT)
+                )
             continue
         try:
             text = path.read_text(encoding="utf-8", errors="replace")

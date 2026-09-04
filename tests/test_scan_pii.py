@@ -7,6 +7,7 @@ lives in the Python source, not in the string handed to `scan_lines`, so it does
 interfere with what is under test.
 """
 
+import pytest
 from tools import scan_pii
 from tools.scan_pii import Finding, luhn_ok, mask, scan_lines
 
@@ -147,6 +148,49 @@ class TestPathClassification:
         assert scan_pii.classify("tests/fixtures/a.json") == (True, True)
         assert scan_pii.classify("tests/test_kroger.py") == (False, True)
         assert scan_pii.classify("src/unbagged/cli.py") == (False, False)
+
+
+class TestOpaqueFixtures:
+    """A fixtures directory is exempt from .gitignore's denials and stands
+    address rules down. A committed file the scanner cannot read is therefore
+    reviewed by nothing at all — which is how a report-shaped PDF used to pass
+    every check this project has."""
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "src/unbagged/adapters/kroger/fixtures/report.pdf",
+            "src/unbagged/adapters/kroger/fixtures/export.zip",
+            "src/unbagged/adapters/safeway/fixtures/response.xlsx",
+            "tests/fixtures/hand-written.pdf",
+        ],
+    )
+    def test_unreadable_fixture_files_are_findings(self, path):
+        assert scan_pii.opaque_in_fixtures(path)
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "src/unbagged/adapters/kroger/fixtures/screenshot.png",
+            "src/unbagged/adapters/kroger/fixtures/logo.ico",
+        ],
+    )
+    def test_images_a_person_can_look_at_are_allowed(self, path):
+        assert not scan_pii.opaque_in_fixtures(path)
+
+    def test_the_rule_is_scoped_to_fixture_directories(self):
+        # Ordinary binaries elsewhere in the repo are not the scanner's business.
+        assert not scan_pii.opaque_in_fixtures("resources/icon-512.png")
+        assert not scan_pii.opaque_in_fixtures("docs/diagram.pdf")
+
+    def test_a_dropped_in_report_is_reported(self, tmp_path, monkeypatch):
+        fixtures = tmp_path / "src" / "unbagged" / "adapters" / "acme" / "fixtures"
+        fixtures.mkdir(parents=True)
+        (fixtures / "report.pdf").write_bytes(b"%PDF-1.7\n4417 Marbury Lane\n")
+        monkeypatch.setattr(scan_pii, "REPO_ROOT", tmp_path)
+        rel = "src/unbagged/adapters/acme/fixtures/report.pdf"
+        findings = scan_pii.scan_paths([rel], denylist=())
+        assert [f.rule for f in findings] == ["OPAQUE_FIXTURE"]
 
 
 class TestSelfScan:
