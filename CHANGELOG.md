@@ -25,6 +25,62 @@ from a specific response. See `CONTRIBUTING.md`.
 
 ## [Unreleased]
 
+### Security
+
+- **A real report could be committed into a `fixtures/` directory and pass every
+  safeguard in the project.** The one hole in `.gitignore` is its re-inclusion of
+  fixture directories, and `tools/scan_pii.py` stands its address-shaped rules
+  down inside a generated one — both safe only because `make fixtures-check`
+  proves the directory's contents come out of a seeded generator. That check
+  compared only the filenames the generator produced, so anything committed
+  *alongside* them was covered by nothing. Verified end to end before the fix: a
+  file carrying a name, street address, city/state/ZIP and a 13-digit loyalty
+  number was reported clean by the working-tree scan, the history scan,
+  `fixtures-check` and the CI stray-file job. `--check` now compares both
+  directions and fails on any committed file no generator produces, and the
+  scanner independently rejects any file in a fixtures directory it cannot read
+  — a PDF or a spreadsheet there was previously skipped on its suffix and never
+  looked at. Both halves are covered by tests.
+
+- **`.dockerignore` said it mirrored `.gitignore` and did not.** The two formats
+  look alike and match differently: a `.gitignore` pattern with no slash matches
+  at every depth, while a `.dockerignore` pattern is matched against the whole
+  path, so `*.pdf` excluded `./report.pdf` and nothing below it. `make reset`
+  renames `./data` to `data.bak-<timestamp>` and leaves it in the checkout, and
+  that directory was denied by neither name nor wildcard — so the next
+  `docker compose build` sent every report and the database to the daemon, which
+  caches its build context. Confirmed by building a probe context and listing what
+  arrived. Every wildcard is now `**/`-prefixed, `data.bak-*/` and `.gstack/` are
+  denied by name, and `tests/test_packaging.py` fails if a depth-limited pattern
+  reappears or if the two files stop denying the same report formats.
+
+- **Report formats that arrive as spreadsheets or archives were denied nowhere.**
+  `.gitignore` covered `.pdf`, `.zip` and `.csv`; `.xlsx`, `.ods`, `.docx`,
+  `.eml`, `.mbox`, `.7z`, `.rar` and the tarballs were trackable, and every one
+  of them is a format `scan_pii.py` cannot read. Both ignore files and the CI
+  stray-file job now carry the same sixteen suffixes.
+
+- **`tests/fixtures/**` was re-included by `.gitignore` and verified by nothing.**
+  `make_fixtures.py` only ever covered `src/**/fixtures/`, so the second
+  re-inclusion was an exemption with no check behind it. Removed, and CI now
+  fails on any re-inclusion that regeneration does not cover.
+
+- **CI actions are pinned to commit SHAs.** A tag is a movable pointer the
+  action's owner controls; repointing `v4` would have run new code here with no
+  diff in the workflow. `.github/dependabot.yml` keeps the pins from decaying
+  into unpatched dependencies, and covers `pip` and `npm` too.
+
+- **Security linting was configured but never running.** `ruff`'s `S`
+  (flake8-bandit) rules were not selected, which meant the `# noqa: S608` already
+  sitting in `ingest.py` silenced a rule that had never run — a suppression that
+  read as a reviewed decision and was inert. `S` is now selected. All eleven hits
+  in `src/` and `tools/` were traced and are safe; each carries an inline
+  suppression naming the reason, and the three SQL sites say why the interpolated
+  value cannot come from a caller.
+
+- **`SECURITY.md`** states what to report, how to report it privately, and what is
+  in scope for a single-user local app.
+
 ### Added
 
 - **A response can be removed.** The endpoint and its client wrapper had existed

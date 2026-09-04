@@ -50,6 +50,87 @@ are about to send in your own name should be shown in full.
 
 **Depends on:** Nothing.
 
+## Supply chain: the Python dependencies are unpinned and unhashed
+
+**What:** Add a hash-pinned lockfile for the runtime dependencies and install
+from it in the Dockerfile, instead of resolving `pyproject.toml` at build time.
+
+**Why:** `pyproject.toml` declares floors only — `pdfplumber>=0.11`,
+`fastapi>=0.115`, `uvicorn[standard]>=0.30`, `pypdf>=4`,
+`python-multipart>=0.0.9` — and the Dockerfile runs `pip install .`, so every
+build resolves whatever PyPI serves that minute. That is 40-odd transitive
+packages, none pinned and none hash-checked. A single compromised release of any
+of them executes at build time and then runs inside the container that reads
+people's reports. `frontend/package-lock.json` already gives the UI exactly the
+guarantee the Python half is missing, and `/cso` on 2026-09-04 found the two
+halves inconsistent for no stated reason.
+
+This one is filed rather than fixed because the fix has a design decision in it,
+not because it is small. Marking it up:
+
+- **Platform.** Hashes are per-wheel, and this repo is developed on macOS and
+  built for `linux/amd64`. A lock generated on the dev machine pins the wrong
+  wheels. It has to be generated in the target image (`pip install` then
+  `pip freeze`, or `uv pip compile --python-platform`), which means the lock is a
+  build artifact of a container, not something you regenerate casually.
+- **Two audiences.** `pip install -e ".[dev]"` is the documented contributor
+  path and should stay a floor-based resolve, so a contributor is not fighting
+  hashes to run the tests. Only the shipped image needs the lock. That argues for
+  a `requirements.lock` used solely by the Dockerfile, not for pinning
+  `pyproject.toml`.
+- **Decay.** A lock nobody regenerates becomes an unpatched dependency, which is
+  a worse posture than floors. `.github/dependabot.yml` now exists and covers
+  `pip`, so the channel is there; the lock has to be a file Dependabot can
+  actually update.
+- **Verification.** `make test-container` has to pass against the locked build
+  before this lands, and the lock has to be proven load-bearing — build once with
+  a deliberately wrong hash and confirm the build fails.
+
+**Depends on:** Nothing. Independent of any UI work.
+
+## Sanitize: object keys survive the skeleton verbatim
+
+**What:** Decide whether `sanitize.py` should mask JSON object keys and CSV
+column headers, or keep the current behaviour with the tradeoff written down
+where a contributor reads it before pasting a skeleton into a public issue.
+
+**Why:** `skeleton_json` returns `{str(k): ...}` at every depth and
+`skeleton_csv` copies each header into `columns[].name`. The reasoning in the
+module docstring is sound — "keys are the retailer's schema, not the user's
+data" — and it is the schema that makes a skeleton worth sending at all. But it
+holds only while keys are field names. The Kroger fixture already contains a
+counterexample the project documented itself: in the identity blob, loyalty card
+numbers are the **keys** of `loyaltyCards`, not the values
+(`tests/test_fixtures.py::test_the_nested_account_shape_is_reproduced` asserts
+exactly this). A skeleton of that structure publishes the card numbers while
+faithfully masking everything they point at.
+
+The instruction in `CONTRIBUTING.md` is to sanitize and attach, and the whole
+point of the command is that a person does not have to inspect the output to
+trust it. So the question is not whether the current behaviour is defensible —
+it is — but whether the guarantee it advertises matches what it does.
+
+Options, roughly in order of how much they cost:
+
+1. Mask keys that look like identifiers (long digit runs, Luhn-valid, UUID) and
+   keep the rest. Cheap, keeps the schema legible, and reuses the rules already
+   written in `tools/scan_pii.py`.
+2. Mask keys below some depth, on the theory that a schema is shallow and a
+   keyed-by-identifier map is not. Fewer false positives on real schemas, more
+   ways to be wrong.
+3. Keep it and say so plainly in `CONTRIBUTING.md` and in `--help`, so the person
+   deciding to attach a skeleton knows what they are attaching.
+
+**Cons of changing it:** every mask costs a round trip on an issue, and the
+schema is the reason the skeleton exists. Option 1 is the smallest change that
+closes the case the project has already documented in its own fixture.
+
+**Context:** Raised by `/cso` on 2026-09-04. Not a confirmed leak against any
+report in hand, which is why it is here rather than fixed. `src/unbagged/sanitize.py`,
+`skeleton_json` and `skeleton_csv`.
+
+**Depends on:** Nothing.
+
 ## Product index: export the portrait as an image
 
 **What:** Let the reader save the index as an image.

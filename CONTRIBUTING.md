@@ -62,15 +62,37 @@ it will not catch a date you happened to shop on, so this one is on you.
 
 | Layer | What it does |
 |---|---|
-| `.gitignore` | Denies `/data/`, `/output/`, and report formats wholesale. Re-inclusions exist only for `fixtures/` directories. |
-| `.dockerignore` | Mirrors it, so real data is never baked into an image layer. `data/` is a bind mount at runtime, never a `COPY`. |
+| `.gitignore` | Denies `/data/`, `/output/`, `data.bak-*/`, and sixteen report formats wholesale. Exactly one re-inclusion: `src/**/fixtures/**`. |
+| `.dockerignore` | Same bytes, different route: keeps real data out of the build context, not just out of an image layer. Every wildcard is `**/`-prefixed — see below. |
 | `tools/no_data_dir.py` | Pre-commit hook that hard-fails any staged path under `data/` or `output/`. |
-| `tools/scan_pii.py` | Scans for emails, phone numbers, addresses, ZIPs, Luhn-valid card numbers, SSNs, loyalty-length digit runs, and UUIDs. |
+| `tools/scan_pii.py` | Scans for emails, phone numbers, addresses, ZIPs, Luhn-valid card numbers, SSNs, loyalty-length digit runs, and UUIDs. Also fails on any committed file in a `fixtures/` directory it cannot read. |
+| `tools/make_fixtures.py --check` | Regenerates every fixture from a fixed seed and fails on any difference **and on any committed file no generator produces**. |
 | `gitleaks` | Credentials, which are a different problem with the same blast radius. |
 | `check-added-large-files` | A 5 MB PDF appearing in a diff is a red flag. |
-| CI | Runs the scanner against the checkout *and* against the PR's commits, so an amended-away mistake is still caught. |
+| CI | Runs all of the above against the checkout *and* against the PR's commits, so an amended-away mistake is still caught. Actions are pinned to commit SHAs. |
 
 Run `make check-pii` before every commit. Do not bypass the hooks with `--no-verify`.
+
+### Two things about these layers that are easy to get wrong
+
+**A `fixtures/` directory is the one hole in `.gitignore`, so it is the most
+policed place in the repository.** Report formats are denied everywhere except
+there, and `scan_pii.py` stands its address-shaped rules down inside a generated
+fixtures directory — because byte-identical regeneration from a fixed seed is a
+stronger guarantee than any regex. That trade only works if regeneration covers
+*everything* committed in the directory. It once compared only the filenames the
+generator named, which meant a real report added alongside them reproduced no
+check, tripped no rule, and was reported clean by every safeguard here. `--check`
+now compares both directions. If you need sample data, add it to
+`fixtures/generate.py` and regenerate; do not hand-place a file.
+
+**`.gitignore` and `.dockerignore` look identical and match differently.** A
+`.gitignore` pattern with no slash matches at every depth. A `.dockerignore`
+pattern is matched against the whole relative path, so a bare `*.pdf` excludes
+`./report.pdf` and nothing beneath it. Copying lines across verbatim therefore
+protects the root and leaks every subdirectory. Every wildcard in
+`.dockerignore` carries a `**/` prefix for that reason, and
+`tests/test_packaging.py` fails if one does not.
 
 ### Suppressing a false positive
 
