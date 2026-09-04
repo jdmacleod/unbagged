@@ -177,7 +177,7 @@ function IndexBody({
           </Empty>
         </Spine>
       ) : (
-        <Spine margin={<Rail letters={letters} tiers={data.tiers} />}>
+        <Spine marginFirst margin={<Rail letters={letters} tiers={data.tiers} />}>
           {/* Below lg the margin does not exist, so the rail comes inline as a
               strip. Without this the jump control and the legend simply vanish
               on a phone, which is how a fix has been silently lost here before. */}
@@ -187,7 +187,7 @@ function IndexBody({
             href="#after-the-index"
             className="sr-only focus:not-sr-only focus:mb-3 focus:inline-block focus:rounded-[2px] focus:border focus:border-line focus:px-3 focus:py-1.5"
           >
-            Skip the index
+            Skip the index ({number(data.product_count)} products)
           </a>
 
           <Block products={data.products} onOpenProduct={onOpenProduct} />
@@ -202,7 +202,13 @@ function IndexBody({
             </p>
           )}
 
-          <div id="after-the-index" />
+          {/* `tabIndex={-1}` is what makes the skip link a skip link. Without
+              it the target is not focusable, so the browser scrolls the page
+              and leaves the keyboard exactly where it was: the next Tab went
+              into entry 1 of 399 and the control was decoration. Measured, the
+              jump rail sits 400 tab stops past this point, so this is the only
+              way to reach it without walking the whole index. */}
+          <div id="after-the-index" tabIndex={-1} className="outline-none" />
         </Spine>
       )}
 

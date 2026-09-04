@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+ROOT = Path(__file__).parent.parent
 STATIC = Path(__file__).parent.parent / "src" / "unbagged" / "static"
 INDEX = STATIC / "index.html"
 
@@ -73,3 +74,44 @@ def test_motion_is_reducible():
     """The app animates; a reduced-motion preference is not a styling whim."""
     css = "".join(f.read_text(encoding="utf-8") for f in STATIC.rglob("*.css"))
     assert "prefers-reduced-motion" in css
+
+
+# The full form of this guard needs a layout engine: "no view scrolls the page
+# horizontally at 375px" is a statement about rendered boxes. The project has no
+# browser harness, so what follows pins the one cause that has actually bitten,
+# twice, and is invisible in review.
+def test_scroll_containers_establish_a_containing_block():
+    """`.scroll-x` must be positioned, or absolutely positioned children escape.
+
+    Compare scrolled the whole page sideways by 130px at 375px while the box it
+    lived in scrolled correctly. The cause was not the table: it was Tailwind's
+    `.sr-only`, which is `position: absolute`, resolving against the body
+    because `.scroll-x` was `position: static`. Its x offset inside a scrolled
+    480px track then counted toward the document's own scroll width, and a
+    getBoundingClientRect sweep showed a 1px-wide screen-reader label as the
+    widest thing on the page.
+
+    One declaration fixes it and nothing in review would catch its removal.
+    """
+    css = "\n".join(f.read_text(encoding="utf-8") for f in STATIC.rglob("*.css"))
+    assert ".scroll-x" in css, "the scroll-x utility is not in the shipped CSS"
+    block = re.search(r"\.scroll-x\s*\{([^}]*)\}", css)
+    assert block, "could not find the .scroll-x rule"
+    body = block.group(1)
+    assert "position:relative" in body.replace(" ", ""), (
+        f".scroll-x must be position:relative, got: {body.strip()!r}"
+    )
+    assert "overflow-x:auto" in body.replace(" ", "")
+
+
+def test_wide_tables_are_wrapped_in_a_scroll_container():
+    """A fixed `min-w-[...]` track is wider than a phone by construction, so it
+    has to sit inside something that scrolls. Checked per file: every source
+    that sets one must also use `scroll-x`."""
+    src = ROOT / "frontend" / "src"
+    offenders = []
+    for f in src.rglob("*.tsx"):
+        text = f.read_text(encoding="utf-8")
+        if re.search(r"min-w-\[\d", text) and "scroll-x" not in text:
+            offenders.append(f.name)
+    assert not offenders, f"fixed min-width with no scroll container: {offenders}"

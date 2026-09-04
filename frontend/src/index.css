@@ -127,8 +127,16 @@ body {
   font-variant-numeric: tabular-nums lining-nums;
 }
 
-/* Wide content scrolls inside its own container rather than the page. */
+/* Wide content scrolls inside its own container rather than the page.
+
+   `position: relative` is load-bearing, not decoration. Without it the box is
+   `static`, so any absolutely positioned descendant resolves against the body
+   instead — and Tailwind's `.sr-only` is absolutely positioned. A screen-reader
+   label sitting at x=505 inside a scrolled 480px track therefore counted toward
+   the document's own scroll width, and Compare scrolled the whole page sideways
+   by 130px at 375px while the container it lived in scrolled correctly. */
 .scroll-x {
+  position: relative;
   overflow-x: auto;
 }
 

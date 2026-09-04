@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { useAsync } from "./components/useAsync";
+import { RemoveRequest } from "./components/RemoveRequest";
 import { Upload } from "./components/Upload";
 import { ErrorBox, Spine, Spinner } from "./components/ui";
 import { Compare } from "./views/Compare";
@@ -255,6 +256,25 @@ export default function App() {
       {rows.length > 0 && (
         <div className="mt-14">
           <Upload onDone={() => requests.reload()} />
+          {/* Removing one is a smaller footnote still, and it lives here rather
+              than beside the retailer selector: the selector is used constantly
+              and a destructive control does not belong under a hand that is
+              only trying to switch views. */}
+          {current !== null && (
+            <div className="mt-4">
+              <RemoveRequest
+                key={current}
+                request={rows.find((r) => r.id === current)!}
+                onRemoved={() => {
+                  // Drop the filter and the selection with it: `?r=` would
+                  // otherwise name a response that no longer exists, and `?q=`
+                  // would keep filtering a timeline that just changed under it.
+                  go({ request: null, query: null, label: null });
+                  requests.reload();
+                }}
+              />
+            </div>
+          )}
         </div>
       )}
 
