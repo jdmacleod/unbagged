@@ -16,6 +16,7 @@ COMPOSE = ROOT / "docker-compose.yml"
 DEV_COMPOSE = ROOT / "docker-compose.dev.yml"
 DOCKERFILE = ROOT / "Dockerfile"
 DOCKERIGNORE = ROOT / ".dockerignore"
+GITIGNORE = ROOT / ".gitignore"
 
 
 class ComposeLoader(yaml.SafeLoader):
@@ -94,14 +95,75 @@ class TestDataHandling:
             if stripped.startswith("COPY") and "--from=" not in stripped:
                 assert not stripped.split()[1].startswith(("data", "./data", "/data"))
 
-    def test_the_dockerignore_excludes_the_data_directory(self):
-        entries = {
+    def _dockerignore_entries(self) -> set[str]:
+        return {
             line.strip()
             for line in DOCKERIGNORE.read_text(encoding="utf-8").splitlines()
             if line.strip() and not line.startswith("#")
         }
+
+    def _gitignore_entries(self) -> set[str]:
+        return {
+            line.strip()
+            for line in GITIGNORE.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.startswith("#")
+        }
+
+    def test_the_dockerignore_excludes_the_data_directory(self):
+        entries = self._dockerignore_entries()
         assert {"data/", "output/"} <= entries
-        assert "*.pdf" in entries and "*.sqlite" in entries
+        # `make reset` renames ./data to data.bak-<timestamp> and leaves it in
+        # the checkout, holding every report and the database under a name
+        # `data/` does not match.
+        assert "data.bak-*/" in entries
+        # Screenshots of the app rendering real reports.
+        assert ".gstack/" in entries
+
+    def test_every_dockerignore_wildcard_is_depth_qualified(self):
+        """A bare `*.pdf` in .dockerignore excludes ./report.pdf and nothing below it.
+
+        This is the one place the two ignore formats look identical and behave
+        differently. A .gitignore pattern containing no slash matches at every
+        depth; a .dockerignore pattern is matched against the whole relative path,
+        so `*.pdf` never sees `data.bak-2026/incoming/report.pdf`. Copying
+        .gitignore's lines across verbatim — which is what "mirrors .gitignore" in
+        the header used to mean — left every report format excluded at the root
+        only, and sent the rest to the daemon.
+        """
+        offenders = sorted(
+            e for e in self._dockerignore_entries()
+            if e.startswith("*") and not e.startswith("**/")
+        )
+        assert not offenders, (
+            f"depth-limited .dockerignore patterns: {offenders}. "
+            "Prefix each with '**/' so it matches at every depth."
+        )
+
+    def test_the_two_ignore_files_deny_the_same_report_formats(self):
+        """Neither file may learn a report format the other has not.
+
+        They protect the same bytes by different routes: .gitignore keeps a real
+        report out of the repository, .dockerignore keeps it out of the build
+        context and the daemon's cache. A format denied in one and not the other
+        is a hole in whichever half was forgotten.
+        """
+        git_suffixes = {
+            e.lstrip("!*") for e in self._gitignore_entries() if e.startswith("*.")
+        }
+        docker_suffixes = {
+            e.removeprefix("**/").lstrip("*")
+            for e in self._dockerignore_entries() if "*." in e
+        }
+        report_formats = {
+            ".pdf", ".zip", ".csv", ".tsv", ".xls", ".xlsx", ".ods",
+            ".doc", ".docx", ".eml", ".mbox", ".7z", ".rar", ".tar", ".tgz",
+        }
+        assert report_formats <= git_suffixes, (
+            f".gitignore is missing: {sorted(report_formats - git_suffixes)}"
+        )
+        assert report_formats <= docker_suffixes, (
+            f".dockerignore is missing: {sorted(report_formats - docker_suffixes)}"
+        )
 
 
 class TestImageShape:
