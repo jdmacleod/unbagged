@@ -167,18 +167,34 @@ practice.
 `purchasedescription`, `productupc`, `retailamt`, `customerloyamt`.
 
 **There is no quantity field.** A line is a description, a UPC and two amounts,
-and nothing else. Buying three cans of the same thing on one trip arrives as
-three lines identical but for their amounts, indistinguishable from three
-separate visits. `TxnItem.quantity` is read from the line anyway — a future
+and nothing else. `TxnItem.quantity` is read from the line anyway — a future
 retailer may disclose one — and for Kroger it is always `NULL`.
 
-This is a disclosure gap, not a parsing problem, and it has to be said rather
-than papered over. The price history counts *days a product was bought* and
-reports the raw line count beside it, because a line count presented on its own
-reads as a quantity the response never gave. Lines sharing a date are averaged
-into one observation of that day's price: plotting them separately put several
-points on one date, so the series doubled back on itself and the endpoints —
-hence the reported price change — fell to whichever line happened to sort first.
+**A trip puts a product on exactly one line.** Buying three of something arrives
+as one line at roughly three times the usual amount, not as three lines. Measured
+across a real response, the same UPC appearing twice in one basket happens on
+**0 of 762 product-days**.
+
+That correction matters more than it looks, because the opposite was believed
+here for a while and it was wrong in a way only real data exposed. An earlier
+version of this file said three cans arrived as three lines, and a whole
+days-versus-lines model was built on it: the price history counted *days a
+product was bought*, reported a raw line count beside it, and averaged
+same-date lines into one observation. Every part of that was solving a problem
+the format does not have. The belief came from the synthetic fixture, whose
+generator drew products with replacement and so emitted duplicates the real
+export never contains. The generator now draws without replacement within a
+basket, and `tests/test_fixture_shape.py` fails if that regresses.
+
+What the missing quantity actually costs is different, and it is a real
+disclosure gap rather than a parsing problem. An amount at twice another can be
+a price rise or two items in the trolley, and an amount that moves every trip
+can be a per-pound product weighed at the till. The response does not say which.
+So the price history treats one line as one purchase, classifies each product by
+the shape of its own amounts, and draws a series only for the ones that behave
+like a unit price. The rest are listed with what their amounts look like and no
+price change is claimed for them. Naming the gap is the job; inventing a unit
+price would be the opposite of it.
 
 Two more things that look like bugs and are not:
 

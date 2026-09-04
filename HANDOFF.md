@@ -34,7 +34,7 @@ things:
 
 1. **What they have** — purchase timeline, identity graph, drill-down to line items
 2. **What they infer** — modeled and appended attributes, separated by likely origin
-3. **What they didn't tell you** — a compliance matrix against the CCPA disclosure
+3. **What they didn't tell you** — a compliance view against the CCPA disclosure
    categories, per retailer
 
 Point 3 is the differentiator. Existing open-source tooling covers request *generation*
@@ -46,7 +46,7 @@ Tesco Clubcard data.
 ### Non-goals
 
 - Not a request generator. Link out to Datenanfragen rather than duplicating it.
-- Not legal advice. The compliance matrix reports observations, never conclusions about
+- Not legal advice. The compliance view reports observations, never conclusions about
   whether a retailer broke the law.
 - Not a hosted service. Local-first, single-user, no accounts, no telemetry.
 - Not a general takeout viewer. Scope is legally compelled access responses.
@@ -110,7 +110,7 @@ publish packages immediately.
 ### Why not Streamlit
 
 Streamlit would cut implementation time roughly in half and is the obvious choice for a
-research prototype. It is rejected here because the compliance matrix and identity graph
+research prototype. It is rejected here because the compliance view and identity graph
 need real interaction (hover-to-provenance, cell drill-down, cross-retailer diffing) that
 Streamlit makes awkward, and because a REST API means the parsers stay usable headlessly
 for people who want to script against their own data. If velocity becomes the binding
@@ -354,7 +354,7 @@ CREATE TABLE parse_warning (
 
 ### Disclosure category enum
 
-Mirrors the CCPA/CPRA disclosure obligations. Keep these exact keys; the compliance matrix
+Mirrors the CCPA/CPRA disclosure obligations. Keep these exact keys; the compliance view
 columns are generated from them.
 
 ```
@@ -570,40 +570,33 @@ Wrap the Docker commands so contributors never need to remember overlay syntax.
 
 ## 8. UI views
 
-### Timeline
-Scatter or bar of visits over the coverage window, one mark per basket sized by total.
-Filters: store, date range, UPC/description search. Click a basket to expand line items
-with both `retail_amt` and `loyalty_amt` shown, so the discount delta is visible per item.
-Header stat: total spend, basket count, distinct products, coverage window.
-
-### Profile
-Inference cards grouped by `origin`. First-party model outputs in one column, appended
-third-party attributes in another, visually separated with an explanatory note that the
-latter came from somewhere the report does not identify. Each card shows the raw value,
-the scale, whether it describes an individual or a household, and a provenance link.
-Call out household-composition and income-predictor attributes specifically — those
-describe people who never enrolled in anything.
-
-### Compliance
-Retailers as rows, the eight disclosure categories as columns. Cells green/amber/red for
-provided/partial/absent, clickable to the evidence or to a note explaining the absence.
-A "generate follow-up letter" action that drafts a supplemental request naming the missing
-categories, as plain text the user reviews and sends themselves — the tool never sends
-anything.
-
-### Compare
-Only meaningful once a second retailer's response lands. Visit cadence, spend, identifier
-count, and inference count side by side. Build the view but leave it empty-stated until
-`request` has more than one row.
-
-### Price history (stretch)
-`retail_amt` per UPC over the coverage window. With ~380 distinct UPCs across 23 months
-in the reference dataset, this yields a personal inflation series for free. This is the
-one idea worth borrowing directly from the Bristol prototype.
-
----
+> **Superseded. `DESIGN.md` is the authority for the UI.**
+>
+> This section is the original brief. It was written before there was a design
+> system, and three of its five view specs were deliberately replaced during
+> implementation. It is kept because the *reasoning* it records is still useful,
+> and because sections 0-7 above remain the live contract — the adapter rules in
+> §4 and the schema in §5 are cited from `adapters/base.py`, `models.py`,
+> `db.py` and four test modules. Only this section and §9 are historical.
+>
+> What shipped, and where it departs:
+>
+> | Brief said | Shipped | Why |
+> |---|---|---|
+> | Timeline as a scatter or bar of visits | One continuous ruled roll, with a month bar chart above it | Your March baskets are not a separate concern from your April ones; a mark per basket answered a question nobody asked |
+> | Profile as inference cards in two columns | Three movements down one spine, with the appended-attribute block on visibly different stock | Two equal columns held 5 cards against 16, which made the most important finding in the product look like a rendering bug. The imbalance *is* the finding |
+> | Compliance as retailers-rows by categories-columns, cells green/amber/red | Eight categories read down the page per retailer, answers quoted, a blank rule where an answer should be | A one-row matrix is a spreadsheet with nothing to compare, and it hid the evidence behind a click. Colour was carrying severity, which `DESIGN.md` forbids |
+> | Compare, once a second response lands | As specified, with a blank second column standing in until one arrives | — |
+> | Price history (stretch) | Shipped, plus a Products index the brief did not anticipate | A line carries an amount and nothing else, so products whose amounts are not a unit price are named rather than charted |
+>
+> The decisions log at the end of `DESIGN.md` records each departure with its
+> reasoning at the time.
 
 ## 9. Milestones
+
+> **All milestones are complete as of 0.9.0 (2026-09-03).** This section is kept
+> as the record of the intended order, not as a plan. Work since then is tracked
+> in `CHANGELOG.md` and `TODOS.md`.
 
 Each milestone is independently mergeable with passing CI.
 
@@ -632,6 +625,7 @@ rather than crashing on a truncated input.
 
 **M5 — UI.** Timeline, Profile, Compliance. Compare and price history if time allows.
 *Acceptance:* every displayed value traceable to a provenance link.
+*Shipped:* all five, plus a sixth Products view added in 0.10.0. See §8 above.
 
 **M6 — Docker packaging.** Single-container compose, dev overlay, README quickstart.
 *Acceptance:* a clean machine with only Docker installed reaches a working UI in three
