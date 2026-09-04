@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { UploadResult } from "../types";
-import { Card, ErrorBox, Pill } from "./ui";
+import { ErrorBox, Spine } from "./ui";
 
 /**
  * Shown while a parse is in flight.
@@ -9,9 +9,14 @@ import { Card, ErrorBox, Pill } from "./ui";
  * Reading a real 116-page report is around 14 seconds of PDF text extraction.
  * The previous version showed one unchanging line of text for that whole time,
  * which reads as a hang: people start doubting it at about five seconds, and the
- * natural next move is to drop the file again. An animation says the process is
- * alive, and naming an expected range means the wait is boring rather than
+ * natural next move is to drop the file again. Something moving says the process
+ * is alive, and naming an expected range means the wait is boring rather than
  * alarming.
+ *
+ * The one place in the app with motion besides the basket unfurl, and it earns
+ * it: a progress signal that does not move is not a progress signal. It is
+ * suppressed under prefers-reduced-motion by the global rule in index.css, and
+ * the elapsed seconds keep counting either way, so nothing becomes invisible.
  */
 function Working() {
   const [seconds, setSeconds] = useState(0);
@@ -26,13 +31,13 @@ function Working() {
         {[0, 1, 2].map((i) => (
           <span
             key={i}
-            className="h-1.5 w-1.5 animate-bounce rounded-full bg-stone-500"
+            className="h-1 w-1 animate-bounce rounded-full bg-line"
             style={{ animationDelay: `${i * 150}ms` }}
           />
         ))}
       </span>
       <span className="font-medium">Reading the response…</span>
-      <span className="text-stone-500 dark:text-stone-400">
+      <span className="num text-[11.5px] text-muted">
         {seconds < 8
           ? "A long report takes 10 to 30 seconds."
           : `Still working — ${seconds}s. Long reports are slow to read; nothing is stuck.`}
@@ -41,7 +46,20 @@ function Working() {
   );
 }
 
-export function Upload({ onDone }: { onDone: (result: UploadResult) => void }) {
+/**
+ * Adding a response.
+ *
+ * `prominent` is the first run, when this is the entire screen and deserves to
+ * be. Once a response is loaded it becomes a quiet line at the foot of the
+ * document instead of a white panel restating itself on all five views.
+ */
+export function Upload({
+  onDone,
+  prominent,
+}: {
+  onDone: (result: UploadResult) => void;
+  prominent?: boolean;
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -64,7 +82,20 @@ export function Upload({ onDone }: { onDone: (result: UploadResult) => void }) {
   }
 
   return (
-    <Card title="Add a response">
+    <Spine margin={prominent ? undefined : <span />}>
+      {prominent && (
+        <div className="mb-5">
+          <h2 className="font-serif text-[17px] font-semibold">
+            Start with a retailer&rsquo;s response
+          </h2>
+          <p className="mt-1 max-w-[62ch] text-muted">
+            The PDF or zip a retailer sent back when you filed a right-to-know
+            request. It is read here, on this machine, and nothing is uploaded
+            anywhere.
+          </p>
+        </div>
+      )}
+
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -84,12 +115,10 @@ export function Upload({ onDone }: { onDone: (result: UploadResult) => void }) {
           if (!busy) input.current?.click();
         }}
         aria-busy={busy}
-        className={`rounded-lg border-2 border-dashed px-6 py-10 text-center text-sm transition ${
-          busy ? "cursor-wait opacity-90" : "cursor-pointer"
-        } ${
-          dragging
-            ? "border-stone-500 bg-stone-100 dark:bg-stone-800"
-            : "border-stone-300 dark:border-stone-700"
+        className={`rounded-[2px] border border-dashed text-center transition-colors ${
+          prominent ? "px-6 py-12" : "px-4 py-4"
+        } ${busy ? "cursor-wait" : "cursor-pointer"} ${
+          dragging ? "border-accent bg-sunken" : "border-line hover:bg-sunken"
         }`}
       >
         <input
@@ -102,13 +131,17 @@ export function Upload({ onDone }: { onDone: (result: UploadResult) => void }) {
         />
         {busy ? (
           <Working />
-        ) : (
+        ) : prominent ? (
           <>
-            <span className="font-medium">Drop the retailer&rsquo;s response here</span>
-            <span className="mt-1 block text-stone-500 dark:text-stone-400">
-              PDF or text. It stays on this machine — nothing is uploaded anywhere.
+            <span className="font-medium">Drop it here</span>
+            <span className="mt-1 block text-muted">
+              PDF or text. Or click to choose a file.
             </span>
           </>
+        ) : (
+          <span className="text-muted">
+            Add another response — drop a file here, or click to choose one
+          </span>
         )}
       </div>
 
@@ -119,32 +152,35 @@ export function Upload({ onDone }: { onDone: (result: UploadResult) => void }) {
       )}
 
       {result && (
-        <div className="mt-3 space-y-2 text-sm">
-          <p className="flex flex-wrap items-center gap-2">
-            <span>
-              Read as <strong>{result.display_name}</strong>
+        <div className="mt-4 border-t border-rule pt-3">
+          <p>
+            Read as <strong>{result.display_name}</strong>
+            {/* A word, not a coloured pill. Confidence is a fact about the
+                match, not a severity, and colour here means provenance. */}
+            <span className="num ml-2 text-[11.5px] text-faint">
+              {result.confident ? "match" : "uncertain match"}{" "}
+              {Math.round(result.confidence * 100)}%
             </span>
-            {result.confident ? (
-              <Pill tone="good">match {Math.round(result.confidence * 100)}%</Pill>
-            ) : (
-              <Pill tone="warn" title="Low confidence — check this is the right retailer.">
-                uncertain match {Math.round(result.confidence * 100)}%
-              </Pill>
-            )}
           </p>
-          <p className="text-stone-600 dark:text-stone-400">
-            {result.summary.transactions.toLocaleString()} visits,{" "}
-            {result.summary.items.toLocaleString()} line items,{" "}
-            {result.summary.identities} identifiers, {result.summary.inferences}{" "}
-            inferred attributes.
+          {!result.confident && (
+            <p className="mt-1 max-w-[62ch] text-muted">
+              Low confidence. Check this is the retailer you meant before reading
+              anything into it.
+            </p>
+          )}
+          <p className="num mt-1 text-[11.5px] text-muted">
+            {result.summary.transactions.toLocaleString()} visits ·{" "}
+            {result.summary.items.toLocaleString()} line items ·{" "}
+            {result.summary.identities} identifiers · {result.summary.inferences}{" "}
+            inferred attributes
           </p>
           {result.warnings.length > 0 && (
-            <ul className="space-y-1">
+            <ul className="mt-2 space-y-1">
               {result.warnings.map((w, i) => (
-                <li key={i} className="text-amber-800 dark:text-amber-300">
+                <li key={i} className="max-w-[62ch] text-muted">
                   {w.message}
                   {w.locator && (
-                    <span className="ml-1 font-mono text-xs opacity-70">{w.locator}</span>
+                    <span className="num ml-1 text-[11.5px] text-faint">{w.locator}</span>
                   )}
                 </li>
               ))}
@@ -152,6 +188,6 @@ export function Upload({ onDone }: { onDone: (result: UploadResult) => void }) {
           )}
         </div>
       )}
-    </Card>
+    </Spine>
   );
 }

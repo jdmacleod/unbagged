@@ -42,7 +42,10 @@ RUN apt-get update \
 
 # Dependency metadata first: the layer that installs 80 MB of wheels should not
 # be invalidated by editing a docstring.
-COPY pyproject.toml README.md LICENSE ./
+# VERSION travels with pyproject.toml because the build reads the version out
+# of it. Omit it and the build fails outright rather than shipping a wrong
+# number, which is the right way round.
+COPY pyproject.toml README.md LICENSE VERSION ./
 COPY src/unbagged/__init__.py ./src/unbagged/
 RUN pip install --no-cache-dir .
 
@@ -90,7 +93,7 @@ FROM runtime AS dev
 
 # pip needs to write to site-packages, and this stage still starts as root
 # (the entrypoint drops privileges at run time, exactly as in runtime).
-COPY pyproject.toml README.md LICENSE ./
+COPY pyproject.toml README.md LICENSE VERSION ./
 COPY src/ ./src/
 RUN pip install --no-cache-dir --no-deps -e .
 

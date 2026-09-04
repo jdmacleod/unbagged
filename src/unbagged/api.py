@@ -252,6 +252,20 @@ def price_history(
     )
 
 
+@app.get("/api/requests/{request_id}/product-index")
+def product_index(
+    conn: Conn,
+    request_id: int,
+    q: Annotated[str | None, Query(description="match product name or UPC")] = None,
+    min_purchases: Annotated[int, Query(ge=1, le=100)] = 1,
+    limit: Annotated[int, Query(ge=1, le=5000)] = views.INDEX_LIMIT,
+) -> dict[str, Any]:
+    _require_request(conn, request_id)
+    return views.product_index(
+        conn, request_id, query=q, min_purchases=min_purchases, limit=limit
+    )
+
+
 @app.get("/api/requests/{request_id}/follow-up-letter")
 def follow_up_letter(conn: Conn, request_id: int) -> dict[str, Any]:
     """Draft a supplemental request naming the categories that went unanswered.

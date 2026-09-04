@@ -104,7 +104,21 @@ DEPARTMENTS = (
     ), ("KRO", "PET PRIDE", "")),
 )
 
-SIZES = ("8Z", "12Z", "16Z", "24Z", "32Z", "DZ", "GAL", "LB", "EA", "6CT", "12CT")
+# Sizes are per-department so the catalogue reads like a shelf rather than a
+# cross join: "BANANAS 3LB" is a product, "BANANAS GAL" is not. Eleven per
+# department is what takes the catalogue past two thousand entries, which is
+# what the long tail below needs to draw from.
+SIZES_BY_DEPARTMENT = {
+    "PRODUCE": ("EA", "LB", "2LB", "3LB", "5LB", "BAG", "BNCH", "PKG", "CLAM", "6CT", "12CT"),
+    "DAIRY": ("8Z", "12Z", "16Z", "24Z", "32Z", "48Z", "QT", "HGAL", "GAL", "6CT", "12CT"),
+    "MEAT": ("8Z", "12Z", "16Z", "LB", "2LB", "3LB", "5LB", "PKG", "FMLY", "VALU", "EA"),
+    "GROCERY": ("8Z", "12Z", "16Z", "24Z", "32Z", "48Z", "2LB", "5LB", "BOX", "6CT", "12CT"),
+    "FROZEN": ("8Z", "12Z", "16Z", "24Z", "32Z", "48Z", "PT", "QT", "BOX", "6CT", "12CT"),
+    "BEVERAGE": ("12Z", "16Z", "20Z", "1L", "2L", "59Z", "64Z", "6PK", "8PK", "12PK", "24PK"),
+    "HOUSEHOLD": ("EA", "2CT", "4CT", "6CT", "8CT", "12CT", "24CT", "SM", "LG", "XL", "VALU"),
+    "PERSONAL CARE": ("3Z", "6Z", "8Z", "12Z", "16Z", "24Z", "EA", "2CT", "3CT", "6CT", "TWIN"),
+    "PET": ("5LB", "10LB", "16LB", "24LB", "30LB", "3Z", "5Z", "13Z", "6CT", "12CT", "24CT"),
+}
 
 
 def build_catalogue() -> tuple[tuple[str, str, float], ...]:
@@ -112,24 +126,88 @@ def build_catalogue() -> tuple[tuple[str, str, float], ...]:
 
     UPCs are sequential inside a per-department prefix, which is not how real
     UPCs work but does give the adapter stable 11-14 digit codes to group by.
+
+    The catalogue is deliberately much larger than any one shopper's history.
+    A store sells tens of thousands of products and a household buys a few
+    hundred of them; a catalogue the size of the history forces every product
+    to be bought repeatedly, which is the fiction that made the long tail
+    untestable. See SHELF_WEIGHTS.
     """
     catalogue: list[tuple[str, str, float]] = []
-    for dept_index, (_dept, items, brands) in enumerate(DEPARTMENTS, start=1):
+    for dept_index, (dept, items, brands) in enumerate(DEPARTMENTS, start=1):
+        sizes = SIZES_BY_DEPARTMENT[dept]
         serial = 0
         for item, low, high in items:
             for brand_index, brand in enumerate(brands):
-                size = SIZES[(serial + brand_index) % len(SIZES)]
-                description = " ".join(part for part in (brand, item, size) if part)
-                serial += 1
-                upc = f"000{dept_index:02d}{serial:06d}"
-                # Spread base prices across the band so the same item in two
-                # brands is not the same price.
-                base = low + (high - low) * ((brand_index + 1) / (len(brands) + 1))
-                catalogue.append((description, upc, round(base, 2)))
+                for size in sizes:
+                    description = " ".join(part for part in (brand, item, size) if part)
+                    serial += 1
+                    upc = f"000{dept_index:02d}{serial:06d}"
+                    # Spread base prices across the band so the same item in two
+                    # brands is not the same price, and scale by size so a
+                    # bigger pack is not the same price as a smaller one.
+                    base = low + (high - low) * ((brand_index + 1) / (len(brands) + 1))
+                    base *= 0.7 + 0.6 * (sizes.index(size) / (len(sizes) - 1))
+                    catalogue.append((description, upc, round(base, 2)))
     return tuple(catalogue)
 
 
 CATALOGUE = build_catalogue()
+
+# How a real shopping history is shaped, and the single most load-bearing
+# property of this fixture.
+#
+# Measured on one real 23-month response: 379 distinct products across 762
+# priced lines, of which 256 — 68% — were bought exactly ONCE, and only 47 were
+# bought four times or more. Drawing uniformly from a small catalogue produces
+# the opposite shape. This generator used to emit 4.9% single-purchase products
+# against a median of 5, so every view that has to survive a long tail was
+# untestable, and a design decision about two thirds of a screen could not be
+# exercised by any test, QA pass or review.
+#
+# The tail is not a quirk of the format. It is what shopping is: a small core
+# bought most weeks, a wider ring bought occasionally, a long list of things
+# tried once and never again, and — the part a small catalogue cannot express —
+# the very large majority of the shelf that this household never touches at all.
+# That last band carries weight 0 on purpose: a store sells far more than any
+# one person buys, and without it every tail line invents a new product and the
+# distinct-product count runs away.
+#
+# (cumulative share of catalogue, relative draw weight). Fitted against the
+# measured real shape above; see tests/test_fixture_shape.py, which fails if a
+# change to this drifts the fixture back off it.
+SHELF_WEIGHTS = (
+    (0.004, 90.0),   # ~10 products: the weekly staples, bought 12-22 times
+    (0.019, 30.0),   # ~38 more: the regular core
+    (0.080, 7.0),    # ~153: bought occasionally
+    (0.600, 1.0),    # ~1300: the tail, mostly bought once
+    (1.000, 0.0),    # the rest of the shelf, never bought
+)
+
+
+def _shelf_weights() -> tuple[float, ...]:
+    """One draw weight per catalogue entry. Deterministic, and *scattered*.
+
+    The band a product falls into comes from a hash of its position, not from
+    the position itself. Taking the heaviest band off the front of the list put
+    every staple in one department — the catalogue is built department by
+    department, so the first ten entries are ten sizes of the same fruit, and
+    the index rendered nine BANANAS variants at the largest size and nothing
+    else. Nobody shops like that. Scattering spreads the weekly staples across
+    produce, dairy, meat and the rest, which is what a household basket is.
+    """
+    weights = []
+    size = len(CATALOGUE)
+    for index in range(size):
+        # Knuth's multiplicative hash, taken mod the catalogue size: a fixed
+        # permutation of 0..size-1, so the bands keep their exact populations
+        # and only their membership changes.
+        position = ((index * 2654435761) % size) / size
+        weights.append(next(w for edge, w in SHELF_WEIGHTS if position < edge))
+    return tuple(weights)
+
+
+CATALOGUE_WEIGHTS = _shelf_weights()
 
 # Annual price drift, applied on top of per-visit jitter. Without a trend the
 # price-history view shows noise; with one it shows what the data actually
@@ -415,13 +493,78 @@ def _email_blob(fake: Faker, rng: random.Random, start: datetime, address: str) 
     }
 
 
+# Roughly one product in twelve is sold by the pound. Chosen by UPC so a given
+# product behaves the same way across the whole report, which is what makes the
+# shape detectable at all.
+def _sold_by_weight(upc: str) -> bool:
+    return int(upc[-3:]) % 12 == 0
+
+
+def _pick(
+    rng: random.Random, seen: set[str] | None = None
+) -> tuple[str, str, float] | None:
+    """One product off the shelf, weighted so the tail is long.
+
+    `rng.choice` here is what produced a fixture in which the median product was
+    bought five times and only 5% were bought once. See SHELF_WEIGHTS.
+
+    `seen` holds the UPCs already on this basket, and a product is never picked
+    twice for one trip. **A trip puts a product on exactly one line.** Buying two
+    of something is one line at twice the amount, not two lines — measured across
+    a real response, a UPC appearing twice in one basket happens on 0 of 762
+    product-days. Drawing with replacement broke that, and the weighting made it
+    worse by concentrating the draws onto a small head: 11 of 720 product-days
+    carried two lines. This is the fourth bug in this project traceable to the
+    fixture modelling a shape real data never produces, so it is enforced here
+    rather than described in a comment.
+    """
+    for _ in range(24):
+        entry = rng.choices(CATALOGUE, weights=CATALOGUE_WEIGHTS, k=1)[0]
+        if seen is None or entry[1] not in seen:
+            return entry
+    # The weighted head is small, so a long basket can genuinely exhaust it.
+    # Dropping the line is right: a shorter basket is realistic, a repeated UPC
+    # is not.
+    return None
+
+
 def _basket(rng: random.Random, when: datetime, index: int, origin: datetime) -> dict:
     items = []
     total = 0.0
-    for _ in range(rng.randrange(3, 18)):
-        description, upc, base = rng.choice(CATALOGUE)
+    # Basket size is drawn to land the whole report near two priced lines per
+    # distinct product, which is the ratio the real response has (762 lines,
+    # 379 products). A larger basket buries the tail by hitting the core again.
+    seen: set[str] = set()
+    for _ in range(rng.randrange(2, 13)):
+        picked = _pick(rng, seen)
+        if picked is None:
+            continue
+        description, upc, base = picked
+        seen.add(upc)
         retail = _priced(rng, base, when, origin)
-        loyalty = round(retail * rng.choice((0.0, 0.0, 0.0, 0.05, 0.1, 0.2)), 2)
+
+        # Two shapes the real format produces that this generator did not, and
+        # whose absence has now cost three separate bugs. A line carries an
+        # amount and nothing else: no quantity, no weight.
+        #
+        # Quantity: buying two of something is ONE line at twice the amount, not
+        # two lines. The fixture used to imply the opposite, purely because
+        # `rng.choice` picks with replacement, and UI copy got written from it
+        # claiming three items arrive as three lines. Measured against a real
+        # response that happens on 0 of 762 product-days.
+        if _sold_by_weight(upc):
+            # Weight: a different amount every trip, unrelated to price change.
+            retail = round(retail * rng.uniform(0.55, 1.75), 2)
+        elif rng.random() < 0.06:
+            retail = round(retail * rng.choice((2, 2, 2, 3)), 2)
+        # `customerloyamt` is the loyalty *price* — what the line cost — not the
+        # discount. Most lines are not on promotion, so it equals `retailamt`;
+        # the rest are cheaper. An earlier version of this generator emitted a
+        # discount instead, which made the fixture disagree with the format it
+        # exists to reproduce and hid a bug that only real data exposed: read as
+        # a discount, a full-price line is 100% off and "you paid" renders
+        # $0.00. In one real response two thirds of lines were full price.
+        loyalty = round(retail * (1 - rng.choice((0.0, 0.0, 0.0, 0.05, 0.1, 0.2))), 2)
         total += retail
         items.append(
             {
@@ -433,7 +576,7 @@ def _basket(rng: random.Random, when: datetime, index: int, origin: datetime) ->
         )
 
     # The placeholder appears in most baskets, sometimes more than once.
-    for _ in range(rng.randrange(0, 3)):
+    for _ in range(rng.randrange(2, 13)):
         items.append(
             {
                 "purchasedescription": PLACEHOLDER_DESCRIPTION,
@@ -445,8 +588,11 @@ def _basket(rng: random.Random, when: datetime, index: int, origin: datetime) ->
 
     # Returns and voids show up as negative amounts. They are real and must not
     # be filtered, so the fixture has to contain some.
-    if rng.random() < 0.12:
-        description, upc, base = rng.choice(CATALOGUE)
+    refunded = _pick(rng, seen) if rng.random() < 0.12 else None
+    if refunded is not None:
+        # A return is for something bought on an earlier trip, so it must not
+        # collide with this basket's own lines either.
+        description, upc, base = refunded
         refund = -_priced(rng, base, when, origin)
         total += refund
         items.append(
@@ -454,7 +600,11 @@ def _basket(rng: random.Random, when: datetime, index: int, origin: datetime) ->
                 "purchasedescription": description,
                 "productupc": upc,
                 "retailamt": f"{refund:.2f}",
-                "customerloyamt": "0.00",
+                # A refund returns what was paid, so the loyalty price mirrors
+                # the shelf amount rather than sitting at zero. Zero here would
+                # read as "you paid nothing back", which inverts the sign of the
+                # refund in every total.
+                "customerloyamt": f"{refund:.2f}",
             }
         )
 

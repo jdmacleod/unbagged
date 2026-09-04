@@ -47,6 +47,158 @@ class TestMeta:
         assert "/api/requests/{request_id}/timeline" in schema["paths"]
 
 
+class TestProductIndex:
+    """The index endpoint, and the properties the view is designed around."""
+
+    def test_it_lists_products_alphabetically(self, client, uploaded):
+        body = client.get(
+            f"/api/requests/{uploaded['request_id']}/product-index"
+        ).json()
+        names = [p["description"] for p in body["products"]]
+        assert names == sorted(names)
+
+    def test_the_headline_counts_the_response_not_the_filter(self, client, uploaded):
+        """`total_products` and `bought_once_total` are facts about the
+        response. Recomputing them from the filtered set would make the
+        headline figure change as you type, which would state something untrue
+        about the retailer."""
+        rid = uploaded["request_id"]
+        everything = client.get(f"/api/requests/{rid}/product-index").json()
+        filtered = client.get(
+            f"/api/requests/{rid}/product-index", params={"min_purchases": 4}
+        ).json()
+        assert filtered["total_products"] == everything["total_products"]
+        assert filtered["bought_once_total"] == everything["bought_once_total"]
+        assert filtered["product_count"] < everything["product_count"]
+
+    def test_tiers_are_absolute_so_a_filter_cannot_resize_a_product(self, client, uploaded):
+        """The whole reason for quantising. On a scale normalised between the
+        smallest and largest count, filtering changes the range and every
+        surviving product silently changes size."""
+        rid = uploaded["request_id"]
+        everything = client.get(f"/api/requests/{rid}/product-index").json()
+        filtered = client.get(
+            f"/api/requests/{rid}/product-index", params={"min_purchases": 3}
+        ).json()
+        before = {p["upc"]: p["tier"] for p in everything["products"]}
+        for product in filtered["products"]:
+            assert product["tier"] == before[product["upc"]]
+
+    def test_a_filter_matching_one_product_does_not_divide_by_zero(self, client, uploaded):
+        """min == max is not a special case when the tiers are absolute. With
+        two thirds of products bought exactly once this is a likely filter
+        result, not an exotic one."""
+        rid = uploaded["request_id"]
+        everything = client.get(f"/api/requests/{rid}/product-index").json()
+        one = everything["products"][0]
+        body = client.get(
+            f"/api/requests/{rid}/product-index", params={"q": one["description"]}
+        ).json()
+        assert body["product_count"] >= 1
+        assert all(p["tier"] in (1, 2, 3, 4, 5) for p in body["products"])
+
+    def test_the_search_matches_what_was_typed(self, client, uploaded):
+        """No LIKE, so no wildcards to leak. A percent sign is a character
+        someone typed, and this catalogue really does contain "2% MILK", so the
+        right answer is those products — not all of them, and not none."""
+        rid = uploaded["request_id"]
+        everything = client.get(f"/api/requests/{rid}/product-index").json()
+        wild = client.get(
+            f"/api/requests/{rid}/product-index", params={"q": "%"}
+        ).json()
+        assert 0 < wild["product_count"] < everything["product_count"]
+        assert all("%" in p["description"] for p in wild["products"])
+
+    def test_search_is_case_insensitive(self, client, uploaded):
+        rid = uploaded["request_id"]
+        lower = client.get(f"/api/requests/{rid}/product-index", params={"q": "milk"})
+        upper = client.get(f"/api/requests/{rid}/product-index", params={"q": "MILK"})
+        assert lower.json()["product_count"] == upper.json()["product_count"]
+
+    def test_placeholder_and_refund_lines_never_become_products(self, client, uploaded):
+        """The export carries zero-value placeholder rows naming no product, and
+        negative rows that are returns. Neither is something you bought, and the
+        same predicate `price_history` uses excludes both."""
+        rid = uploaded["request_id"]
+        body = client.get(f"/api/requests/{rid}/product-index").json()
+        assert all(p["purchases"] > 0 for p in body["products"])
+        assert not any(p["description"] == "UNKNOWN" for p in body["products"])
+
+    def test_stopped_products_were_bought_more_than_once(self, client, uploaded):
+        """Otherwise 'you stopped buying this' is a label on every product
+        anyone ever tried once, and two thirds of them were."""
+        rid = uploaded["request_id"]
+        body = client.get(f"/api/requests/{rid}/product-index").json()
+        for product in body["products"]:
+            if product["stopped"]:
+                assert product["purchases"] >= 2
+                assert product["last_seen"] < body["stale_before"]
+
+    def test_the_cap_discloses_itself(self, client, uploaded):
+        rid = uploaded["request_id"]
+        body = client.get(
+            f"/api/requests/{rid}/product-index", params={"limit": 5}
+        ).json()
+        assert body["truncated"] is True
+        assert len(body["products"]) == 5
+        assert body["product_count"] > 5
+
+    def test_a_missing_request_is_a_404(self, client):
+        assert client.get("/api/requests/9999/product-index").status_code == 404
+
+
+class TestClickThroughContract:
+    """Pins the contract the Products index depends on: the query string it
+    sends must return the visits containing that product, and *only* that
+    product. Without this, a change to Timeline's matching silently empties
+    every click, or silently over-fills it, and nothing turns red."""
+
+    def test_an_index_entry_filters_the_timeline_to_itself(self, client, uploaded):
+        rid = uploaded["request_id"]
+        index = client.get(f"/api/requests/{rid}/product-index").json()
+        # A product bought several times, so the assertion is about matching
+        # rather than about a single lucky row.
+        product = max(index["products"], key=lambda p: p["purchases"])
+        timeline = client.get(
+            f"/api/requests/{rid}/timeline", params={"q": product["upc"]}
+        ).json()
+        assert timeline["baskets"], product["upc"]
+        # Every visit that shows a positive line, plus at most the visits where
+        # the product came back as a refund. Never more.
+        assert product["purchases"] <= timeline["filtered_count"] <= product["purchases"] + 3
+
+    def test_linking_by_name_would_pull_in_other_products(self, client, uploaded):
+        """Why the link carries a UPC and not the name.
+
+        The timeline search is a substring match and this catalogue is full of
+        names that contain each other — BANANAS EA is inside ORGANIC BANANAS EA
+        and SIMPLE TRUTH ORG BANANAS EA. Linking by name opened a timeline
+        claiming 26 visits "that included" a product bought 20 times, six of
+        which were a different product. This test fails if someone switches the
+        link back to the description.
+        """
+        rid = uploaded["request_id"]
+        index = client.get(f"/api/requests/{rid}/product-index").json()
+        by_name = {p["description"]: p for p in index["products"]}
+        contained = next(
+            (
+                name
+                for name in by_name
+                if any(name != other and name in other for other in by_name)
+            ),
+            None,
+        )
+        assert contained is not None, "fixture no longer has overlapping names"
+
+        by_upc = client.get(
+            f"/api/requests/{rid}/timeline", params={"q": by_name[contained]["upc"]}
+        ).json()["filtered_count"]
+        by_description = client.get(
+            f"/api/requests/{rid}/timeline", params={"q": contained}
+        ).json()["filtered_count"]
+        assert by_upc < by_description
+
+
 class TestUpload:
     def test_a_report_is_ingested_and_summarised(self, uploaded):
         assert uploaded["retailer_id"] == "kroger"
@@ -161,7 +313,7 @@ class TestTimeline:
         data = client.get(f"/api/requests/{uploaded['request_id']}/timeline").json()
         stats = data["stats"]
         assert stats["basket_count"] == len(data["baskets"])
-        assert stats["total_spend"] > 0
+        assert stats["total_shelf"] > 0
         assert stats["first_visit"] < stats["last_visit"]
         assert stats["stores"]
 
@@ -213,14 +365,47 @@ class TestTimeline:
 
 class TestTransactionDetail:
     def test_line_items_show_the_discount_delta(self, client, uploaded):
+        """`loyalty_amt` is the price paid, so the saving is the difference.
+
+        This test previously asserted the opposite — that what you paid is
+        retail minus loyalty — which is the bug it now guards against. On a
+        full-price line, where the two amounts are equal, that arithmetic
+        renders $0.00 under a column headed "You paid".
+        """
         timeline = client.get(f"/api/requests/{uploaded['request_id']}/timeline").json()
         detail = client.get(f"/api/transactions/{timeline['baskets'][0]['id']}").json()
         assert detail["items"]
         for item in detail["items"]:
-            if item["retail_amt"] is not None:
-                assert item["net_amt"] == round(
-                    item["retail_amt"] - (item["loyalty_amt"] or 0), 2
-                )
+            if item["retail_amt"] is None:
+                continue
+            expected = (
+                item["retail_amt"] if item["loyalty_amt"] is None else item["loyalty_amt"]
+            )
+            assert item["paid_amt"] == expected
+            assert item["saved_amt"] == round(item["retail_amt"] - expected, 2)
+
+    def test_a_full_price_line_is_not_free(self, client, uploaded):
+        """The regression in one line.
+
+        Most lines in a real response carry a loyalty price equal to the shelf
+        price: ordinary items, no promotion. Reading that field as a discount
+        makes every one of them 100% off.
+        """
+        timeline = client.get(f"/api/requests/{uploaded['request_id']}/timeline").json()
+        full_price = 0
+        # 25 baskets, not 15. The count below is a sample-size floor rather than
+        # a property, and baskets got smaller when the generator stopped putting
+        # the same product on two lines of one trip.
+        for basket in timeline["baskets"][:25]:
+            detail = client.get(f"/api/transactions/{basket['id']}").json()
+            for item in detail["items"]:
+                r, loyal = item["retail_amt"], item["loyalty_amt"]
+                if r is None or loyal is None or r <= 0 or abs(loyal - r) >= 0.005:
+                    continue
+                full_price += 1
+                assert item["paid_amt"] == r, "a full-price line costs its shelf price"
+                assert item["saved_amt"] == 0
+        assert full_price > 50, "the fixture must carry full-price lines"
 
     def test_every_basket_is_traceable(self, client, uploaded):
         timeline = client.get(f"/api/requests/{uploaded['request_id']}/timeline").json()
@@ -228,6 +413,59 @@ class TestTransactionDetail:
             assert basket["provenance"]["locator"]
             assert basket["provenance"]["page"] >= 1
             assert basket["provenance"]["source_document_id"]
+
+    def test_the_drill_down_foots_to_the_row_that_opened_it(self, client, uploaded):
+        """The basket row and its own line items have to agree.
+
+        They did not. The row showed summed `retail_amt` — the shelf amount
+        before discounts — while the "You paid" column beneath it subtracted the
+        loyalty discount per line, so the two disagreed by the whole discount
+        with nothing on screen explaining the gap.
+        """
+        timeline = client.get(f"/api/requests/{uploaded['request_id']}/timeline").json()
+        checked = 0
+        for basket in timeline["baskets"][:10]:
+            detail = client.get(f"/api/transactions/{basket['id']}").json()
+            paid_from_lines = round(
+                sum(i["paid_amt"] or 0 for i in detail["items"]), 2
+            )
+            assert detail["paid_total"] == paid_from_lines
+            assert basket["paid_total"] == paid_from_lines
+            assert basket["shelf_total"] == detail["shelf_total"]
+            assert basket["saved_total"] == round(
+                basket["shelf_total"] - basket["paid_total"], 2
+            )
+            checked += 1
+        assert checked == 10
+
+    def test_paid_is_at_most_shelf_and_usually_close_to_it(self, client, uploaded):
+        """Sanity bounds that catch a discount/price mix-up from either side.
+
+        Reading the loyalty price as a discount put paid at a small fraction of
+        shelf — about 14% on a real response. A tool whose spend figure is an
+        eighth of the truth looks plausible on every screen.
+        """
+        timeline = client.get(f"/api/requests/{uploaded['request_id']}/timeline").json()
+        priced = [b for b in timeline["baskets"] if b["shelf_total"] > 0]
+        assert priced
+        for basket in priced:
+            assert basket["paid_total"] <= basket["shelf_total"] + 0.005
+            assert basket["saved_total"] >= -0.005
+        saved = sum(b["saved_total"] for b in priced)
+        shelf = sum(b["shelf_total"] for b in priced)
+        assert 0 < saved / shelf < 0.35, "a loyalty saving, not most of the basket"
+
+    def test_summed_lines_match_the_total_the_retailer_stated(self, client, uploaded):
+        """The retailer's own arithmetic, used as a check on ours.
+
+        Every basket states `total_amount_prior_to_discounts`. It was parsed and
+        never compared to anything. A non-zero delta means the parse dropped a
+        line, which would make every total in the app quietly short.
+        """
+        timeline = client.get(f"/api/requests/{uploaded['request_id']}/timeline").json()
+        deltas = [b["stated_pre_discount_delta"] for b in timeline["baskets"]]
+        assert all(d is not None for d in deltas), "the fixture states a total per basket"
+        assert all(abs(d) < 0.01 for d in deltas)
 
     def test_an_unknown_transaction_is_a_404(self, client, uploaded):
         assert client.get("/api/transactions/999999").status_code == 404
@@ -359,9 +597,76 @@ class TestPriceHistory:
         ).json()
         assert data["product_count"] > 20
         product = data["products"][0]
-        assert product["observations"] >= data["min_observations"]
-        assert len(product["points"]) == product["observations"]
+        assert product["purchases"] >= data["min_observations"]
+        assert len(product["points"]) == product["purchases"]
         assert product["first_seen"] <= product["last_seen"]
+
+    def test_one_line_is_one_purchase(self, client, uploaded):
+        """Deliberately replaces a test that asserted the opposite.
+
+        The removed test pinned that several lines sharing a date collapse into
+        one point, on the belief that buying three of something arrived as three
+        lines. Measured across a real response that happened on 0 of 762
+        product-days: the format puts the whole trip on one line and multiplies
+        the amount instead. The old belief came from the synthetic fixture,
+        whose generator picks products with replacement, so the fixture produced
+        a shape the real format never emits.
+        """
+        data = client.get(
+            f"/api/requests/{uploaded['request_id']}/price-history",
+            params={"min_observations": 2},
+        ).json()
+        assert data["quantity_disclosed"] is False
+
+        for product in data["products"]:
+            dates = [point["date"] for point in product["points"]]
+            assert dates == sorted(dates)
+            assert product["purchases"] == len(product["points"])
+
+    def test_products_the_response_cannot_price_are_separated_out(self, client, uploaded):
+        """A line carries an amount, never a quantity and never a weight.
+
+        So an amount at twice another can be a price rise or a second item, and
+        an amount that moves every trip can be a per-pound product. Neither is a
+        unit price, and neither may drive a price-change figure.
+        """
+        data = client.get(
+            f"/api/requests/{uploaded['request_id']}/price-history",
+            params={"min_observations": 2},
+        ).json()
+        assert data["priceable_count"] <= data["product_count"]
+
+        for product in data["products"]:
+            assert product["shape"] in {"unit", "multiple", "weight"}
+            assert product["priceable"] == (product["shape"] == "unit")
+            # Only a product whose amounts look like single units gets a change.
+            if not product["priceable"]:
+                assert product["change_pct"] is None
+            # Points flagged as more than one item never set the endpoints.
+            flagged = [p for p in product["points"] if p["multiple_of"]]
+            assert all(p["multiple_of"] >= 2 for p in flagged)
+
+    def test_priceable_products_are_listed_first(self, client, uploaded):
+        data = client.get(
+            f"/api/requests/{uploaded['request_id']}/price-history",
+            params={"min_observations": 2},
+        ).json()
+        flags = [p["priceable"] for p in data["products"]]
+        assert flags == sorted(flags, reverse=True), "priceable first, then the rest"
+
+    def test_points_carry_what_was_paid_not_only_the_shelf_price(self, client, uploaded):
+        data = client.get(
+            f"/api/requests/{uploaded['request_id']}/price-history"
+        ).json()
+        discounted = 0
+        for product in data["products"]:
+            for point in product["points"]:
+                assert point["paid_amt"] <= point["retail_amt"] + 0.005
+                assert point["saved_amt"] == round(
+                    point["retail_amt"] - point["paid_amt"], 2
+                )
+                discounted += point["saved_amt"] > 0
+        assert discounted, "the fixture must carry discounts or this proves nothing"
 
     def test_refunds_are_excluded_from_prices(self, client, uploaded):
         # A negative amount is a refund, not a price — but it stays in the
@@ -407,7 +712,7 @@ class TestDisclosedVersusZero:
     def test_a_letter_reports_not_disclosed_rather_than_zero(self, client, letter_only):
         stats = client.get(f"/api/requests/{letter_only}/timeline").json()["stats"]
         assert stats["disclosed"] is False
-        for key in ("basket_count", "total_spend", "distinct_products",
+        for key in ("basket_count", "total_shelf", "total_paid", "distinct_products",
                     "first_visit", "last_visit", "line_count"):
             assert stats[key] is None, f"{key} should be null, not zero"
 
@@ -415,7 +720,7 @@ class TestDisclosedVersusZero:
         rows = {r["display_name"]: r for r in client.get("/api/compare").json()["requests"]}
         letter = rows["Corner Market"]
         assert letter["disclosed"] is False
-        for key in ("visits", "total_spend", "distinct_products",
+        for key in ("visits", "total_paid", "total_shelf", "distinct_products",
                     "identifier_count", "inference_count",
                     "appended_inference_count"):
             assert letter[key] is None, f"{key} should be null, not zero"

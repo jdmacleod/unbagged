@@ -1,9 +1,12 @@
 @import "tailwindcss";
 
-/* A system font stack rather than a vendored webfont. Vendoring would work, but
-   the rule is zero external requests, and the cheapest way to keep that rule
-   permanently true is to ship no font files at all. */
+/* Ink on paper. See DESIGN.md — this file is the direction made literal.
+   Serif and sans come from the system stack and ship no bytes. Only the data
+   face is vendored, because narrowness is what lets five numeric columns fit
+   without truncating, and no system monospace is narrow enough. */
 @theme {
+  --font-serif:
+    ui-serif, Georgia, "Iowan Old Style", "Palatino Linotype", serif;
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
     Arial, sans-serif;
@@ -11,29 +14,117 @@
     ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
     monospace;
 
-  /* Compliance statuses. Deliberately not red/amber/green alone: the matrix has
-     to be readable without colour vision, so cells carry a glyph too. */
-  --color-provided: oklch(0.62 0.14 155);
-  --color-partial: oklch(0.72 0.15 75);
-  --color-absent: oklch(0.58 0.19 25);
+  /* The spine's content width. Wider than a prose measure on purpose: prose in
+     this app carries its own max-w-[62ch], so this track only ever has to hold
+     tabular rows, and at a 76ch prose measure the timeline's store column
+     truncated. See DESIGN.md, Layout. */
+  --measure-read: 92ch;
+  /* 11rem, not 15. The margin never carried more than a page citation and a
+     two-word aside, and at 15rem the arithmetic did not work: the shell is
+     64rem minus 3rem of padding either side = 928px, while 92ch + gap-12 +
+     15rem asks for 946px. `minmax(0, …)` absorbed the overflow silently, so
+     the spine delivered 640px and a basket row — which spends another 3.25rem
+     on its hanging month column — delivered 540px, about 75ch. That is the
+     measure the decisions log raised AWAY from, because it truncated the
+     timeline's store column. See DESIGN.md, Layout. */
+  --spacing-margin: 11rem;
 }
 
+/* Raw values live here so they can swap with the colour scheme; @theme inline
+   below maps them to utilities without freezing them. */
 :root {
   color-scheme: light dark;
+
+  --paper-desk: #e9e6de;
+  --paper-page: #fbfaf7;
+  --paper-sunken: #f2efe9;
+  --ink: #1e1c19;
+  --ink-muted: #5c574f;
+  --ink-faint: #78716a;
+  --ink-rule: #d8d2c7;
+  --ink-line: #8a8378;
+  --ink-accent: #0f5257;
+  --foreign-ink: #8a5a1e;
+  --foreign-paper: #f5eee1;
+  --foreign-rule: rgb(138 90 30 / 0.22);
+  --ink-danger: #8c2f22;
+
+  /* Categorical colour. Identity and recognition only: which store, which
+     series, which product group. Never severity — see DESIGN.md. Six hues
+     drawn from the same warm ground as the paper so they read as inks on this
+     page rather than as a chart library's defaults, each held at 4.5:1 or
+     better on --paper-page. */
+  --cat-1: #1f5f5b;
+  --cat-2: #8a4b2a;
+  --cat-3: #3f5688;
+  --cat-4: #6b6320;
+  --cat-5: #7a3b5c;
+  --cat-6: #2f6636;
+}
+
+/* A lit reading room, not a blue-black terminal: no hue shift toward blue. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper-desk: #0e0d0c;
+    --paper-page: #1e1d1b;
+    --paper-sunken: #121110;
+    --ink: #ede8df;
+    --ink-muted: #a29b90;
+    --ink-faint: #8b8478;
+    --ink-rule: #302e2b;
+    --ink-line: #6e675d;
+    --ink-accent: #4fb3a6;
+    --foreign-ink: #d9a25a;
+    --foreign-paper: #241f17;
+    --foreign-rule: rgb(217 162 90 / 0.24);
+    --ink-danger: #d9705f;
+
+    /* Lifted and desaturated for a dark ground, same order, same meanings. */
+    --cat-1: #5fb3ab;
+    --cat-2: #d09566;
+    --cat-3: #8aa4dc;
+    --cat-4: #c2b662;
+    --cat-5: #cf8fae;
+    --cat-6: #7dbb84;
+  }
+}
+
+@theme inline {
+  --color-desk: var(--paper-desk);
+  --color-page: var(--paper-page);
+  --color-sunken: var(--paper-sunken);
+  --color-ink: var(--ink);
+  --color-muted: var(--ink-muted);
+  --color-faint: var(--ink-faint);
+  --color-rule: var(--ink-rule);
+  --color-line: var(--ink-line);
+  --color-accent: var(--ink-accent);
+  --color-foreign: var(--foreign-ink);
+  --color-foreign-paper: var(--foreign-paper);
+  --color-foreign-rule: var(--foreign-rule);
+  /* One call site in the whole app: confirming deletion of a report. */
+  --color-danger: var(--ink-danger);
+  --color-cat-1: var(--cat-1);
+  --color-cat-2: var(--cat-2);
+  --color-cat-3: var(--cat-3);
+  --color-cat-4: var(--cat-4);
+  --color-cat-5: var(--cat-5);
+  --color-cat-6: var(--cat-6);
 }
 
 body {
   margin: 0;
   font-family: var(--font-sans);
-  background: var(--color-stone-50);
-  color: var(--color-stone-900);
+  font-size: 13px;
+  background: var(--paper-desk);
+  color: var(--ink);
 }
 
-@media (prefers-color-scheme: dark) {
-  body {
-    background: var(--color-stone-950);
-    color: var(--color-stone-100);
-  }
+/* Every numeral that sits in a column. Numerals in running prose stay in the
+   serif or sans with tabular figures; that is the whole rule. */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 /* Wide content scrolls inside its own container rather than the page. */

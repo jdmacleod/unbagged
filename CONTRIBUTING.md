@@ -27,6 +27,22 @@ The skeleton keeps object keys, replaces string values with `<str:len=N>`, bucke
 to their order of magnitude, and coarsens dates to the month. That is enough to debug a
 parser and not enough to identify you. Read the output before you attach it.
 
+## The CHANGELOG is public and permanent
+
+`CHANGELOG.md` describes what changed in the software. It never describes what
+was in a report. No dates lifted from a shopping history, no product
+descriptions, no UPCs, no counts drawn from one person's response.
+
+Worth stating separately because a changelog is exactly where the urge to be
+concrete bites hardest. "Corrected a misread field" wants an example, and the
+nearest example is always the report on your disk. Reach for the shape of the
+problem instead: *an item bought at its ordinary price came out free* says
+everything a reader needs and names nothing.
+
+The same rule covers commit messages, PR descriptions, code comments, test
+names, and docstrings. `make check-pii` will catch an address or a card number;
+it will not catch a date you happened to shop on, so this one is on you.
+
 ## The safeguards, and why each one exists
 
 | Layer | What it does |

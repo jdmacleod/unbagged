@@ -13,10 +13,10 @@ export function useShowMore<T>(items: T[], step = 25) {
   const remaining = items.length - visible.length;
   const control =
     remaining > 0 ? (
-      <div className="pt-3 text-center">
+      <div className="py-3 text-center">
         <button
           onClick={() => setLimit((n) => n + step * 4)}
-          className="rounded border border-stone-300 px-3 py-1 text-xs hover:bg-stone-100 dark:border-stone-700 dark:hover:bg-stone-800"
+          className="rounded-[2px] border border-line px-3 py-1.5 hover:bg-sunken"
         >
           {/* "Show 97 more (97 left)" said 97 twice. The count of what you get
               is the useful half; the remainder only differs once you are partway
