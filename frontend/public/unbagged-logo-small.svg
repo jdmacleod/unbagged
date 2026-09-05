@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="64" height="64" role="img" aria-labelledby="t d"><title id="t">unbagged</title>
+<desc id="d">Simplified brown paper bag mark with a bandit mask and eyes, drawn on a pixel grid for small sizes.</desc>
+<rect x="6.25" y="12.5" width="87.5" height="12.5" rx="2" fill="#A9763F"/>
+<rect x="12.5" y="25" width="75" height="62.5" rx="3" fill="#C99A63"/>
+<rect x="18.75" y="43.75" width="62.5" height="25" fill="#2E2A26"/>
+<circle cx="31.25" cy="56.25" r="6.25" fill="#FFF6EA"/>
+<circle cx="68.75" cy="56.25" r="6.25" fill="#FFF6EA"/>
+</svg>

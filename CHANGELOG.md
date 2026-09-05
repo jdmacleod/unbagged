@@ -72,6 +72,29 @@ from a specific response. See `CONTRIBUTING.md`.
   against the real download in a browser. It exports what is on screen, filters
   included.
 
+## [Unreleased]
+
+### Fixed
+
+- **The favicon and logo never appeared, because the assets were never wired to
+  anything.** They were committed to `resources/` in a commit named "add the
+  logo and icon assets, unmoved" and the second half never happened:
+  `index.html` declared no icon, `frontend/public/` did not exist, and nothing
+  served `resources/`. Every brand URL fell through to the SPA shell, so the
+  browser asked for `/favicon.ico` on each page load and got HTML back. Nothing
+  in the suite noticed, because nothing asserted the app has a favicon at all.
+
+  The tab now carries the mark (`.ico` plus an SVG for browsers that take one,
+  and an apple-touch-icon), and the first-run screen carries it once — the only
+  surface `DESIGN.md` leaves open to illustration, and it is gone the moment a
+  report loads.
+
+  `make brand` produces the served copies from the sources, stripping a C2PA
+  content-credential manifest that is 90-94% of each file: 21.6 KB of provenance
+  record that would otherwise be fetched on every page load, and which named
+  `c2pa.org` in a build that references no other host. `make brand-check` runs in
+  CI and compares both directions, so a hand-copied source or a stray file fails.
+
 ## [0.11.0] - 2026-09-05
 
 ### Changed

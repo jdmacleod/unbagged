@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="512" height="512" role="img" aria-labelledby="t d"><title id="t">unbagged</title>
+<desc id="d">A brown paper grocery bag wearing a bandit mask, with eyes and a small smile.</desc>
+<g transform="translate(0,-2)">
+<rect x="4" y="10" width="92" height="16" rx="3" fill="#B07F49" stroke="#8A5A2B" stroke-width="2"/>
+<rect x="8" y="24" width="84" height="70" rx="5" fill="#C99A63" stroke="#8A5A2B" stroke-width="2"/>
+<path d="M16 44 L42 44 Q50 53 58 44 L84 44 L84 66 L16 66 Z" fill="#2E2A26"/>
+<circle cx="32" cy="55" r="7.5" fill="#FFF6EA"/>
+<circle cx="68" cy="55" r="7.5" fill="#FFF6EA"/>
+<circle cx="32" cy="55" r="3.5" fill="#2E2A26"/>
+<circle cx="68" cy="55" r="3.5" fill="#2E2A26"/>
+<path d="M37 76 Q50 85 63 76" fill="none" stroke="#2E2A26" stroke-width="4" stroke-linecap="round"/>
+</g>
+</svg>

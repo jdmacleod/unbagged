@@ -8,6 +8,15 @@
          request to a CDN would leak to a third party that you are reading a
          report about yourself right now. -->
     <title>unbagged</title>
+    <!-- Served from frontend/public/, which Vite copies verbatim into the build
+         root. Same-origin only, like everything else here. The SVG is taken by
+         browsers that support it and scales cleanly; the .ico is the fallback
+         and is what most browsers request unasked on every page load. Both are
+         produced by `make brand`, which strips a C2PA manifest that is 93% of
+         the source file. -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" href="/unbagged-logo-small.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon-180.png" />
   </head>
   <body>
     <div id="root"></div>

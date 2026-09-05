@@ -85,6 +85,25 @@ export function Upload({
     <Spine margin={prominent ? undefined : <span />}>
       {prominent && (
         <div className="mt-8 mb-5">
+          {/* The one place the mark appears in the app, and the only surface
+              DESIGN.md leaves open to it: illustration is forbidden on the
+              reading surface, and this screen has no report on it yet. It
+              greets at the door and is gone the moment data loads; identity
+              persists in the tab from there. Decorative, so it is hidden from
+              assistive technology — the heading below says the same thing in
+              words.
+
+              Width and height are set so the row does not reflow when the image
+              arrives, and it is `/`-rooted from frontend/public/ rather than
+              imported, which keeps it out of the JS bundle. */}
+          <img
+            src="/unbagged-logo.svg"
+            alt=""
+            aria-hidden="true"
+            width="56"
+            height="56"
+            className="mb-3 block"
+          />
           {/* `mt-8` because the heading had none: it sat 0px under the page's
               intro paragraph and 4px above its own, so it read as the tail of
               the header rather than as the start of this section. A heading
