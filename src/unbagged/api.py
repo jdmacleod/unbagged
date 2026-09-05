@@ -307,17 +307,20 @@ def mount_frontend(application: FastAPI = app) -> bool:
 
     @application.get("/{path:path}", include_in_schema=False)
     def spa(path: str) -> FileResponse:
-        requested = Path(path)
-        if requested.is_absolute() or ".." in requested.parts:
+        normalized = os.path.normpath(path or "")
+        if normalized == ".":
+            normalized = ""
+        if os.path.isabs(normalized) or normalized == ".." or normalized.startswith("../"):
             return FileResponse(root / "index.html")
 
+        requested = Path(normalized)
         candidate = (root / requested).resolve()
         try:
             candidate.relative_to(root)
         except ValueError:
             return FileResponse(root / "index.html")
 
-        if path and candidate.is_file():
+        if normalized and candidate.is_file():
             return FileResponse(candidate)
         return FileResponse(root / "index.html")
 
