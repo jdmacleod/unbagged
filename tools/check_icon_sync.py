@@ -22,8 +22,10 @@ so the middle link of the chain was unguarded:
 Edit an SVG, run `make brand`, push: every gate was green, because the served
 copies faithfully matched rasters that were a version behind.
 
-**What this proves, and what it does not.** It proves the derived files moved
-when their source did. It does not prove they are correct — regenerate wrongly
+**What this proves, and what it does not.** It proves that each source that
+moved was accompanied by something it produces, matched per source rather than
+as one pool: editing one SVG while touching a raster belonging to the other does
+not count. It does not prove they are correct — regenerate wrongly
 and this passes. The stronger check regenerates with cairosvg and compares
 decoded pixels, which was measured as practical (22s to install libcairo2 on a
 slim image, and all six rasters reproduce pixel-identically today) and set aside
@@ -45,9 +47,29 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WATCHED_DIR = "resources"
 SOURCE_SUFFIX = ".svg"
-# Everything build_icons.py writes. `resources/README.md` states the contract
-# this rests on: two source SVGs, everything else generated from them.
 DERIVED_SUFFIXES = (".png", ".ico")
+
+# Which source produces which files, read off build_icons.py. Per source, not a
+# single pool: an earlier version asked only "did any source change and any
+# generated file change", which passes when a pull request edits one SVG and
+# touches a raster belonging to the other. The first SVG's icons then stay stale
+# with the gate green, which is the bug this exists to catch wearing a hat.
+#
+# A test asserts this mapping against what build_icons.py actually writes, and
+# a second asserts the attribution rather than just the coverage, so a swapped
+# pair cannot pass either.
+PRODUCES: dict[str, tuple[str, ...]] = {
+    "resources/unbagged-logo.svg": (
+        "resources/icon-512.png",
+        "resources/apple-touch-icon-180.png",
+    ),
+    "resources/unbagged-logo-small.svg": (
+        "resources/favicon-16.png",
+        "resources/favicon-32.png",
+        "resources/favicon-48.png",
+        "resources/favicon.ico",
+    ),
+}
 
 
 def changed_paths(base: str) -> list[str]:
@@ -64,12 +86,34 @@ def changed_paths(base: str) -> list[str]:
     return [line for line in result.stdout.splitlines() if line]
 
 
-def out_of_step(paths: list[str]) -> tuple[list[str], list[str]]:
-    """The watched sources and derived files among `paths`."""
-    watched = [p for p in paths if p.startswith(f"{WATCHED_DIR}/")]
-    sources = sorted(p for p in watched if p.endswith(SOURCE_SUFFIX))
-    derived = sorted(p for p in watched if p.endswith(DERIVED_SUFFIXES))
-    return sources, derived
+def changed_sources(paths: list[str]) -> list[str]:
+    """The watched source SVGs among `paths`."""
+    return sorted(
+        p for p in paths
+        if p.startswith(f"{WATCHED_DIR}/") and p.endswith(SOURCE_SUFFIX)
+    )
+
+
+def unaccompanied(paths: list[str], reasons: dict[str, str]) -> list[str]:
+    """Sources that moved with none of what they produce, and no reason given.
+
+    Per source. `reasons` is keyed by source path, so a reason written for one
+    SVG cannot excuse an edit to the other — which a range-wide flag did, since
+    it flattened every commit message into a single yes.
+    """
+    changed = set(paths)
+    stale = []
+    for source in changed_sources(paths):
+        if source in reasons:
+            continue
+        produced = PRODUCES.get(source)
+        if produced is None:
+            # An unmapped source is an unwatched source, which is the whole bug.
+            stale.append(source)
+            continue
+        if not changed.intersection(produced):
+            stale.append(source)
+    return stale
 
 
 # The escape hatch, and why it has to exist.
@@ -80,47 +124,70 @@ def out_of_step(paths: list[str]) -> tuple[list[str], list[str]]:
 # with nothing the contributor can do to satisfy it short of a pointless edit.
 # That is how a gate gets disabled instead of fixed.
 #
-# So: a commit in the range may carry a reason, in the shape the PII scanner
-# already uses for its suppressions. A bare marker is not enough; the text after
-# the colon has to say something.
+# So a commit may carry a reason, in the shape the PII scanner already uses for
+# its suppressions. It names the source it excuses:
+#
+#     icons-unchanged: unbagged-logo.svg reformatted, renders identically
+#
+# Naming the file is not ceremony. An unscoped marker excused every source in
+# the range, so a render-neutral edit in one commit waved through a later commit
+# that moved pixels and skipped the regenerate. A bare marker does not count.
 ESCAPE = "icons-unchanged:"
 
 
-def escape_reasons(base: str) -> list[str]:
-    """Any `icons-unchanged: <reason>` lines in this branch's commit messages."""
+def escape_reasons(base: str) -> dict[str, str]:
+    """`icons-unchanged: <source> <reason>` lines, keyed by the source named."""
     result = subprocess.run(
         ["git", "log", "--format=%B", f"{base}..HEAD"],
         cwd=REPO_ROOT, capture_output=True, text=True, check=True,
     )
-    found = []
-    for line in result.stdout.splitlines():
+    return parse_reasons(result.stdout)
+
+
+def parse_reasons(text: str) -> dict[str, str]:
+    found: dict[str, str] = {}
+    for line in text.splitlines():
         marker = line.strip()
-        if marker.lower().startswith(ESCAPE):
-            reason = marker[len(ESCAPE):].strip()
-            if reason:
-                found.append(reason)
+        if not marker.lower().startswith(ESCAPE):
+            continue
+        rest = marker[len(ESCAPE):].strip()
+        if not rest:
+            continue
+        named, _, reason = rest.partition(" ")
+        named = named.rstrip(":")
+        path = f"{WATCHED_DIR}/{named}" if "/" not in named else named
+        if path in PRODUCES and reason.strip():
+            found[path] = reason.strip()
     return found
 
 
-def run(paths: list[str], reasons: list[str] | None = None) -> int:
-    sources, derived = out_of_step(paths)
+def run(paths: list[str], reasons: dict[str, str] | None = None) -> int:
+    reasons = reasons or {}
+    sources = changed_sources(paths)
     if not sources:
         print("check_icon_sync: no source SVG changed")
         return 0
-    if derived:
+
+    stale = unaccompanied(paths, reasons)
+    for source, reason in sorted(reasons.items()):
+        if source in sources:
+            print(f'check_icon_sync: {source} allowed by "{reason}"')
+    if not stale:
         print(f"check_icon_sync: {len(sources)} source(s) changed, "
-              f"{len(derived)} generated file(s) changed with them")
-        return 0
-    if reasons:
-        print("check_icon_sync: a source changed with no generated file, allowed by:")
-        for reason in reasons:
-            print(f"  {ESCAPE} {reason}")
+              "each with what it produces or a stated reason")
         return 0
 
-    print("check_icon_sync: a source SVG changed and nothing generated from it did",
+    print("check_icon_sync: a source SVG changed and nothing it produces did",
           file=sys.stderr)
-    for source in sources:
-        print(f"  CHANGED  {source}", file=sys.stderr)
+    for source in stale:
+        produced = PRODUCES.get(source)
+        if produced is None:
+            print(f"  UNMAPPED  {source}  (not in PRODUCES, so nothing watches it)",
+                  file=sys.stderr)
+            continue
+        print(f"  STALE  {source}", file=sys.stderr)
+        for name in produced:
+            print(f"           expected one of: {name}", file=sys.stderr)
     print(
         "\nThe icons in resources/ are still the previous artwork, and "
         "`make brand`\nwill copy them to frontend/public/ without complaint — "
@@ -130,10 +197,10 @@ def run(paths: list[str], reasons: list[str] | None = None) -> int:
         "    cd resources && python build_icons.py\n"
         "    make brand\n\n"
         "If the edit genuinely changes no pixel, the rasters regenerate identical\n"
-        "and there is nothing to commit. Say so in a commit message and this\n"
-        "passes:\n\n"
-        f"    {ESCAPE} reformatted the path data, renders identically\n\n"
-        "A reason is required — a bare marker does not count.",
+        "and there is nothing to commit. Say so in a commit message, naming the\n"
+        "file, and this passes:\n\n"
+        f"    {ESCAPE} unbagged-logo.svg reformatted the path data, renders identically\n\n"
+        "The name and the reason are both required.",
         file=sys.stderr,
     )
     return 1
