@@ -110,6 +110,10 @@ jobs:
       # the lock to compare would need Docker and a network round trip, so the
       # thorough version is `make lock` and this is the fast half.
       - run: python tools/check_lock.py
+      # frontend/public/ is generated from resources/ with the C2PA manifests
+      # stripped. Copying a source across by hand instead ships several KB of
+      # provenance record on every page load and passes every other check.
+      - run: python tools/build_brand.py --check
 
   hooks:
     name: pre-commit

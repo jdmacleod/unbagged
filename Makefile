@@ -8,7 +8,7 @@ PY := $(shell test -x .venv/bin/python && echo .venv/bin/python || echo $(BOOTST
 COMPOSE := docker compose
 DEV_COMPOSE := docker compose -f docker-compose.yml -f docker-compose.dev.yml
 
-.PHONY: help setup setup-frontend build-frontend serve up down logs reset dev test test-frontend test-container setup-browser lint denylist check-pii check-pii-history fixtures fixtures-check lock lock-check screenshots clean
+.PHONY: help setup setup-frontend build-frontend serve up down logs reset dev test test-frontend test-container setup-browser lint denylist check-pii check-pii-history fixtures fixtures-check lock lock-check brand brand-check screenshots clean
 
 help:  ## Show this help
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -101,6 +101,12 @@ lock:  ## Regenerate docker/requirements.txt (needs Docker; runs on linux/amd64)
 
 lock-check:  ## Fail if the lock no longer covers pyproject's dependencies
 	$(PY) tools/check_lock.py
+
+brand:  ## Regenerate frontend/public/ from resources/ (strips C2PA manifests)
+	$(PY) tools/build_brand.py
+
+brand-check:  ## Fail if a served brand asset is not what its source produces
+	$(PY) tools/build_brand.py --check
 
 screenshots:  ## Regenerate docs/screenshots from the synthetic fixture (needs Docker + browser)
 	$(PY) tools/make_screenshots.py
