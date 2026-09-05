@@ -72,6 +72,28 @@ ALLOWED_EMAIL_DOMAINS = {
     # Machine identities that appear in commit trailers, not people's inboxes.
     "noreply.github.com", "users.noreply.github.com", "anthropic.com",
 }
+
+# Exact addresses, where the domain itself cannot be allowed. `github.com` holds
+# real people's mail; `support@github.com` is a published corporate address that
+# every Dependabot commit signs off with:
+#
+#     Signed-off-by: dependabot[bot] <support@github.com>
+#
+# Flagging it turned the history scan red on every dependency PR — eleven of
+# them at once, and every future one. A check that is always red on a whole
+# class of PR is a check people learn to scroll past, which is the thing
+# CONTRIBUTING.md says protects nobody. Allowed by address rather than by
+# domain, so a real @github.com inbox is still a finding.
+#
+# The considered alternative was to skip `Signed-off-by:` lines outright. That
+# would be consistent with the choice above this file's LOG_FORMAT — author and
+# committer lines are already omitted, and a sign-off is the same kind of
+# machine-written identity metadata — and it would cover every bot at once
+# instead of one per entry. It was not taken because a trailer is still a line
+# somebody can paste an address into, and one entry per bot is a cost paid
+# rarely and loudly. If a second bot turns up here, weigh it again rather than
+# adding a third entry out of habit.
+ALLOWED_EMAILS = {"support@github.com"}
 ALLOWED_EMAIL_SUFFIXES = (".invalid", ".example", ".test", ".localhost")
 
 US_STATES = (
@@ -139,6 +161,8 @@ def luhn_ok(digits: str) -> bool:
 
 
 def _email_is_real(m: re.Match[str]) -> bool:
+    if m.group(0).lower() in ALLOWED_EMAILS:
+        return False
     domain = m.group("domain").lower()
     return not (
         domain in ALLOWED_EMAIL_DOMAINS or domain.endswith(ALLOWED_EMAIL_SUFFIXES)
