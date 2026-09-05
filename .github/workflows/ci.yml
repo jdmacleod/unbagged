@@ -25,6 +25,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
+          # Explicit rather than implied by the full fetch: check_signers.py
+          # refuses to verify an empty set of tags, so a checkout without them
+          # fails the job loudly instead of passing having checked nothing.
+          fetch-tags: true
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
@@ -58,6 +62,14 @@ jobs:
       # frontend/public/ against resources/ rather than resources/ against the
       # SVGs -- so editing a source and running `make brand` shipped stale icons
       # with every gate green. Pull requests only: it needs a base to diff from.
+      # A signature nobody can check is decoration. This asserts that the
+      # signers file committed beside the tags still verifies every one of
+      # them -- which is what a rotation that replaces a key instead of adding
+      # one would break, permanently, since a signed tag can never be re-signed
+      # under a ruleset that blocks deletion and non-fast-forward.
+      - name: Verify every tag against the committed signers file
+        run: python tools/check_signers.py
+
       - name: Refuse a source SVG that moved without its icons
         if: github.event_name == 'pull_request'
         run: |

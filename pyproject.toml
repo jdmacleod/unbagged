@@ -103,6 +103,9 @@ select = ["E", "F", "I", "UP", "B", "SIM", "S"]
 # Builds a throwaway git repository in tmp_path to prove the icon gate reads
 # its escape marker out of real commit messages rather than a mocked string.
 "tests/test_check_icon_sync.py" = ["S101", "S603", "S607"]
+# Runs git verify-tag with the signers file deliberately unset, to prove the
+# check does its own configuring rather than inheriting the developer's.
+"tests/test_check_signers.py" = ["S101", "S603", "S607"]
 # The safeguard tooling shells out to git by name, on argument lists it builds
 # itself from literals and repo-relative paths. Resolving an absolute git path
 # would only move the trust, and there is no untrusted input on these calls.

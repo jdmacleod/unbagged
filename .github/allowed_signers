@@ -1,0 +1,23 @@
+# Who may sign tags in this repository, and with which key.
+#
+# Point git at this file and `git verify-tag` and `git log --show-signature`
+# start working against it:
+#
+#     git config gpg.ssh.allowedSignersFile .github/allowed_signers
+#     git verify-tag v0.12.0
+#
+# GitHub verifies signatures on its own and shows a Verified badge either way.
+# This file is what lets someone who has cloned the repository check a release
+# without asking GitHub to vouch for it — which is the point, in a project whose
+# claim is that you can read what you are running.
+#
+# `namespaces="git"` restricts the key to git signatures, so it cannot be used
+# to verify a signature made for some other purpose with the same key.
+#
+# Rotating a key means ADDING a line, never replacing one. Tags already signed
+# with an old key must keep verifying, and the tag ruleset blocks deletion and
+# non-fast-forward, so those signatures can never be redone. tools/check_signers.py
+# fails if any existing tag stops verifying, which is what makes that concrete.
+#
+# pii-scan: allow the maintainer's own address, which authors every commit here already and is the identity a signature is checked against
+jason.d.macleod@gmail.com namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOqcwdix7G4w0mW9SP3MocfE/pG7kg5JZfLlU1YmiRgn
