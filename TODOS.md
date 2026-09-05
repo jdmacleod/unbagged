@@ -8,6 +8,55 @@ carries enough context to be picked up cold.
 
 ## Open
 
+- **The signed rasters in `resources/` are a one-way door.** Each of the six
+  carries a C2PA `caBX` manifest — 5,758 bytes of the 5,974 in `favicon-16.png`,
+  the same chunk in `icon-512.png` at 20,750. Nothing in this repository can
+  re-apply one. `build_icons.py` regenerates from the SVGs via cairosvg, which
+  emits no manifest, so rebuilding a raster strips its provenance permanently.
+
+  Nothing goes red when that happens. `tools/build_brand.py` strips `caBX` on
+  the way out and compares decoded pixels, so a freshly regenerated raster is
+  indistinguishable from a signed one to every gate in CI. Verified 2026-09-05:
+  a container render of all six came back pixel-identical to the committed
+  files and carried no manifest.
+
+  This is the constraint that decided the raster-guard design on 2026-09-05. A
+  gate that verifies by regenerating would have told people to run a command
+  that destroys the record `build_brand.py`'s own docstring exists to preserve:
+  *"the record survives where the asset is authored and never reaches the wire."*
+
+  **Open question, and it needs a human:** is the tool that signed these still
+  available? If it is, this is a workflow note — regenerate, then re-sign — and
+  a regeneration gate becomes viable again. If it is not, the rasters are frozen:
+  any edit to a source SVG costs the provenance record on everything derived
+  from it, and the docs that describe the manifests as a standing property
+  should say so.
+
+- **`tools/` is importable from pytest and nowhere else.** `pyproject.toml` sets
+  `pythonpath = ["src", "."]` under `[tool.pytest.ini_options]`, so
+  `from tools import build_brand` resolves in tests. Run any script directly and
+  `sys.path[0]` is the script's own directory, so the repo root is absent and
+  `tools` does not resolve — `tools/` has no `__init__.py` and exists only as a
+  namespace package off the root.
+
+  This bites the file itself: `python tools/build_brand.py` cannot import a
+  sibling module, and `Makefile:109` and `.github/workflows/ci.yml:116` both
+  invoke it exactly that way. Measured 2026-09-05, from both `tools/` and
+  `resources/`: `ModuleNotFoundError: No module named 'tools'`.
+
+  It cost a plan a decision on 2026-09-05 — an extraction of shared helpers into
+  `tools/imagecheck.py` would have broken CI on its first run, and was caught
+  only by a review pass that tried the import. The failure reads like a missing
+  dependency rather than a path problem, which is what makes it worth writing
+  down.
+
+  Three known fixes, none of them adopted yet: insert the repo root into
+  `sys.path` at the top of each script; add `tools/__init__.py` and invoke with
+  `python -m tools.build_brand`; or declare console-script entry points in
+  `pyproject.toml`. The third is the only one that does not put path manipulation
+  in the source.
+
+
 - **Nothing checks `resources/`'s rasters against the SVGs that produce them.**
   `build_icons.py` turns the two source SVGs into six rasters. Nothing re-runs
   it: not CI, not pre-commit, and `cairosvg` is in no dependency group, so it
@@ -25,12 +74,26 @@ carries enough context to be picked up cold.
   bug: a guard covering one direction of a two-direction problem. This repo has
   now hit that shape three times.
 
-  Cost: `cairosvg` pulls a C library (`libcairo`), which is why it was kept out
-  of the dependency groups in the first place, so the fix is not simply adding a
-  CI step. Options worth weighing: pin cairosvg in a separate optional group and
-  run the check in one job; or commit a hash of each SVG beside the rasters and
-  fail when an SVG changes without its rasters being rebuilt, which needs no new
-  dependency and catches the realistic case.
+  Cost, measured 2026-09-05 rather than assumed: the earlier note here said
+  cairosvg pulls a C library so "the fix is not simply adding a CI step". On
+  `python:3.12-slim`, `apt-get install -y libcairo2` is 13s and 1.4 MB, then
+  cairosvg imports; 22s total. It is simply adding a CI step. All six rasters
+  also regenerate pixel-identical from today's SVGs, so a regeneration check
+  would pass on the current tree.
+
+  **Approach decided 2026-09-05: a changed-together gate, not regeneration.**
+  Fail when a `resources/*.svg` changes in a pull request and the rasters do not.
+  One step in the existing `safeguards` job, no new dependency, no write path.
+  Regeneration was the stronger guarantee and was rejected anyway, because it
+  would have made "run the regenerate command" the documented fix for a red
+  build — and that command destroys the C2PA manifests permanently. See the
+  one-way-door entry above. A hash manifest was also considered and rejected: it
+  is satisfied by editing the hash, which is the same one-directional shape that
+  has already failed here three times.
+
+  Known limit of the chosen gate: it proves the rasters moved, not that they are
+  correct, and it needs a diff base, so it gates pull requests rather than direct
+  pushes to main. Accepted, because main is protected and everything lands by PR.
 
 
 - **No response headers constrain what a served document may do.** `api.py`
