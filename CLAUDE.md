@@ -28,7 +28,10 @@ historical**: `DESIGN.md` is the authority for anything the user sees, and it de
 
 - `src/unbagged/adapters/` — one adapter per retailer, behind the `RetailerAdapter`
   protocol. Core code never branches on retailer identity.
-- `tools/` — repo tooling: PII scanner, fixture generator, hook helpers.
+- `tools/` — repo tooling: PII scanner, fixture generator, hook helpers, the runtime
+  lock (`check_lock.py`, `make_lock.py`), and the brand asset build (`build_brand.py`).
+  Anything generated is checked in CI against what produced it, in both directions;
+  `CONTRIBUTING.md` lists which gate covers what.
 - `data/` — gitignored, bind-mounted at runtime, off-limits (see above).
 
 ## Conventions

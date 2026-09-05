@@ -15,7 +15,7 @@ Both are transparent and centered in a 100×100 viewBox.
 
 | File | Source | Notes |
 |---|---|---|
-| `favicon.ico` | small | 16 / 32 / 48 bundled |
+| `favicon.ico` | small | 16 / 32 / 48 bundled. The only generated file carrying no C2PA manifest: every PNG below has one, and this is re-rendered from the SVG (`build_icons.py` line 27) rather than assembled from them, so it inherits nothing. It ships as authored, which `make brand-check` asserts rather than assumes. |
 | `favicon-16.png` | small | |
 | `favicon-32.png` | small | |
 | `favicon-48.png` | small | |
@@ -47,7 +47,7 @@ Browsers that support SVG favicons take the second line and scale the small mark
 ## Regenerating
 
 ```bash
-pip install cairosvg pillow
+pip install cairosvg     # pillow arrives with `make setup`; cairosvg does not
 python3 build_icons.py   # regenerate the rasters in this directory
 make brand               # refresh the served copies in frontend/public/
 ```
@@ -55,11 +55,19 @@ make brand               # refresh the served copies in frontend/public/
 Edit the SVGs, never the PNGs.
 
 Both steps are needed. This directory holds the sources; `frontend/public/` holds
-what the app actually serves, with the C2PA content-credential manifest stripped
-— 90-93% of each SVG and 64% of the touch icon, on a favicon fetched every page
-load. `make brand-check` runs in CI and fails if the two fall out of step or if a
-file appears in `frontend/public/` that no source produces, so stopping after
-`build_icons.py` gets you a red build.
+what the app actually serves, with the C2PA content-credential manifest stripped:
+90-93% of each SVG and 64% of the touch icon. Not a bandwidth argument, whatever
+the size suggests — this app is served over loopback, where transfer cost is not
+a cost. The manifest names `c2pa.org` and carries a provenance record, in a build
+whose README promises it reaches no other host.
+
+`make brand-check` runs in CI, so stopping after `build_icons.py` gets you a red
+build. It fails on four things: a served file that is not what its source
+produces, a file in `frontend/public/` that no source produces, a symlink
+anywhere beneath it, and bytes that still carry a manifest. The last is judged on
+the bytes themselves rather than by comparison, because both sides of a
+comparison run through the same stripper and stay equal whether or not it still
+strips anything.
 
 The HTML above is what `frontend/index.html` declares; a test asserts every href
 there resolves to a shipped file, so change the two together.
