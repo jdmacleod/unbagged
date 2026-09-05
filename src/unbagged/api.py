@@ -312,12 +312,13 @@ def mount_frontend(application: FastAPI = app) -> bool:
             return FileResponse(root / "index.html")
 
         candidate = (root / requested).resolve()
+        try:
+            candidate.relative_to(root)
+        except ValueError:
+            return FileResponse(root / "index.html")
+
         if path and candidate.is_file():
-            try:
-                candidate.relative_to(root)
-                return FileResponse(candidate)
-            except ValueError:
-                pass
+            return FileResponse(candidate)
         return FileResponse(root / "index.html")
 
     return True
