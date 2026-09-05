@@ -15,18 +15,28 @@ updates:
     commit-message:
       prefix: "ci"
 
-  - package-ecosystem: pip
-    directory: /
-    schedule:
-      interval: monthly
-    commit-message:
-      prefix: "deps"
-
-  # docker/requirements.txt is the shipped image's hash-pinned runtime lock. It
-  # is the entry that matters most: the root entry above covers pyproject's
-  # floors, which the image no longer installs from. A pin nobody bumps decays
-  # into an unpatched dependency, and `make lock` needs Docker, so leaving this
-  # to a human means it does not happen.
+  # One pip entry, not two. There was a `directory: /` entry here as well, meant
+  # to track pyproject's floors — but Dependabot's pip ecosystem discovers
+  # requirements files below the directory it is given, so `/` found
+  # docker/requirements.txt too and every lock bump arrived as two identical
+  # PRs (#7 and #8, byte-identical diffs on the same blob).
+  #
+  # Dropping the root entry costs nothing that was happening: in eleven PRs it
+  # never once produced a pyproject.toml change, only duplicates of this lock.
+  #
+  # It does leave a gap worth naming rather than glossing. `pip install -e
+  # ".[dev]"` runs in four places in ci.yml and is the documented contributor
+  # path, so pyproject's floors are installed constantly — and the dev extras
+  # (pytest, ruff, faker, httpx, pyyaml, pre-commit, playwright) now have no
+  # version-update channel. They had none before either, since the root entry
+  # never produced one, so this is a standing gap and not a regression.
+  # tools/check_lock.py does not cover them: it reads `[project.dependencies]`
+  # only, never `[project.optional-dependencies]`.
+  #
+  # Security updates are unaffected. The dependency graph does include the dev
+  # extras, and repo-level Dependabot security updates are on, so a CVE in any
+  # of them still raises an alert. What is missing is routine version bumps for
+  # tools that are never shipped.
   - package-ecosystem: pip
     directory: /docker
     schedule:
