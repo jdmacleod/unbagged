@@ -25,7 +25,7 @@ Point 3 is the part nothing else does. Existing open-source tooling covers reque
 Three commands, no Python install, no Node install, no database setup.
 
 ```bash
-git clone https://github.com/jasonmacleod/unbagged
+git clone https://github.com/jdmacleod/unbagged
 cd unbagged
 docker compose up
 ```
