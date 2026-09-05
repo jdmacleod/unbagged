@@ -30,8 +30,10 @@ historical**: `DESIGN.md` is the authority for anything the user sees, and it de
   protocol. Core code never branches on retailer identity.
 - `tools/` — repo tooling: PII scanner, fixture generator, hook helpers, the runtime
   lock (`check_lock.py`, `make_lock.py`), and the brand asset build (`build_brand.py`).
-  Anything generated is checked in CI against what produced it, in both directions;
-  `CONTRIBUTING.md` lists which gate covers what.
+  `CONTRIBUTING.md` lists which gate covers what — and note that `resources/`'s own
+  rasters are the gap: `build_icons.py` needs cairosvg, which is in no dependency
+  group, so nothing re-runs it. Edit an SVG, run `make brand` alone, and stale
+  icons ship with CI green.
 - `data/` — gitignored, bind-mounted at runtime, off-limits (see above).
 
 ## Conventions

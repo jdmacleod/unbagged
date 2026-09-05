@@ -8,6 +8,31 @@ carries enough context to be picked up cold.
 
 ## Open
 
+- **Nothing checks `resources/`'s rasters against the SVGs that produce them.**
+  `build_icons.py` turns the two source SVGs into six rasters. Nothing re-runs
+  it: not CI, not pre-commit, and `cairosvg` is in no dependency group, so it
+  cannot run in CI as things stand. `tools/build_brand.py --check` compares
+  `frontend/public/` against `resources/` and never `resources/` against the
+  SVGs.
+
+  The failure: edit an SVG, run `make brand`, push. `brand-check` is green
+  because the served copies faithfully match the rasters — which are a version
+  behind. The icon in the tab is stale and every gate passes.
+
+  Found by a documentation review on 2026-09-05, while checking a claim in
+  `CLAUDE.md` that every generated artifact is checked against what produced it.
+  It is the same shape as the fixtures bypass and the `--check`-compares-itself
+  bug: a guard covering one direction of a two-direction problem. This repo has
+  now hit that shape three times.
+
+  Cost: `cairosvg` pulls a C library (`libcairo`), which is why it was kept out
+  of the dependency groups in the first place, so the fix is not simply adding a
+  CI step. Options worth weighing: pin cairosvg in a separate optional group and
+  run the check in one job; or commit a hash of each SVG beside the rasters and
+  fail when an SVG changes without its rasters being rebuilt, which needs no new
+  dependency and catches the realistic case.
+
+
 - **No response headers constrain what a served document may do.** `api.py`
   sets no `Content-Security-Policy` and no `X-Content-Type-Options`, and the SPA
   route serves every file in the bundle with `FileResponse`. That includes

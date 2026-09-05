@@ -13,6 +13,10 @@ Both are transparent and centered in a 100×100 viewBox.
 
 ## Generated
 
+Four of these six are served. `SERVED` in `tools/build_brand.py` excludes `icon-512.png`
+(README and avatar, never requested by the app) and the three `favicon-*.png` (already
+bundled inside the `.ico`), so `make brand-check` says nothing about them.
+
 | File | Source | Notes |
 |---|---|---|
 | `favicon.ico` | small | 16 / 32 / 48 bundled. The only generated file carrying no C2PA manifest: every PNG below has one, and this is re-rendered from the SVG (`build_icons.py` line 27) rather than assembled from them, so it inherits nothing. It ships as authored, which `make brand-check` asserts rather than assumes. |
@@ -47,10 +51,14 @@ Browsers that support SVG favicons take the second line and scale the small mark
 ## Regenerating
 
 ```bash
-pip install cairosvg     # pillow arrives with `make setup`; cairosvg does not
-python3 build_icons.py   # regenerate the rasters in this directory
-make brand               # refresh the served copies in frontend/public/
+.venv/bin/pip install cairosvg    # pillow comes with `make setup`; cairosvg does not
+.venv/bin/python build_icons.py   # regenerate the rasters in this directory
+make brand                        # refresh the served copies in frontend/public/
 ```
+
+The venv, not `python3`. Pillow is a dev dependency, so it lives in `.venv` and
+the system interpreter cannot import it; every other tool here runs through the
+same interpreter (`Makefile` line 7).
 
 Edit the SVGs, never the PNGs.
 
@@ -62,12 +70,26 @@ a cost. The manifest names `c2pa.org` and carries a provenance record, in a buil
 whose README promises it reaches no other host.
 
 `make brand-check` runs in CI, so stopping after `build_icons.py` gets you a red
-build. It fails on four things: a served file that is not what its source
-produces, a file in `frontend/public/` that no source produces, a symlink
-anywhere beneath it, and bytes that still carry a manifest. The last is judged on
-the bytes themselves rather than by comparison, because both sides of a
-comparison run through the same stripper and stay equal whether or not it still
-strips anything.
+build. It fails five ways: `DRIFT` (a served file is not what its source
+produces), `MISSING` (a served file is absent), `STRAY` (a file in
+`frontend/public/` that no source produces), `SYMLINK` (a link anywhere beneath
+it, which the walk follows because Vite does), and `UNSTRIPPED`.
+
+`UNSTRIPPED` is broader than the metadata it was built for. It fails on any PNG
+chunk that is not pixel data — iCCP and EXIF as much as a C2PA manifest — and on
+a served SVG carrying a `<script>`, a `<foreignObject>`, an inline event handler
+or an off-origin `href`, because a served SVG is a navigable same-origin document
+and not only a picture. `TODOS.md` leans on that breadth: it is the reason the
+missing Content-Security-Policy is filed as a gap rather than a live hole.
+
+It is judged on the bytes themselves rather than by comparison, because both
+sides of a comparison run through the same stripper and stay equal whether or not
+it still strips anything.
+
+**What this does not cover:** `resources/` against the two source SVGs. Nothing
+re-runs `build_icons.py` — cairosvg is in no dependency group — so an SVG edited
+without it leaves stale rasters here, and `make brand` will faithfully strip and
+serve them.
 
 The HTML above is what `frontend/index.html` declares; a test asserts every href
 there resolves to a shipped file, so change the two together.
