@@ -34,6 +34,31 @@ class TestEmail:
         assert "EMAIL" not in rules_hit("someone@users.noreply.github.com")
 
 
+class TestMachineIdentities:
+    """A trailer written by a bot is not somebody's inbox.
+
+    Every Dependabot commit signs off with `support@github.com`, so the history
+    scan went red on all eleven open dependency PRs at once and would have on
+    every future one. A check that is always red on a whole class of PR is one
+    people learn to scroll past, which CONTRIBUTING.md says protects nobody.
+    """
+
+    def test_the_dependabot_trailer_is_not_a_finding(self):
+        assert rules_hit("Signed-off-by: dependabot[bot] <support@github.com>") == set()
+
+    def test_a_real_github_inbox_still_is(self):
+        # Allowed by exact address, not by domain: github.com carries real mail.
+        # pii-scan: allow the literal below is the input proving the rule fires
+        assert "EMAIL" in rules_hit("reach me at octocat@github.com")
+
+    def test_the_existing_machine_domains_still_pass(self):
+        assert rules_hit("Co-Authored-By: X <a@users.noreply.github.com>") == set()
+        assert rules_hit("bot <b@noreply.github.com>") == set()
+
+    def test_the_allowance_is_case_insensitive(self):
+        assert rules_hit("<Support@GitHub.com>") == set()
+
+
 class TestPhone:
     def test_non_555_exchange_is_flagged(self):
         assert "PHONE" in rules_hit("cell 415-682-9013")  # pii-scan: allow test literal
