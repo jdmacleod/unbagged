@@ -1,0 +1,60 @@
+name: Release
+
+# A tag is the only human step. Everything a release page says comes out of the
+# CHANGELOG, so the notes and the record cannot disagree — retyping them at tag
+# time produces a second description of the same release, and the two drift.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write   # create the release; nothing else
+
+jobs:
+  release:
+    name: Publish the GitHub release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12"
+
+      # Refuses three things, each of which would otherwise publish quietly:
+      # a tag the CHANGELOG does not describe, a tag whose VERSION file says
+      # something else, and a section that exists but is empty. The middle one
+      # is the one worth having — the app reports __version__ from that file,
+      # so the running software would name a version that was never released.
+      - name: Extract the release notes from CHANGELOG.md
+        run: python tools/release_notes.py "${{ github.ref_name }}" > "${RUNNER_TEMP}/notes.md"
+
+      # The tag is protected against deletion and non-fast-forward, so a release
+      # cut from a bad tag cannot be quietly replaced. Better to fail above.
+      #
+      # Re-running this workflow is a normal thing to do -- a transient failure
+      # in the step above, or someone pressing Re-run jobs. An unconditional
+      # create fails the second time with "already exists", which puts a red X
+      # on a job whose work is already done and sends the next reader looking
+      # for a problem that is not there.
+      #
+      # It reports and stops rather than updating. The notes are a pure function
+      # of the tag, and the tag cannot move, so a re-run could only ever write
+      # identical text -- unless someone edited the release page by hand, in
+      # which case overwriting their edit is the one outcome nobody wants.
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ github.ref_name }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists; leaving it alone."
+            echo "Nothing to do: the notes come from the CHANGELOG at this tag,"
+            echo "and neither the tag nor that file can change under it."
+            exit 0
+          fi
+          gh release create "$tag" \
+            --title "$tag" \
+            --notes-file "${RUNNER_TEMP}/notes.md" \
+            --verify-tag
