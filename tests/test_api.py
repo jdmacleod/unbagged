@@ -848,3 +848,69 @@ class TestSearchWildcards:
         )
         assert response.status_code == 200
         assert response.json()["filtered_count"] == 0
+
+
+class TestStaticRouteTraversal:
+    """The SPA catch-all serves any file under the static root and nothing above it.
+
+    `spa()` resolves the candidate and checks `is_relative_to` the static root.
+    Nothing asserted that until CodeQL flagged the route as `py/path-injection`
+    (high) on three lines. The finding is a false positive — the taint tracker
+    does not model `Path.is_relative_to` as a sanitizer — but it was true that a
+    refactor could have dropped the guard and no test would have noticed, which
+    is the same shape as the unverified safeguards this project has been bitten
+    by before. So the guard is now asserted rather than argued about.
+
+    `resolve()` is what makes the symlink case work: a link inside the static
+    root pointing outside it resolves to its target, which is then not relative
+    to the root. That is the case a string-prefix check would miss.
+    """
+
+    @pytest.fixture
+    def served(self, tmp_path, monkeypatch):
+        import os
+
+        static = tmp_path / "static"
+        (static / "assets").mkdir(parents=True)
+        (static / "index.html").write_text("INDEX")
+        (static / "assets" / "app.js").write_text("APP_JS")
+        secret = tmp_path / "secret.txt"
+        secret.write_text("TOP_SECRET")
+        os.symlink(secret, static / "escape.txt")
+
+        monkeypatch.setenv(api.STATIC_DIR_ENV, str(static))
+        from fastapi import FastAPI
+
+        app = FastAPI()
+        assert api.mount_frontend(app), "the frontend did not mount"
+        return TestClient(app)
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "../secret.txt",
+            "../../secret.txt",
+            "../../../../../../etc/passwd",
+            "/etc/passwd",
+            "//etc/passwd",
+            "/../secret.txt",
+            "..%2fsecret.txt",
+            "..%252fsecret.txt",
+            ".%2e/secret.txt",
+            "....//secret.txt",
+            "assets/../../secret.txt",
+            "escape.txt",  # a symlink inside the root, pointing out of it
+        ],
+    )
+    def test_nothing_above_the_static_root_is_served(self, served, path):
+        body = served.get(f"/{path}").text
+        assert "TOP_SECRET" not in body
+        assert "root:x:" not in body
+        # A miss is not an error: an unknown path is a client-side route.
+        assert body == "INDEX"
+
+    def test_real_assets_are_still_served(self, served):
+        assert served.get("/assets/app.js").text == "APP_JS"
+
+    def test_an_unknown_path_returns_the_shell(self, served):
+        assert served.get("/timeline").text == "INDEX"
