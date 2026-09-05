@@ -18,8 +18,9 @@ without exception.
 
 ## Project shape
 
-`docs/handoff.md` §9 is a record of the original milestones, not a plan. Current work is
-tracked in `CHANGELOG.md` and `TODOS.md`.
+`docs/handoff.md` §9 is a record of the original milestones, not a plan. Shipped work is
+recorded in `CHANGELOG.md`; planned work is filed as GitHub issues. `TODOS.md` is a
+historical record of items already resolved and is no longer a queue — do not add to it.
 
 `docs/handoff.md` §§0-7 remain the live contract — the adapter rules in §4 and the schema in
 §5 are cited from `adapters/base.py`, `models.py`, `db.py` and the tests. **§8 and §9 are
@@ -28,7 +29,12 @@ historical**: `DESIGN.md` is the authority for anything the user sees, and it de
 
 - `src/unbagged/adapters/` — one adapter per retailer, behind the `RetailerAdapter`
   protocol. Core code never branches on retailer identity.
-- `tools/` — repo tooling: PII scanner, fixture generator, hook helpers.
+- `tools/` — repo tooling: PII scanner, fixture generator, hook helpers, the runtime
+  lock (`check_lock.py`, `make_lock.py`), and the brand asset build (`build_brand.py`).
+  `CONTRIBUTING.md` lists which gate covers what — and note that `resources/`'s own
+  rasters are the gap: `build_icons.py` needs cairosvg, which is in no dependency
+  group, so nothing re-runs it. Edit an SVG, run `make brand` alone, and stale
+  icons ship with CI green.
 - `data/` — gitignored, bind-mounted at runtime, off-limits (see above).
 
 ## Conventions

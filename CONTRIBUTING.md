@@ -74,6 +74,7 @@ it will not catch a date you happened to shop on, so this one is on you.
 | `tools/no_data_dir.py` | Pre-commit hook that hard-fails any staged path under `data/` or `output/`. |
 | `tools/scan_pii.py` | Scans for emails, phone numbers, addresses, ZIPs, Luhn-valid card numbers, SSNs, loyalty-length digit runs, and UUIDs. Also fails on any committed file in a `fixtures/` directory it cannot read. |
 | `tools/make_fixtures.py --check` | Regenerates every fixture from a fixed seed and fails on any difference **and on any committed file no generator produces**. |
+| `tools/build_brand.py --check` | Rebuilds the served brand assets from `resources/` in memory and compares, writing nothing. Fails on drift, a missing or stray file, a symlink beneath `frontend/public/`, and on bytes that carry anything but pixels — a C2PA manifest, an ICC profile, or a served SVG holding a `<script>` or an off-origin `href`. The odd one out here: it guards provenance metadata and the shape of a served document, not anything about a person's shopping. |
 | `docker/requirements.txt` | The shipped image's runtime lock: every package pinned and hashed, installed with `--require-hashes`. `tools/check_lock.py` fails when it stops covering what `pyproject.toml` declares. |
 | `gitleaks` | Credentials, which are a different problem with the same blast radius. |
 | `tools/make_screenshots.py` | Published screenshots come from a throwaway container seeded only with the synthetic fixture. The scanner cannot read a PNG; this is what stands in for it. |
@@ -164,6 +165,12 @@ photograph a real database even by accident. Your own instance on :8420 is
 bind-mounted to `./data` and is exactly what must not appear in a screenshot.
 The PII scanner cannot read a PNG, so this is the control that replaces it.
 
+It rewrites all five images every run, and the PNG bytes are not stable across
+runs even when nothing about the view changed. Compare the pixels before you
+commit — `ImageChops.difference(a, b).getbbox()` returning `None` means the only
+thing that moved was zlib, and the file should be left alone. Committing those
+is churn that makes a real screenshot change hard to spot in a diff.
+
 ## Validating against your own report
 
 You will want to. Do it locally:
@@ -194,3 +201,8 @@ that is a bug in the abstraction — please open an issue.
 
 `ruff` for lint and format, 100-column lines, Python 3.12. `make lint` and `make test`
 before you push.
+
+Editing the logo or an icon is the one change with a step that is easy to miss.
+`resources/README.md` covers it: the sources live there, `frontend/public/` holds
+what the app serves, and both have to move together. Running `build_icons.py`
+without then running `make brand` leaves the two out of step and turns CI red.

@@ -1,3 +1,5 @@
+<img src="resources/icon-512.png" alt="" width="96" height="96">
+
 # unbagged
 
 [![CI](https://github.com/jdmacleod/unbagged/actions/workflows/ci.yml/badge.svg)](https://github.com/jdmacleod/unbagged/actions/workflows/ci.yml)
@@ -99,9 +101,13 @@ no quantity and no weight, so Prices classifies each product by the shape of its
 amounts and draws a series only for those that behave like a unit price. The rest are
 listed with what their amounts look like, and no price change is claimed for them.
 
+![The prices view](docs/screenshots/prices.png)
+
 **Products** — every product the response discloses, set as a typographic index:
 alphabetical, sized by purchase count, with an A-Z rail. Clicking one opens the visits
-that contained it.
+that contained it. Under the index is a control that saves what you are looking at
+as an SVG — text, not a rasterised screenshot, so it stays selectable and searchable
+and scales to a wall print. It exports what is on screen, filters included.
 
 ![The products index](docs/screenshots/products.png)
 
