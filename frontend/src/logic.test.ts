@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { currentMonthKey, doesNotFoot, monthIndex } from "./views/Timeline";
 import { scale } from "./views/PriceHistory";
 import { gaugeWidth } from "./views/Profile";
+import { draftRows } from "./views/Compliance";
 import type { Basket, Inference, PricePoint } from "./types";
 
 const basket = (delta: number | null): Basket =>
@@ -171,5 +172,28 @@ describe("currentMonthKey", () => {
 
   it("is null when nothing is rendered", () => {
     expect(currentMonthKey([])).toBe(null);
+  });
+});
+
+describe("draftRows", () => {
+  it("gives a short draft only the height it needs", () => {
+    // The old fixed rows={18} padded a four-line follow-up with empty box.
+    expect(draftRows("a\nb\nc\nd")).toBe(4);
+  });
+
+  it("caps a long draft rather than spending the whole section on it", () => {
+    expect(draftRows(Array(40).fill("line").join("\n"))).toBe(8);
+  });
+
+  it("keeps a floor, so the field still reads as a document", () => {
+    expect(draftRows("one line")).toBe(3);
+    expect(draftRows("")).toBe(3);
+  });
+
+  it("takes a different cap when the reader asks for the whole thing", () => {
+    const long = Array(40).fill("line").join("\n");
+    expect(draftRows(long, 40)).toBe(40);
+    // And still does not invent height the draft does not have.
+    expect(draftRows("a\nb", 40)).toBe(3);
   });
 });
