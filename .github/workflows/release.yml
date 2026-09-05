@@ -32,11 +32,29 @@ jobs:
 
       # The tag is protected against deletion and non-fast-forward, so a release
       # cut from a bad tag cannot be quietly replaced. Better to fail above.
+      #
+      # Re-running this workflow is a normal thing to do -- a transient failure
+      # in the step above, or someone pressing Re-run jobs. An unconditional
+      # create fails the second time with "already exists", which puts a red X
+      # on a job whose work is already done and sends the next reader looking
+      # for a problem that is not there.
+      #
+      # It reports and stops rather than updating. The notes are a pure function
+      # of the tag, and the tag cannot move, so a re-run could only ever write
+      # identical text -- unless someone edited the release page by hand, in
+      # which case overwriting their edit is the one outcome nobody wants.
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ github.ref_name }}" \
-            --title "${{ github.ref_name }}" \
+          tag="${{ github.ref_name }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists; leaving it alone."
+            echo "Nothing to do: the notes come from the CHANGELOG at this tag,"
+            echo "and neither the tag nor that file can change under it."
+            exit 0
+          fi
+          gh release create "$tag" \
+            --title "$tag" \
             --notes-file "${RUNNER_TEMP}/notes.md" \
             --verify-tag
