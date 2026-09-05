@@ -8,7 +8,7 @@ PY := $(shell test -x .venv/bin/python && echo .venv/bin/python || echo $(BOOTST
 COMPOSE := docker compose
 DEV_COMPOSE := docker compose -f docker-compose.yml -f docker-compose.dev.yml
 
-.PHONY: help setup setup-frontend build-frontend serve up down logs reset dev test test-frontend test-container setup-browser lint denylist check-pii check-pii-history fixtures fixtures-check lock lock-check brand brand-check screenshots clean
+.PHONY: help setup setup-frontend build-frontend serve up down logs reset dev test test-frontend test-container setup-browser lint denylist check-pii check-pii-history fixtures fixtures-check lock lock-check brand brand-check icons-check screenshots clean
 
 help:  ## Show this help
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -107,6 +107,13 @@ brand:  ## Regenerate frontend/public/ from resources/ (strips C2PA manifests)
 
 brand-check:  ## Fail if a served brand asset is not what its source produces
 	$(PY) tools/build_brand.py --check
+
+# The gate CI runs on every pull request, available locally against whatever you
+# would open the PR against. Override for a stacked branch: make icons-check BASE=origin/other
+BASE ?= origin/main
+
+icons-check:  ## Fail if a source SVG changed without the icons it produces
+	$(PY) tools/check_icon_sync.py $(BASE)
 
 screenshots:  ## Regenerate docs/screenshots from the synthetic fixture (needs Docker + browser)
 	$(PY) tools/make_screenshots.py

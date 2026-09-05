@@ -53,6 +53,17 @@ jobs:
             echo "Tracked files under a data directory:"; echo "$tracked"; exit 1
           fi
 
+      # resources/ holds two source SVGs and six files build_icons.py makes from
+      # them. Nothing re-runs that generator, and build_brand --check compares
+      # frontend/public/ against resources/ rather than resources/ against the
+      # SVGs -- so editing a source and running `make brand` shipped stale icons
+      # with every gate green. Pull requests only: it needs a base to diff from.
+      - name: Refuse a source SVG that moved without its icons
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags origin "${{ github.base_ref }}"
+          python tools/check_icon_sync.py "origin/${{ github.base_ref }}"
+
       - name: Verify committed fixtures are generator output
         # Load-bearing: scan_pii.py stands a few address-shaped rules down inside
         # generated fixture directories, and byte-identical regeneration from a

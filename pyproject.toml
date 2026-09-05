@@ -100,6 +100,9 @@ select = ["E", "F", "I", "UP", "B", "SIM", "S"]
 "tests/**" = ["S101", "S311"]
 "tests/container/**" = ["S101", "S310", "S603", "S607"]
 "tests/test_build_denylist.py" = ["S101", "S603", "S607"]
+# Builds a throwaway git repository in tmp_path to prove the icon gate reads
+# its escape marker out of real commit messages rather than a mocked string.
+"tests/test_check_icon_sync.py" = ["S101", "S603", "S607"]
 # The safeguard tooling shells out to git by name, on argument lists it builds
 # itself from literals and repo-relative paths. Resolving an absolute git path
 # would only move the trust, and there is no untrusted input on these calls.
