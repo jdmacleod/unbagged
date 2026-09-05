@@ -280,3 +280,83 @@ class TestNoViewScrollsSideways:
             assert _excess(page) == 0
         finally:
             page.close()
+
+
+@requires_docker
+class TestMonthRailNavigates:
+    """The rail has to work twice.
+
+    The roll renders 25 of 127 rows, so a jump to a month past that window has to
+    reveal the rows before it scrolls. The first version did, and every jump after
+    the first silently did nothing: revealing is a `setState` that returns the same
+    limit once the rows are already there, React bails out of the re-render on an
+    unchanged value, and the effect that performed the scroll never ran. Nothing in
+    the unit tests could see it — the bug lived in the gap between a React bailout
+    and the DOM, which is exactly what this tier is for.
+    """
+
+    def _rail(self, page):
+        return page.locator('a[href^="#month-"]')
+
+    def test_a_jump_reveals_the_rows_it_needs(self, browser, seeded_app):
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
+        try:
+            page.goto(f"{seeded_app}/?tab=timeline&r=1", wait_until="networkidle")
+            before = page.locator("button[aria-expanded]").count()
+            assert before == 25, f"the roll should start at 25 rows, got {before}"
+
+            rail = self._rail(page)
+            rail.nth(rail.count() - 1).click()
+            page.wait_for_timeout(500)
+            after = page.locator("button[aria-expanded]").count()
+            assert after > before, (
+                f"jumping to the last month revealed nothing: still {after} rows, so "
+                "the anchor was never mounted and the scroll went nowhere"
+            )
+        finally:
+            page.close()
+
+    def test_a_second_jump_also_moves_the_page(self, browser, seeded_app):
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
+        try:
+            page.goto(f"{seeded_app}/?tab=timeline&r=1", wait_until="networkidle")
+            rail = self._rail(page)
+            rail.nth(rail.count() - 1).click()   # reveals; changes the limit
+            page.wait_for_timeout(500)
+            settled = page.evaluate("window.scrollY")
+
+            # The regression: this one needs no reveal, so it used to no-op.
+            target = rail.nth(11).get_attribute("href")
+            rail.nth(11).click()
+            page.wait_for_timeout(500)
+            assert page.evaluate("window.scrollY") != settled, (
+                "the second jump left the page where it was"
+            )
+            top = page.locator(target).bounding_box()["y"]
+            assert 0 <= top <= 120, (
+                f"{target} landed at y={top:.0f}px; a jump should put the month at the "
+                "top of the viewport, below the running head"
+            )
+        finally:
+            page.close()
+
+    def test_the_running_head_names_the_month_you_are_in(self, browser, seeded_app):
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
+        try:
+            page.goto(f"{seeded_app}/?tab=timeline&r=1", wait_until="networkidle")
+            head = page.locator("div.sticky.top-0").first
+            rail = self._rail(page)
+            target = rail.nth(11).get_attribute("href")
+            month_key = target.removeprefix("#month-")
+            rail.nth(11).click()
+            page.wait_for_timeout(500)
+
+            # "Jan 25" for 2025-01: the head speaks the roll's own label, not the key.
+            year = month_key[2:4]
+            assert year in head.inner_text(), (
+                f"the running head reads {head.inner_text()!r} after jumping to "
+                f"{month_key}"
+            )
+            assert page.locator('a[aria-current="true"][href^="#month-"]').count() == 1
+        finally:
+            page.close()
