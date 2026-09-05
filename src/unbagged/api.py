@@ -298,20 +298,23 @@ def mount_frontend(application: FastAPI = app) -> bool:
     with no payoff for a single local user.
     """
     directory = static_dir()
-    if not (directory / "index.html").is_file():
+    root = directory.resolve()
+    if not (root / "index.html").is_file():
         return False
 
-    if (directory / "assets").is_dir():
-        application.mount(
-            "/assets", StaticFiles(directory=directory / "assets"), name="assets"
-        )
+    if (root / "assets").is_dir():
+        application.mount("/assets", StaticFiles(directory=root / "assets"), name="assets")
 
     @application.get("/{path:path}", include_in_schema=False)
     def spa(path: str) -> FileResponse:
-        candidate = (directory / path).resolve()
-        if path and candidate.is_file() and candidate.is_relative_to(directory.resolve()):
-            return FileResponse(candidate)
-        return FileResponse(directory / "index.html")
+        candidate = (root / path).resolve()
+        if path and candidate.is_file():
+            try:
+                candidate.relative_to(root)
+                return FileResponse(candidate)
+            except ValueError:
+                pass
+        return FileResponse(root / "index.html")
 
     return True
 
