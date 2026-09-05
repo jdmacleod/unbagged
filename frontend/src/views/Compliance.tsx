@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { useAsync } from "../components/useAsync";
 import { Aside, Empty, ErrorBox, Spine, Spinner } from "../components/ui";
@@ -225,11 +225,46 @@ function Category({
   );
 }
 
+/** Rows for the collapsed draft: as tall as it needs, up to a cap.
+ *
+ * A blanket `rows={8}` is wrong in both directions. Most follow-ups name one or
+ * two unanswered categories and run shorter than eight lines, so a fixed height
+ * pads them with empty box; a response that went unanswered across the board
+ * runs to thirty and needs the cap. Three is the floor because below that the
+ * field stops reading as a document and starts reading as an input.
+ *
+ * Counts newlines only. Wrapping is what the measured overflow check handles —
+ * this decides the height, that decides whether to offer the control.
+ */
+export function draftRows(text: string, cap = 8): number {
+  const lines = text ? text.split("\n").length : 1;
+  return Math.min(Math.max(lines, 3), cap);
+}
+
+/** True when the collapsed field is hiding something, wrapping included. */
+function useOverflows(ref: React.RefObject<HTMLTextAreaElement | null>, deps: unknown[]) {
+  const [overflows, setOverflows] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const read = () => setOverflows(el.scrollHeight - el.clientHeight > 2);
+    read();
+    window.addEventListener("resize", read);
+    return () => window.removeEventListener("resize", read);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+  return overflows;
+}
+
 function Letter({ requestId }: { requestId: number }) {
   const letter = useAsync(() => api.followUpLetter(requestId), [requestId]);
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const draft = useRef<HTMLTextAreaElement>(null);
+  const text = letter.data?.letter ?? "";
+  const collapsedRows = draftRows(text);
+  const overflows = useOverflows(draft, [text, expanded]);
 
   // The Clipboard API rejects more often than it looks: permission denied, the
   // page not focused, Firefox's stricter policy. And over plain http to a LAN
@@ -266,13 +301,33 @@ function Letter({ requestId }: { requestId: number }) {
   return (
     <div className="mt-4">
       <p className="mb-2 max-w-[62ch] text-muted">{letter.data.note}</p>
+      {/* Shortened, not hidden. This view was rebuilt to take evidence out from
+          behind a click, and a disclosure that concealed the draft would walk
+          that back — so the field still scrolls to every word without touching
+          the control, and the control only changes how much you see at once.
+          The letter is also the one thing here you are about to send in your own
+          name, which is the argument for showing it whole; `rows={18}` answered
+          that by spending ~350px of a ~700px section on a preview of a document
+          that gets read in a mail client. */}
       <textarea
         ref={draft}
         readOnly
         value={letter.data.letter}
-        rows={18}
+        rows={expanded ? draftRows(text, 40) : collapsedRows}
         className="num w-full rounded-[2px] border border-rule bg-sunken p-3 text-[12.5px] focus:border-accent focus:outline-2 focus:outline-offset-1 focus:outline-accent"
       />
+      {/* Offered only when the collapsed field is actually holding something
+          back. A short follow-up names one category and fits, and a control that
+          expands nothing is furniture. */}
+      {(overflows || expanded) && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          className="mt-1 text-accent underline underline-offset-2 hover:no-underline"
+        >
+          {expanded ? "Shorten the draft" : "Show the whole draft"}
+        </button>
+      )}
       <div className="mt-2 flex flex-wrap items-center gap-3">
         <button
           onClick={copy}

@@ -3,25 +3,6 @@
 Deferred work, with the measurement that justified deferring it. Each item
 carries enough context to be picked up cold.
 
-## Compliance: the letter draft is 350px of read-only preview
-
-**What:** Reduce the follow-up draft from `rows={18}` to about 8, with a control
-to expand.
-
-**Why:** ~350px of a read-only textarea on a view whose per-retailer section is
-already ~700px. The field cannot be edited and the only action on it is Copy, so
-the height buys a preview of a document that will be read in a mail client.
-
-**Pros:** Cuts roughly 200px on a dense view. Keeps every word reachable.
-
-**Cons:** Adds a disclosure to the one view that was rebuilt specifically to take
-evidence out from behind a click. Reasonable people will argue that a letter you
-are about to send in your own name should be shown in full.
-
-**Context:** Measured during /plan-design-review on 2026-09-04.
-`frontend/src/views/Compliance.tsx`, the `Letter` component.
-
-**Depends on:** Nothing.
 
 ## Product index: export the portrait as an image
 
@@ -131,3 +112,25 @@ same day. Kept as a record of what changed and why, not as open work.*
   `adapters/base.py`, `models.py`, `db.py` and four test modules cite §4 and §5
   as the live contract — which is why marking the whole file historical would
   have been wrong. `CLAUDE.md` now says which half is which.
+
+*The Compliance letter draft was shortened on 2026-09-05.*
+
+- **The follow-up draft was 350px of read-only preview.** Measured in a browser
+  before and after rather than estimated: `rows={18}` rendered at 364px, the
+  collapsed field at 176px, so 188px comes back on a section running about
+  700px. The filing guessed ~200px and was close.
+
+  Not a fixed `rows={8}`, which is wrong in both directions. Most follow-ups
+  name one or two unanswered categories and run shorter than eight lines, so a
+  fixed height pads those with empty box while still truncating the response
+  that went unanswered across the board. The height is the draft's own line
+  count capped at eight: the fixture's 25-line letter collapses to 8, a
+  four-line letter gets four.
+
+  The objection in the filing — that this is the one view rebuilt to take
+  evidence out from behind a click — is answered by shortening rather than
+  hiding. The field still scrolls to every word with the control untouched, so
+  nothing is behind anything. The control appears only when the collapsed box is
+  genuinely holding something back, measured against the rendered box so
+  wrapping counts, and the letter was already behind a "Draft a follow-up"
+  button before this change.

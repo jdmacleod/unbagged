@@ -51,6 +51,14 @@ from a specific response. See `CONTRIBUTING.md`.
   margin, it stays and its bars became clickable. The page citation moves from
   the margin onto the row, because a sticky rail and a per-row footnote cannot
   share one column — recorded in `DESIGN.md`'s decisions log.
+- **The compliance follow-up draft is as tall as it needs, up to a cap.** It was
+  a fixed `rows={18}`: 364px of read-only preview on a section running about
+  700px, for a document that gets read in a mail client. The field now takes the
+  draft's own line count capped at eight — 176px for the fixture's 25-line
+  letter, four rows for a four-line one — with a control that shows the whole
+  thing. Shortened rather than hidden: the field still scrolls to every word
+  without touching the control, and the control appears only when the collapsed
+  box is actually holding something back.
 
 ## [0.11.0] - 2026-09-05
 
