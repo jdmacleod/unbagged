@@ -18,8 +18,9 @@ without exception.
 
 ## Project shape
 
-`docs/handoff.md` §9 is a record of the original milestones, not a plan. Current work is
-tracked in `CHANGELOG.md` and `TODOS.md`.
+`docs/handoff.md` §9 is a record of the original milestones, not a plan. Shipped work is
+recorded in `CHANGELOG.md`; planned work is filed as GitHub issues. `TODOS.md` is a
+historical record of items already resolved and is no longer a queue — do not add to it.
 
 `docs/handoff.md` §§0-7 remain the live contract — the adapter rules in §4 and the schema in
 §5 are cited from `adapters/base.py`, `models.py`, `db.py` and the tests. **§8 and §9 are

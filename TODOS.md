@@ -1,126 +1,27 @@
 # TODOS
 
-Deferred work, with the measurement that justified deferring it. Each item
-carries enough context to be picked up cold.
+**Planned work now lives in GitHub issues:**
+<https://github.com/jdmacleod/unbagged/issues>
 
+This file is a historical record, not a queue. It stops here so there is one
+place to look rather than two, and so an item can be discussed, linked from a
+pull request, and closed by a merge without a second edit to a file in the repo.
 
----
+File new work as an issue. Carry the same thing this file asked for: the
+measurement that justified deferring it, and enough context to be picked up
+cold. What was open here on 2026-09-05 moved to:
 
-## Open
+| Issue | Was |
+|---|---|
+| [#27](https://github.com/jdmacleod/unbagged/issues/27) | No `Content-Security-Policy` or `X-Content-Type-Options` on any response |
+| [#28](https://github.com/jdmacleod/unbagged/issues/28) | Stale rasters in `resources/` ship green |
+| [#29](https://github.com/jdmacleod/unbagged/issues/29) | `tools/` is importable from pytest only |
 
-- **The signed rasters in `resources/` are a one-way door.** Each of the six
-  carries a C2PA `caBX` manifest — 5,758 bytes of the 5,974 in `favicon-16.png`,
-  the same chunk in `icon-512.png` at 20,750. Nothing in this repository can
-  re-apply one. `build_icons.py` regenerates from the SVGs via cairosvg, which
-  emits no manifest, so rebuilding a raster strips its provenance permanently.
-
-  Nothing goes red when that happens. `tools/build_brand.py` strips `caBX` on
-  the way out and compares decoded pixels, so a freshly regenerated raster is
-  indistinguishable from a signed one to every gate in CI. Verified 2026-09-05:
-  a container render of all six came back pixel-identical to the committed
-  files and carried no manifest.
-
-  This is the constraint that decided the raster-guard design on 2026-09-05. A
-  gate that verifies by regenerating would have told people to run a command
-  that destroys the record `build_brand.py`'s own docstring exists to preserve:
-  *"the record survives where the asset is authored and never reaches the wire."*
-
-  **Open question, and it needs a human:** is the tool that signed these still
-  available? If it is, this is a workflow note — regenerate, then re-sign — and
-  a regeneration gate becomes viable again. If it is not, the rasters are frozen:
-  any edit to a source SVG costs the provenance record on everything derived
-  from it, and the docs that describe the manifests as a standing property
-  should say so.
-
-- **`tools/` is importable from pytest and nowhere else.** `pyproject.toml` sets
-  `pythonpath = ["src", "."]` under `[tool.pytest.ini_options]`, so
-  `from tools import build_brand` resolves in tests. Run any script directly and
-  `sys.path[0]` is the script's own directory, so the repo root is absent and
-  `tools` does not resolve — `tools/` has no `__init__.py` and exists only as a
-  namespace package off the root.
-
-  This bites the file itself: `python tools/build_brand.py` cannot import a
-  sibling module, and `Makefile:109` and `.github/workflows/ci.yml:116` both
-  invoke it exactly that way. Measured 2026-09-05, from both `tools/` and
-  `resources/`: `ModuleNotFoundError: No module named 'tools'`.
-
-  It cost a plan a decision on 2026-09-05 — an extraction of shared helpers into
-  `tools/imagecheck.py` would have broken CI on its first run, and was caught
-  only by a review pass that tried the import. The failure reads like a missing
-  dependency rather than a path problem, which is what makes it worth writing
-  down.
-
-  Three known fixes, none of them adopted yet: insert the repo root into
-  `sys.path` at the top of each script; add `tools/__init__.py` and invoke with
-  `python -m tools.build_brand`; or declare console-script entry points in
-  `pyproject.toml`. The third is the only one that does not put path manipulation
-  in the source.
-
-
-- **Nothing checks `resources/`'s rasters against the SVGs that produce them.**
-  `build_icons.py` turns the two source SVGs into six rasters. Nothing re-runs
-  it: not CI, not pre-commit, and `cairosvg` is in no dependency group, so it
-  cannot run in CI as things stand. `tools/build_brand.py --check` compares
-  `frontend/public/` against `resources/` and never `resources/` against the
-  SVGs.
-
-  The failure: edit an SVG, run `make brand`, push. `brand-check` is green
-  because the served copies faithfully match the rasters — which are a version
-  behind. The icon in the tab is stale and every gate passes.
-
-  Found by a documentation review on 2026-09-05, while checking a claim in
-  `CLAUDE.md` that every generated artifact is checked against what produced it.
-  It is the same shape as the fixtures bypass and the `--check`-compares-itself
-  bug: a guard covering one direction of a two-direction problem. This repo has
-  now hit that shape three times.
-
-  Cost, measured 2026-09-05 rather than assumed: the earlier note here said
-  cairosvg pulls a C library so "the fix is not simply adding a CI step". On
-  `python:3.12-slim`, `apt-get install -y libcairo2` is 13s and 1.4 MB, then
-  cairosvg imports; 22s total. It is simply adding a CI step. All six rasters
-  also regenerate pixel-identical from today's SVGs, so a regeneration check
-  would pass on the current tree.
-
-  **Approach decided 2026-09-05: a changed-together gate, not regeneration.**
-  Fail when a `resources/*.svg` changes in a pull request and the rasters do not.
-  One step in the existing `safeguards` job, no new dependency, no write path.
-  Regeneration was the stronger guarantee and was rejected anyway, because it
-  would have made "run the regenerate command" the documented fix for a red
-  build — and that command destroys the C2PA manifests permanently. See the
-  one-way-door entry above. A hash manifest was also considered and rejected: it
-  is satisfied by editing the hash, which is the same one-directional shape that
-  has already failed here three times.
-
-  Known limit of the chosen gate: it proves the rasters moved, not that they are
-  correct, and it needs a diff base, so it gates pull requests rather than direct
-  pushes to main. Accepted, because main is protected and everything lands by PR.
-
-
-- **No response headers constrain what a served document may do.** `api.py`
-  sets no `Content-Security-Policy` and no `X-Content-Type-Options`, and the SPA
-  route serves every file in the bundle with `FileResponse`. That includes
-  `/unbagged-logo.svg`, which as of 2026-09-05 is reachable as a top-level
-  navigation and therefore a script execution context in the app's origin,
-  alongside report data in the same browser profile.
-
-  Raised by an adversarial review of the brand PR on 2026-09-05. Deferred there
-  rather than fixed, because a header policy is an application-wide decision and
-  that PR was about wiring an icon — the fix belongs in one place with one test,
-  not smuggled into an asset change.
-
-  What is already true, and why this is a gap rather than a live hole: the
-  served SVGs are generated by `tools/build_brand.py`, whose `--check` now fails
-  on a `<script>`, a `<foreignObject>`, an inline event handler or an off-origin
-  `href` in any served SVG, and CI runs it. So the artwork cannot carry a script
-  without turning CI red. The realistic ingress was always an optimiser or
-  generator round-trip on the logo rather than an attacker, and that route is
-  now closed at the point the file is produced.
-
-  What a header would add is defence that does not depend on the generator being
-  right. Measured cost: one middleware, one test asserting the header on both an
-  API response and a static one. `default-src 'self'` needs checking against the
-  inlined Vite assets (`assetsInlineLimit: 4096` produces `data:` URLs) and
-  Tailwind's injected styles before it is turned on, which is the actual work.
+One entry was dropped rather than migrated: a note that regenerating the signed
+rasters in `resources/` destroys their C2PA manifests. Those manifests come from
+interactive image generation, and for logo variations in an open source project
+they are not worth constraining a design around. Recorded here so the reasoning
+is not rediscovered as a question.
 
 ---
 

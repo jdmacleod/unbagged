@@ -597,8 +597,8 @@ Wrap the Docker commands so contributors never need to remember overlay syntax.
 ## 9. Milestones
 
 > **All milestones are complete as of 0.9.0 (2026-09-03).** This section is kept
-> as the record of the intended order, not as a plan. Work since then is tracked
-> in `CHANGELOG.md` and `TODOS.md`.
+> as the record of the intended order, not as a plan. Work since then is recorded
+> in `CHANGELOG.md`, and planned work is filed as GitHub issues.
 
 Each milestone is independently mergeable with passing CI.
 

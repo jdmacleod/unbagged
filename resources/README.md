@@ -79,7 +79,7 @@ it, which the walk follows because Vite does), and `UNSTRIPPED`.
 chunk that is not pixel data — iCCP and EXIF as much as a C2PA manifest — and on
 a served SVG carrying a `<script>`, a `<foreignObject>`, an inline event handler
 or an off-origin `href`, because a served SVG is a navigable same-origin document
-and not only a picture. `TODOS.md` leans on that breadth: it is the reason the
+and not only a picture. Issue #27 leans on that breadth: it is the reason the
 missing Content-Security-Policy is filed as a gap rather than a live hole.
 
 It is judged on the bytes themselves rather than by comparison, because both
