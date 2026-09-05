@@ -259,7 +259,7 @@ class TestUpload:
         assert "writing-an-adapter" not in detail
 
     def test_an_archive_is_told_to_unzip_first(self, client):
-        # A zip is what Safeway sends, per HANDOFF.md section 4.
+        # A zip is what Safeway sends, per docs/handoff.md section 4.
         response = client.post(
             "/api/requests",
             files={"files": ("bundle.zip", b"PK\x03\x04nope", "application/zip")},

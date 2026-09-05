@@ -119,7 +119,7 @@ class TestParseResult:
 class TestImmutability:
     def test_records_are_frozen(self):
         item = TxnItem("ORGANIC BANANAS", retail_amt=2.49)
-        # Adapters never mutate values (HANDOFF.md section 4, rule 2); the type
+        # Adapters never mutate values (docs/handoff.md section 4, rule 2); the type
         # system should enforce that rather than a code review.
         with pytest.raises(FrozenInstanceError):
             item.retail_amt = 0.0

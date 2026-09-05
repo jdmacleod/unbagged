@@ -76,6 +76,7 @@ it will not catch a date you happened to shop on, so this one is on you.
 | `tools/make_fixtures.py --check` | Regenerates every fixture from a fixed seed and fails on any difference **and on any committed file no generator produces**. |
 | `docker/requirements.txt` | The shipped image's runtime lock: every package pinned and hashed, installed with `--require-hashes`. `tools/check_lock.py` fails when it stops covering what `pyproject.toml` declares. |
 | `gitleaks` | Credentials, which are a different problem with the same blast radius. |
+| `tools/make_screenshots.py` | Published screenshots come from a throwaway container seeded only with the synthetic fixture. The scanner cannot read a PNG; this is what stands in for it. |
 | `check-added-large-files` | A 5 MB PDF appearing in a diff is a red flag. |
 | CI | Runs all of the above against the checkout *and* against the PR's commits, so an amended-away mistake is still caught. Actions are pinned to commit SHAs. |
 
@@ -150,13 +151,18 @@ are what protect everyone else's.
 
 ## Test data
 
-All test data comes from `tools/make_fixtures.py` (landing at M2). If you need a new
+All test data comes from `tools/make_fixtures.py`. If you need a new
 shape, extend the generator rather than hand-writing a fixture from a real report. The
 generator is deterministic under a fixed seed, uses reserved-for-fiction values (`555`
 phone prefixes, `example.com` domains, addresses that do not resolve), and its output is
 verified by the same scanner that guards the rest of the tree.
 
-Screenshots in the README and docs come from synthetic fixtures only.
+Screenshots in the README and docs come from synthetic fixtures only, and
+`make screenshots` is the only way they are made. It starts its own container on a
+scratch directory, ingests the fixture and deletes the directory, so it cannot
+photograph a real database even by accident. Your own instance on :8420 is
+bind-mounted to `./data` and is exactly what must not appear in a screenshot.
+The PII scanner cannot read a PNG, so this is the control that replaces it.
 
 ## Validating against your own report
 

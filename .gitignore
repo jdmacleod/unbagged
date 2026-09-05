@@ -62,6 +62,10 @@ tools/denylist.txt
 # untracked and un-ignored where `git add .` would take it.
 /.pytest-layout-data/
 
+# `make screenshots` mounts this into a throwaway container as /data. Same shape
+# as data/, same reason to keep it out. Removed on success; this covers a crash.
+/.screenshot-data/
+
 # Local overrides
 *.local.*
 .env

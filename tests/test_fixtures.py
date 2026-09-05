@@ -17,7 +17,7 @@ KROGER_FIXTURES = (
 )
 REPORT = KROGER_FIXTURES / "synthetic_report.txt"
 
-# The strip documented in the adapter notes and in HANDOFF.md section 4.
+# The strip documented in the adapter notes and in docs/handoff.md section 4.
 PAGE_NUMBER_LINE = re.compile(r"\n\s*\d{1,3}\r?\n")
 JSON_BLOB = re.compile(r"^\{$.*?^\}$", re.M | re.S)
 

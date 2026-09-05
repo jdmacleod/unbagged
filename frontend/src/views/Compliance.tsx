@@ -19,7 +19,7 @@ import type { ComplianceRow, DisclosureCell } from "../types";
  * blank. Seven rules in a column state the finding without a single pill, and
  * the evidence sits on the page instead of behind a click.
  *
- * A deliberate departure from HANDOFF section 8, which specified retailers as
+ * A deliberate departure from docs/handoff.md section 8, which specified retailers as
  * rows and categories as columns. Cross-retailer comparison lives in Compare,
  * which already carries the unanswered count per retailer.
  */

@@ -1,24 +1,27 @@
 # unbagged
 
+[![CI](https://github.com/jdmacleod/unbagged/actions/workflows/ci.yml/badge.svg)](https://github.com/jdmacleod/unbagged/actions/workflows/ci.yml)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **Read what the grocery store knows about you.**
 
 You file a right-to-know request with a grocery retailer. Weeks later a PDF arrives
 containing raw internal JSON, or a zip of CSVs, or a letter. It is technically compliant
 and practically unreadable.
 
-`unbagged` ingests those responses, normalizes them into a common schema, and shows you
-three things:
+`unbagged` reads those responses, normalizes them into a common schema, and shows three
+things:
 
 1. **What they have** — a purchase timeline, an identity graph, drill-down to line items.
-2. **What they infer** — modeled and appended attributes, separated by likely origin. The
-   demographic and household-composition attributes are usually not derivable from your
-   baskets, which means they were bought from somewhere the report does not name.
+2. **What they infer** — modeled and appended attributes, separated by likely origin.
+   Demographic and household attributes are usually not derivable from your baskets,
+   which suggests they were obtained somewhere the report does not name.
 3. **What they didn't tell you** — each of the eight CCPA/CPRA disclosure categories,
-   per retailer, with the retailer's own words where it answered and a blank rule where
-   it did not. Absence is recorded as a finding, not as a blank.
+   with the retailer's own words where it answered and a blank rule where it did not.
+   Absence is recorded as a finding, not as a blank.
 
-Point 3 is the part nothing else does. Existing open-source tooling covers request
-*generation* and company-side request *fulfillment*. Nothing reads the response back.
+![The timeline view](docs/screenshots/timeline.png)
 
 ## Quickstart
 
@@ -33,28 +36,25 @@ docker compose up
 Then open <http://localhost:8420> and drag the retailer's response onto the upload
 area.
 
-**The first run builds the app**, which took 75 seconds on a clean machine with
-nothing cached: it pulls two base images, compiles the UI, and installs the
-Python dependencies. There is no prebuilt image to download, deliberately — you
-run what you can read. Later starts are immediate.
+The first run builds the app: it pulls two base images, compiles the UI, and
+installs the Python dependencies, which took about 75 seconds on a clean machine.
+There is no prebuilt image to download, deliberately — you run what you can read.
+Later starts are immediate. Reading a long report takes 10 to 30 seconds.
 
-Reading a long report takes 10 to 30 seconds. A 116-page PDF is about 14 seconds
-of text extraction, and the page tells you it is working.
-
-Your database and your uploads live in `./data`, on your disk — back the whole
-thing up by copying that directory.
+Your database and uploads live in `./data`, on your disk. Back it up by copying
+that directory.
 
 **No response yet?** A request takes weeks to come back, so the repo ships a
-synthetic one you can drop in immediately to see what the views do:
+synthetic one you can drop in now to see what the views do:
 
 ```
 src/unbagged/adapters/kroger/fixtures/synthetic_report.txt
 ```
 
-It is generated, not anyone's shopping — `make fixtures` rebuilds it from
-`tools/make_fixtures.py`, and a test fails if the committed file is not exactly
-what the generator produces. It reproduces the quirks of the real Kroger format
-on purpose, including the ones that look like bugs.
+It is generated, not anyone's shopping. `make fixtures` rebuilds it, and CI fails
+if the committed file is not exactly what the generator produces. It reproduces
+the quirks of the real Kroger format on purpose, including the ones that look like
+bugs. Every screenshot in this README comes from it.
 
 ### Running it
 
@@ -71,61 +71,56 @@ it is what keeps your report off your local network.
 
 ## What you get
 
-**Timeline** — every visit over the coverage window, with the header numbers
-(what you paid, baskets, distinct products, window) above it. Click a basket to
-expand the line items, with the shelf price and the price you actually paid side
-by side, which is the one thing a receipt never shows you. `customerloyamt` is
-the amount the line cost, not a discount to subtract, so what you paid is that
-figure and the saving is the difference between the two. Both halves stay on
-screen so the subtraction is checkable. Each basket is also checked against the
-total the retailer states for it, and says so when the two disagree.
+**Timeline** — every visit over the coverage window, with the header numbers above
+it. Click a basket to expand its line items, showing the shelf price and the price
+you actually paid side by side. `customerloyamt` is what the line cost, not a
+discount to subtract, so the saving is the difference between the two; both stay on
+screen so the subtraction is checkable. Each basket is checked against the total the
+retailer states for it and says so when they disagree.
 
-**Profile** — the identifiers the retailer holds for you, and the attributes it
-has inferred, split by where they came from. Scores it modelled from your own
-baskets sit in one column; attributes it obtained somewhere it does not name sit
-in the other. Anything describing your *household* rather than you is called out,
-because those describe people who never signed up for anything.
+**Profile** — the identifiers the retailer holds, and the attributes it has inferred,
+split by origin. Scores modelled from your own baskets sit in one column; attributes
+obtained somewhere the report does not name sit in the other. Anything describing your
+*household* rather than you is called out, because those describe people who never
+signed up for anything.
 
-**Compliance** — the eight CCPA/CPRA disclosure categories read down the page per
-retailer, with the answer quoted where there is one and a blank rule where there
-is not. A column of blank rules states the finding without a single coloured
-badge. There is a "draft a follow-up" action that writes a supplemental request
-naming what went unanswered. You read it and send it yourself.
+![The profile view](docs/screenshots/profile.png)
+
+**Compliance** — the eight CCPA/CPRA categories per retailer, with the answer quoted
+where there is one and a blank rule where there is not. A "draft a follow-up" action
+writes a supplemental request naming what went unanswered; you read it and send it
+yourself.
+
+![The compliance view](docs/screenshots/compliance.png)
 
 **Compare** and **Prices** — two retailers side by side once a second response
-arrives, and a personal inflation series per product, which two years of itemised
-baskets contains for free. A line carries an amount and nothing else: no quantity
-and no weight. So Prices classifies each product by the shape of its own amounts
-and only draws a series for the ones that behave like a unit price. The rest are
-listed with what their amounts actually look like, and no price change is claimed
-for them.
+arrives, and a per-product price series. A line carries an amount and nothing else,
+no quantity and no weight, so Prices classifies each product by the shape of its own
+amounts and draws a series only for those that behave like a unit price. The rest are
+listed with what their amounts look like, and no price change is claimed for them.
 
 **Products** — every product the response discloses, set as a typographic index:
-alphabetical, sized by how often you bought it, with an A-Z rail to jump by
-letter. Not a ranking, which is what Prices is for. It is the vocabulary the
-retailer files your shopping under, several hundred names at once, and clicking
-one opens the visits that contained it.
+alphabetical, sized by purchase count, with an A-Z rail. Clicking one opens the visits
+that contained it.
 
-## Status
+![The products index](docs/screenshots/products.png)
 
-**All eight milestones complete.** Kroger is the only full adapter — it is the
-only format anyone has had a real response for. A retailer with no adapter still
-works: the fallback reads the response as text and records what it did and did
-not address, because a letter with no data in it is itself the finding.
+## Supported responses
 
-To add a retailer, see `docs/writing-an-adapter.md`. It should not require
-touching any code outside the retailer's own package.
+| Retailer | State |
+|---|---|
+| Kroger | Full adapter — purchases, identity graph, inferred attributes, disclosures |
+| Safeway (Albertsons) | Stub. Expectations recorded in its `NOTES.md`; no real response seen |
+| H Mart | Stub. A letter is handled by the fallback already |
+| Anything else | Fallback: read as text, disclosures recorded, no data extracted |
 
-| | Milestone | State |
-|---|---|---|
-| M0 | Safeguards and scaffolding | done |
-| M1 | Canonical schema | done |
-| M2 | Synthetic fixture generator | done |
-| M3 | Kroger adapter | done |
-| M4 | Read API | done |
-| M5 | UI — timeline, profile, compliance, compare, prices, products | done |
-| M6 | Docker packaging | done |
-| M7 | Adapter authoring guide, fallback, stubs | done |
+Kroger is the only full adapter, because it is the only format anyone has had a real
+response for. A retailer with no adapter still works: the fallback reads the response
+as text and records what it did and did not address, since a letter with no data in it
+is itself the finding.
+
+Adding a retailer should not require touching code outside its own package. See
+`docs/writing-an-adapter.md`.
 
 ## Working on it
 
@@ -137,25 +132,23 @@ make test            # fast suite
 make test-frontend   # UI unit tests (vitest)
 make test-container  # slow: builds and runs a real container
 make setup-browser   # once, if you want the layout test to run rather than skip
+make screenshots     # regenerate docs/screenshots from the fixture
 make check-pii       # run this before every commit
 ```
 
-`make dev` serves **one** URL, <http://localhost:5173>, with hot reload for both
-the UI and the backend. The API is proxied at `/api` on that same port. The
-backend's own port is not published in dev, because it would serve the UI bundle
-frozen into the image at build time with no way to tell the difference in a
-browser.
+`make dev` serves one URL, <http://localhost:5173>, hot-reloading both halves with
+the API proxied at `/api`. The backend's own port is deliberately not published in
+dev: it would serve the bundle frozen into the image at build time, with no way to
+tell from a browser.
 
-`make test-container` is the tier that runs a real container: effective uid,
-self-healing data permissions, bounded restart, that the production image is the
-runtime stage, and that no view scrolls the page sideways at any width from
-320px up. The last one drives a real browser, because horizontal overflow is a
-statement about rendered boxes that no amount of grepping can check; it skips
-with a visible reason unless you have run `make setup-browser`. Tests that need real uid semantics skip loudly on Docker
-Desktop, where bind-mount ownership is remapped and they would pass without
-checking anything.
+`make test-container` builds and runs a real container and checks the things only a
+running one can show: effective uid, data permissions, bounded restart, that the
+shipped image is the runtime stage, and that no view scrolls sideways from 320px up.
+Tests needing real uid semantics skip loudly on Docker Desktop, where bind-mount
+ownership is remapped and they would otherwise pass without checking anything.
 
-`make help` lists the rest.
+`make help` lists the rest. `CONTRIBUTING.md` covers the PII safeguards, which you
+should read before putting a real report anywhere near this repository.
 
 ## Your data stays on your machine
 
@@ -165,20 +158,14 @@ checking anything.
   `127.0.0.1`-scoped too. Without that prefix Docker publishes on every interface
   and goes straight through the host firewall. LAN access is an explicit opt-in,
   and `unbagged serve` warns on stderr if you ask for it.
-- Fonts and JS are vendored. Zero CDN requests — the app works fully offline, and a CDN
-  request would leak usage timing to a third party.
-- Your reports live in `data/`, which is gitignored wholesale, excluded from Docker build
-  context, and guarded by a pre-commit hook, a scanner, and a CI gate. If you plan to
+- Fonts and JS are vendored, so the app works offline and makes no third-party
+  requests. `tests/test_frontend_build.py` asserts this against the built output.
+- Your reports live in `data/`: gitignored wholesale, kept out of the Docker build
+  context, and guarded by a pre-commit hook, a scanner and a CI gate. If you plan to
   contribute, read `CONTRIBUTING.md` before you put anything there.
 
-## Supported responses
-
-| Retailer | State |
-|---|---|
-| Kroger | Full adapter — purchases, identity graph, inferred attributes, disclosures |
-| Safeway (Albertsons) | Stub. Expectations recorded in its `NOTES.md`; no real response seen |
-| H Mart | Stub. A letter is handled by the fallback already |
-| Anything else | Fallback: read as text, disclosures recorded, no data extracted |
+Security issues go through GitHub's private vulnerability reporting; see
+`SECURITY.md`.
 
 ## What this is not
 

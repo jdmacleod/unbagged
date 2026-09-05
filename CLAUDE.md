@@ -18,10 +18,10 @@ without exception.
 
 ## Project shape
 
-All eight milestones in `HANDOFF.md` §9 are complete; that section is now a record, not
-a plan. Current work is tracked in `CHANGELOG.md` and `TODOS.md`.
+`docs/handoff.md` §9 is a record of the original milestones, not a plan. Current work is
+tracked in `CHANGELOG.md` and `TODOS.md`.
 
-`HANDOFF.md` §§0-7 remain the live contract — the adapter rules in §4 and the schema in
+`docs/handoff.md` §§0-7 remain the live contract — the adapter rules in §4 and the schema in
 §5 are cited from `adapters/base.py`, `models.py`, `db.py` and the tests. **§8 and §9 are
 historical**: `DESIGN.md` is the authority for anything the user sees, and it departs from
 §8 deliberately in three places.
@@ -48,7 +48,8 @@ spacing, layout and motion are defined there, along with the reasoning.
 The rules most often broken by accident:
 
 - Colour means provenance, interaction or quantity. Never good/bad, never
-  severity, never sentiment. Red has exactly one call site in the whole app.
+  severity, never sentiment. Red has two call sites and means "this is not
+  recoverable"; `DESIGN.md` holds the current count.
 - No cards. Containers are hairline rules and whitespace, never a border on all
   four sides, never a shadow.
 - Every numeral in an aligned column is set in the vendored mono.

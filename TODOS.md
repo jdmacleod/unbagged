@@ -121,7 +121,7 @@ same day. Kept as a record of what changed and why, not as open work.*
 - **The display serif's OS variance was undocumented.** Already closed before
   this pass: `DESIGN.md`'s decisions log carries the row dated 2026-09-04. The
   entry here was itself stale and has been removed.
-- **`HANDOFF.md` §8 described a UI that no longer exists.** §8 and §9 are now
+- **`docs/handoff.md` §8 described a UI that no longer exists.** §8 and §9 are now
   marked historical, with a table of what shipped against what the brief asked
   for and why each departure was made. §§0-7 stay authoritative, because
   `adapters/base.py`, `models.py`, `db.py` and four test modules cite §4 and §5

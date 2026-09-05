@@ -8,7 +8,7 @@ PY := $(shell test -x .venv/bin/python && echo .venv/bin/python || echo $(BOOTST
 COMPOSE := docker compose
 DEV_COMPOSE := docker compose -f docker-compose.yml -f docker-compose.dev.yml
 
-.PHONY: help setup setup-frontend build-frontend serve up down logs reset dev test test-frontend test-container setup-browser lint denylist check-pii check-pii-history fixtures fixtures-check lock lock-check clean
+.PHONY: help setup setup-frontend build-frontend serve up down logs reset dev test test-frontend test-container setup-browser lint denylist check-pii check-pii-history fixtures fixtures-check lock lock-check screenshots clean
 
 help:  ## Show this help
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -101,6 +101,9 @@ lock:  ## Regenerate docker/requirements.txt (needs Docker; runs on linux/amd64)
 
 lock-check:  ## Fail if the lock no longer covers pyproject's dependencies
 	$(PY) tools/check_lock.py
+
+screenshots:  ## Regenerate docs/screenshots from the synthetic fixture (needs Docker + browser)
+	$(PY) tools/make_screenshots.py
 
 clean:  ## Remove build and cache artifacts (never touches data/)
 	rm -rf .pytest_cache .ruff_cache build dist src/*.egg-info

@@ -23,7 +23,30 @@ from a specific response. See `CONTRIBUTING.md`.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/
 
-## [Unreleased]
+## [0.11.0] - 2026-09-05
+
+### Changed
+
+- **`unbagged sanitize` masks keys that are identifiers.** Same input, different
+  skeleton: a key matching a long digit run, a UUID or an email is now
+  `<key:len=N>`. Field names are unaffected. Reason in the Security section below.
+- **Documentation trimmed for a public repository.** The README carries badges and
+  screenshots and drops an unverifiable claim about what other tooling does; the
+  implementation brief moved to `docs/handoff.md` with every `§N` citation in
+  `src/` and `tests/` rewritten and checked to resolve. Two cross-document
+  contradictions fixed: `CLAUDE.md` said red had one call site where `DESIGN.md`,
+  which it names as the authority, records two, and `docs/handoff.md` §6 still
+  embedded a `.gitignore` and a "`.dockerignore` mirrors `.gitignore`" instruction
+  that this release proves wrong.
+
+### Added
+
+- **`make screenshots`** regenerates `docs/screenshots/` from a throwaway container
+  seeded only with the synthetic fixture. It takes no URL on purpose: the PII
+  scanner cannot read a PNG, so the guarantee that a published screenshot contains
+  nobody's data has to come from the capture path rather than from a check
+  afterwards. A developer's own instance is bind-mounted to `./data` and is exactly
+  what must not be photographed.
 
 ### Security
 
@@ -129,7 +152,7 @@ from a specific response. See `CONTRIBUTING.md`.
   skips, not after all 399 of them.
 - Basket rows wrap to two lines on a narrow screen instead of squeezing the
   store column to nothing.
-- `HANDOFF.md` §8 and §9 are marked historical, with a table of what shipped
+- `docs/handoff.md` §8 and §9 are marked historical, with a table of what shipped
   against what was asked for. §§0-7 stay authoritative; the adapter rules and
   the schema are cited from source.
 - The upload prompt no longer offers to read a zip, which was never supported.

@@ -49,6 +49,7 @@ tools/denylist.txt
 
 # A container test bind-mounts this as /data. See .gitignore.
 .pytest-layout-data/
+.screenshot-data/
 
 .git/
 .github/

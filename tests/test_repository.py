@@ -42,7 +42,7 @@ class TestRoundTrip:
         assert loaded.item_count() == 4
 
     def test_negative_amounts_are_not_filtered(self, conn):
-        # Returns and voids are real transactions (HANDOFF.md section 4).
+        # Returns and voids are real transactions (docs/handoff.md section 4).
         request_id = repository.save_parse_result(conn, sample_result(doc_id=None))
         loaded = repository.load_parse_result(conn, request_id)
         assert any(t.total_pre_discount < 0 for t in loaded.transactions)
@@ -138,7 +138,7 @@ class TestAtomicity:
 
 
 class TestProvenancePage:
-    """HANDOFF.md section 4 rule 1 requires a page alongside the document and
+    """docs/handoff.md section 4 rule 1 requires a page alongside the document and
     locator; the section 5 tables omit it, so migration 002 adds it."""
 
     def test_page_survives_the_round_trip(self, conn):

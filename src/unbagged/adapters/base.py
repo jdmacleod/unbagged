@@ -5,7 +5,7 @@ can say "import from `unbagged.adapters.base`" and mean it. The canonical
 definitions live in `unbagged.models`; this module adds only the pieces that are
 specific to writing an adapter.
 
-The five rules from HANDOFF.md §4, restated because they are the whole contract:
+The five rules from docs/handoff.md §4, restated because they are the whole contract:
 
 1. **Every emitted record carries provenance** — document, page, locator.
 2. **Adapters never mutate values.** `description_raw` is stored exactly as it

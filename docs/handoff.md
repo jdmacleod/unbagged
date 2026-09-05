@@ -37,11 +37,12 @@ things:
 3. **What they didn't tell you** — a compliance view against the CCPA disclosure
    categories, per retailer
 
-Point 3 is the differentiator. Existing open-source tooling covers request *generation*
-(Datenanfragen, YourDigitalRights) and company-side request *fulfillment* (Ethyca Fides,
-inthhq/dsar). Nothing reads the response back. The closest prior art is an unreleased
-Streamlit prototype from the University of Bristol's Jean Golding Institute, scoped to
-Tesco Clubcard data.
+Point 3 is where the project puts its weight. The tooling surveyed when this brief
+was written covered request *generation* (Datenanfragen, YourDigitalRights) and
+company-side request *fulfillment* (Ethyca Fides, inthhq/dsar); the nearest thing
+found for reading a response back was an unreleased Streamlit prototype from the
+University of Bristol's Jean Golding Institute, scoped to Tesco Clubcard data. That
+was a survey at one point in time, not a standing claim about the field.
 
 ### Non-goals
 
@@ -377,38 +378,35 @@ note that the tool reports observations and is not legal advice.
 
 Nine layers. Implement all of them in M0, before writing any parser.
 
+> **The embedded config below was the brief's starting point and has since been
+> superseded.** Read `.gitignore`, `.dockerignore` and `CONTRIBUTING.md` for what
+> is actually in force; two of the three rules sketched here turned out to be
+> wrong in ways that mattered, and the corrections are recorded in `CHANGELOG.md`.
+
 ### 6.1 Deny-by-default `.gitignore`
 
 Do not enumerate risky patterns and hope you caught them all. Ignore the data directories
-wholesale and whitelist nothing inside them.
+wholesale and whitelist nothing inside them. Broad denials first, then narrow
+re-inclusions only for fixture directories that CI verifies are synthetic.
 
-```gitignore
-# Everything the user feeds in, and everything derived from it
-/data/
-/output/
-*.sqlite
-*.sqlite3
-*.db
-
-# Common report formats anywhere outside fixtures
-*.pdf
-*.zip
-*.csv
-!src/**/fixtures/**
-!tests/fixtures/**
-
-# Local overrides
-*.local.*
-.env
-```
-
-Note the deliberate ordering: broad denials first, then narrow re-inclusions only for
-fixture directories that CI verifies are synthetic.
+Two amendments the brief did not anticipate. The re-inclusion list has to be
+exactly the set a regeneration check covers — `tests/fixtures/**` was re-included
+here and covered by nothing, an exemption with no check behind it. And three
+report formats is not the set: every format the scanner cannot read has to be
+denied, which is sixteen of them.
 
 ### 6.2 `.dockerignore` mirrors `.gitignore`
 
 Real data must never be baked into an image layer. The data directory is a bind mount at
 runtime, never a `COPY`.
+
+**"Mirrors" is the trap.** The two files look alike and match differently: a
+`.gitignore` pattern with no slash matches at every depth, while a `.dockerignore`
+pattern is matched against the whole relative path, so a bare `*.pdf` excludes
+`./report.pdf` and nothing below it. Copying the lines across verbatim protects the
+root and leaks every subdirectory. Every wildcard needs a `**/` prefix, and the
+build context matters as much as the image layer — the daemon caches what it is
+sent.
 
 ### 6.3 Directory separation, enforced by convention and by CI
 
@@ -416,8 +414,12 @@ runtime, never a `COPY`.
 data/incoming/     gitignored, bind-mounted, where users drop reports
 data/db/           gitignored, SQLite lives here
 src/**/fixtures/   committed, synthetic only, CI-verified
-tests/fixtures/    committed, synthetic only, CI-verified
 ```
+
+`tests/fixtures/` appeared here as a fourth line marked CI-verified. It was not:
+the regeneration check only ever covered `src/**/fixtures/`. The re-inclusion has
+been removed rather than the check extended, because one exempted directory is
+easier to guarantee than two.
 
 ### 6.4 Synthetic fixture generator
 
