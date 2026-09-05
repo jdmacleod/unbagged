@@ -135,6 +135,35 @@ class SecurityHeaders:
         await self.app(scope, receive, with_headers)
 
 
+def _headers_for_a_response_the_middleware_never_sees() -> dict[str, str]:
+    return {name.decode(): value.decode() for name, value in SECURITY_HEADERS}
+
+
+async def unhandled_error(_request: Any, exc: Exception) -> JSONResponse:
+    """The one response `SecurityHeaders` cannot decorate, so it sets its own.
+
+    Starlette builds the stack as ServerErrorMiddleware -> user middleware ->
+    router. An exception nothing else catches unwinds past the wrapper, and
+    ServerErrorMiddleware emits its 500 through the original `send` — so the
+    wrapper never sees the message and the response ships with no policy at all.
+    Measured: 500 with `content-security-policy: None` before this existed.
+
+    Registering a handler does not move the response back inside the wrapper;
+    it still leaves by the outer path. What it does is let the response carry
+    the headers itself, from the same constant, so there is one policy in the
+    codebase and not two that can drift.
+
+    The body says nothing about what failed. A traceback in an error page is a
+    disclosure, and this app's errors are about a document on someone's disk.
+    """
+    log.exception("unhandled error serving a request", exc_info=exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error"},
+        headers=_headers_for_a_response_the_middleware_never_sees(),
+    )
+
+
 def add_security_headers(application: FastAPI = app) -> None:
     """Install the headers on `application`.
 
@@ -146,6 +175,8 @@ def add_security_headers(application: FastAPI = app) -> None:
     the app that covers that path.
     """
     application.add_middleware(SecurityHeaders)
+    # Covers the 500 the middleware structurally cannot reach. See above.
+    application.add_exception_handler(Exception, unhandled_error)
 
 
 add_security_headers()

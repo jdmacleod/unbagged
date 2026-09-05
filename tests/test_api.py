@@ -994,6 +994,46 @@ class TestSecurityHeaders:
         assert response.status_code == 404
         self._assert_carries(response)
 
+    def test_an_unhandled_500_carries_them(self):
+        """The response the middleware structurally cannot reach.
+
+        Starlette builds the stack as ServerErrorMiddleware -> user middleware
+        -> router, so an exception nothing catches unwinds past the wrapper and
+        the 500 is emitted through the original send. Measured before the fix:
+        status 500, content-security-policy None. A separate exception handler
+        carries the headers on that one path, from the same constant.
+
+        Raised by a Greptile review of PR #30 and confirmed by execution.
+        """
+        from fastapi import FastAPI
+
+        app = FastAPI()
+        api.add_security_headers(app)
+
+        @app.get("/boom")
+        def boom():
+            raise RuntimeError("unhandled")
+
+        response = TestClient(app, raise_server_exceptions=False).get("/boom")
+        assert response.status_code == 500
+        self._assert_carries(response)
+
+    def test_an_unhandled_500_says_nothing_about_what_failed(self):
+        """A traceback in an error page is a disclosure, and the things that go
+        wrong here are about a document on someone's disk."""
+        from fastapi import FastAPI
+
+        app = FastAPI()
+        api.add_security_headers(app)
+
+        @app.get("/boom")
+        def boom():
+            raise RuntimeError("a path or a value that should not be published")
+
+        response = TestClient(app, raise_server_exceptions=False).get("/boom")
+        assert response.json() == {"detail": "Internal Server Error"}
+        assert "should not be published" not in response.text
+
     def test_a_response_with_no_body_carries_them(self, client, uploaded):
         # 204 takes a different path through the response machinery than any
         # response that writes bytes.
