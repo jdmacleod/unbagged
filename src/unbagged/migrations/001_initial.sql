@@ -1,4 +1,4 @@
--- Canonical schema (HANDOFF.md §5).
+-- Canonical schema (docs/handoff.md §5).
 --
 -- Every table carries request_id so a single database can hold responses from
 -- several retailers and still keep them separable. Timestamps are ISO-8601 UTC

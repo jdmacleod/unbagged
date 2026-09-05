@@ -1,26 +1,63 @@
 # ---------------------------------------------------------------------------
-# Mirrors .gitignore. Real data must never be baked into an image layer:
-# the data directory is a bind mount at runtime, never a COPY.
+# Mirrors .gitignore. Real data must never be baked into an image layer, and
+# must never reach the build context either: the daemon caches what it is sent,
+# and a remote or rootless builder is off this machine entirely. The data
+# directory is a bind mount at runtime, never a COPY.
+#
+# The `**/` prefixes are load-bearing and are why this file does not simply
+# repeat .gitignore. The two formats look alike and match differently: a
+# .gitignore pattern with no slash matches at every depth, while a .dockerignore
+# pattern is matched against the whole path, so a bare `*.pdf` here covers
+# `report.pdf` at the root and NOTHING below it. Every wildcard below is
+# depth-qualified for that reason. Verified by building a probe context: with
+# bare patterns, data.bak-*/incoming/report.pdf was sent to the daemon.
 # ---------------------------------------------------------------------------
 data/
 output/
-*.sqlite
-*.sqlite3
-*.db
-*.pdf
-*.zip
-*.csv
+# `make reset` renames ./data to data.bak-<timestamp> and leaves it in the
+# checkout. It holds every report and the database — the exact contents of
+# data/, under a name data/ does not match. .gitignore denies it; so must this.
+data.bak-*/
+**/*.sqlite
+**/*.sqlite3
+**/*.db
+**/*.pdf
+**/*.zip
+**/*.csv
+**/*.tsv
+**/*.xls
+**/*.xlsx
+**/*.ods
+**/*.doc
+**/*.docx
+**/*.eml
+**/*.mbox
+**/*.7z
+**/*.rar
+**/*.tar
+**/*.tar.gz
+**/*.tgz
 tools/denylist.txt
-*.local.*
+**/*.local.*
 .env
+
+# gstack tool output: QA reports, design audits and screenshots. The screenshots
+# are pictures of the app rendering real reports, which makes this directory as
+# sensitive as data/ and, at 2 MB of PNGs, more likely to be noticed missing
+# than noticed present.
+.gstack/
+
+# A container test bind-mounts this as /data. See .gitignore.
+.pytest-layout-data/
+.screenshot-data/
 
 .git/
 .github/
 __pycache__/
-*.py[cod]
+**/*.py[cod]
 .venv/
 venv/
-*.egg-info/
+**/*.egg-info/
 dist/
 build/
 .pytest_cache/

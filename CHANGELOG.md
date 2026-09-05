@@ -23,7 +23,114 @@ from a specific response. See `CONTRIBUTING.md`.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/
 
-## [Unreleased]
+## [0.11.0] - 2026-09-05
+
+### Changed
+
+- **`unbagged sanitize` masks keys that are identifiers.** Same input, different
+  skeleton: a key matching a long digit run, a UUID or an email is now
+  `<key:len=N>`. Field names are unaffected. Reason in the Security section below.
+- **Documentation trimmed for a public repository.** The README carries badges and
+  screenshots and drops an unverifiable claim about what other tooling does; the
+  implementation brief moved to `docs/handoff.md` with every `§N` citation in
+  `src/` and `tests/` rewritten and checked to resolve. Two cross-document
+  contradictions fixed: `CLAUDE.md` said red had one call site where `DESIGN.md`,
+  which it names as the authority, records two, and `docs/handoff.md` §6 still
+  embedded a `.gitignore` and a "`.dockerignore` mirrors `.gitignore`" instruction
+  that this release proves wrong.
+
+### Added
+
+- **`make screenshots`** regenerates `docs/screenshots/` from a throwaway container
+  seeded only with the synthetic fixture. It takes no URL on purpose: the PII
+  scanner cannot read a PNG, so the guarantee that a published screenshot contains
+  nobody's data has to come from the capture path rather than from a check
+  afterwards. A developer's own instance is bind-mounted to `./data` and is exactly
+  what must not be photographed.
+
+### Security
+
+- **The runtime dependencies are pinned and hashed.** The Dockerfile ran
+  `pip install .`, resolving 29 packages fresh at every build with no pins and no
+  hashes, into the container that reads people's reports; a compromised release
+  anywhere in that graph executed at build time and then ran against the data.
+  `frontend/package-lock.json` already gave the UI this guarantee. The Python
+  half is now `docker/requirements.txt`, installed with `--require-hashes` —
+  which is all-or-nothing, so the build cannot silently fall back to a
+  floor-based resolve. `make lock` regenerates it inside `python:3.12-slim` on
+  linux/amd64, because hashes are per-wheel and a lock compiled in a macOS venv
+  pins wheels the image cannot install. The contributor path is unchanged:
+  `pip install -e ".[dev]"` still resolves floors on whatever platform you are
+  on, which is why the lock lives in `docker/` and not at the root. Proved
+  load-bearing by corrupting a hash and watching the build refuse it.
+  `tools/check_lock.py` runs in CI and fails when the lock stops covering what
+  `pyproject.toml` declares; Dependabot has a `/docker` entry so the pins do not
+  decay into unpatched dependencies.
+
+- **`unbagged sanitize` no longer publishes identifiers that appear as keys.**
+  The skeleton kept object keys on the reasoning that keys are the retailer's
+  schema. True for field names, and false for a map keyed by the user's data —
+  and the counterexample was already in this repository, asserted by a test: a
+  Kroger identity blob keys `loyaltyCards` by the card number. The skeleton
+  published those numbers while faithfully masking everything they pointed at,
+  and `CONTRIBUTING.md` tells people to attach the output to a public issue. A
+  key matching a long digit run, a UUID or an email address is now masked to
+  `<key:len=N>`; the length is kept so the shape of the map stays readable, and
+  every field name survives.
+
+- **A real report could be committed into a `fixtures/` directory and pass every
+  safeguard in the project.** The one hole in `.gitignore` is its re-inclusion of
+  fixture directories, and `tools/scan_pii.py` stands its address-shaped rules
+  down inside a generated one — both safe only because `make fixtures-check`
+  proves the directory's contents come out of a seeded generator. That check
+  compared only the filenames the generator produced, so anything committed
+  *alongside* them was covered by nothing. Verified end to end before the fix: a
+  file carrying a name, street address, city/state/ZIP and a 13-digit loyalty
+  number was reported clean by the working-tree scan, the history scan,
+  `fixtures-check` and the CI stray-file job. `--check` now compares both
+  directions and fails on any committed file no generator produces, and the
+  scanner independently rejects any file in a fixtures directory it cannot read
+  — a PDF or a spreadsheet there was previously skipped on its suffix and never
+  looked at. Both halves are covered by tests.
+
+- **`.dockerignore` said it mirrored `.gitignore` and did not.** The two formats
+  look alike and match differently: a `.gitignore` pattern with no slash matches
+  at every depth, while a `.dockerignore` pattern is matched against the whole
+  path, so `*.pdf` excluded `./report.pdf` and nothing below it. `make reset`
+  renames `./data` to `data.bak-<timestamp>` and leaves it in the checkout, and
+  that directory was denied by neither name nor wildcard — so the next
+  `docker compose build` sent every report and the database to the daemon, which
+  caches its build context. Confirmed by building a probe context and listing what
+  arrived. Every wildcard is now `**/`-prefixed, `data.bak-*/` and `.gstack/` are
+  denied by name, and `tests/test_packaging.py` fails if a depth-limited pattern
+  reappears or if the two files stop denying the same report formats.
+
+- **Report formats that arrive as spreadsheets or archives were denied nowhere.**
+  `.gitignore` covered `.pdf`, `.zip` and `.csv`; `.xlsx`, `.ods`, `.docx`,
+  `.eml`, `.mbox`, `.7z`, `.rar` and the tarballs were trackable, and every one
+  of them is a format `scan_pii.py` cannot read. Both ignore files and the CI
+  stray-file job now carry the same sixteen suffixes.
+
+- **`tests/fixtures/**` was re-included by `.gitignore` and verified by nothing.**
+  `make_fixtures.py` only ever covered `src/**/fixtures/`, so the second
+  re-inclusion was an exemption with no check behind it. Removed, and CI now
+  fails on any re-inclusion that regeneration does not cover.
+
+- **CI actions are pinned to commit SHAs.** A tag is a movable pointer the
+  action's owner controls; repointing `v4` would have run new code here with no
+  diff in the workflow. `.github/dependabot.yml` keeps the pins from decaying
+  into unpatched dependencies, and covers `pip` and `npm` too.
+
+- **Security linting was configured but never running.** `ruff`'s `S`
+  (flake8-bandit) rules were not selected, which meant the `# noqa: S608` already
+  sitting in `ingest.py` silenced a rule that had never run — a suppression that
+  read as a reviewed decision and was inert. `S` is now selected. All eleven hits
+  in `src/` and `tools/` were traced and are safe; each carries an inline
+  suppression naming the reason, and the three SQL sites say why the interpolated
+  value cannot come from a caller.
+
+- **`SECURITY.md`** states what to report, how to report it privately, and what is
+  in scope for a single-user local app.
 
 ### Added
 
@@ -45,7 +152,7 @@ from a specific response. See `CONTRIBUTING.md`.
   skips, not after all 399 of them.
 - Basket rows wrap to two lines on a narrow screen instead of squeezing the
   store column to nothing.
-- `HANDOFF.md` §8 and §9 are marked historical, with a table of what shipped
+- `docs/handoff.md` §8 and §9 are marked historical, with a table of what shipped
   against what was asked for. §§0-7 stay authoritative; the adapter rules and
   the schema are cited from source.
 - The upload prompt no longer offers to read a zip, which was never supported.

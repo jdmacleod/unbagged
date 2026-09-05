@@ -105,6 +105,8 @@ def timeline(
         )
         params.extend([pattern, pattern])
 
+    # Every element of `where` is a literal fragment written above; every value
+    # is bound in `params`. Nothing the caller sends reaches the SQL text.
     clause = " AND ".join(where)
     baskets = _rows(
         conn,
@@ -136,7 +138,7 @@ def timeline(
         WHERE {clause}
         GROUP BY t.id
         ORDER BY t.occurred_at, t.id
-        """,
+        """,  # noqa: S608 - `clause` is literal fragments; every value is bound
         tuple(params),
     )
     for basket in baskets:

@@ -27,6 +27,13 @@ The skeleton keeps object keys, replaces string values with `<str:len=N>`, bucke
 to their order of magnitude, and coarsens dates to the month. That is enough to debug a
 parser and not enough to identify you. Read the output before you attach it.
 
+Keys are kept because keys are the retailer's schema, with one exception: a key that is
+*itself* an identifier is masked to `<key:len=N>`. That is not a hypothetical. A Kroger
+identity blob keys `loyaltyCards` by the card number, so the old skeleton published the
+numbers while faithfully masking everything they pointed at. Long digit runs, UUIDs and
+email addresses are masked when they appear as keys; `loyaltyCards`, `productupc`, `2024`
+and every other field name survives.
+
 ## The CHANGELOG is public and permanent
 
 `CHANGELOG.md` describes what changed in the software. It never describes what
@@ -62,15 +69,39 @@ it will not catch a date you happened to shop on, so this one is on you.
 
 | Layer | What it does |
 |---|---|
-| `.gitignore` | Denies `/data/`, `/output/`, and report formats wholesale. Re-inclusions exist only for `fixtures/` directories. |
-| `.dockerignore` | Mirrors it, so real data is never baked into an image layer. `data/` is a bind mount at runtime, never a `COPY`. |
+| `.gitignore` | Denies `/data/`, `/output/`, `data.bak-*/`, and sixteen report formats wholesale. Exactly one re-inclusion: `src/**/fixtures/**`. |
+| `.dockerignore` | Same bytes, different route: keeps real data out of the build context, not just out of an image layer. Every wildcard is `**/`-prefixed — see below. |
 | `tools/no_data_dir.py` | Pre-commit hook that hard-fails any staged path under `data/` or `output/`. |
-| `tools/scan_pii.py` | Scans for emails, phone numbers, addresses, ZIPs, Luhn-valid card numbers, SSNs, loyalty-length digit runs, and UUIDs. |
+| `tools/scan_pii.py` | Scans for emails, phone numbers, addresses, ZIPs, Luhn-valid card numbers, SSNs, loyalty-length digit runs, and UUIDs. Also fails on any committed file in a `fixtures/` directory it cannot read. |
+| `tools/make_fixtures.py --check` | Regenerates every fixture from a fixed seed and fails on any difference **and on any committed file no generator produces**. |
+| `docker/requirements.txt` | The shipped image's runtime lock: every package pinned and hashed, installed with `--require-hashes`. `tools/check_lock.py` fails when it stops covering what `pyproject.toml` declares. |
 | `gitleaks` | Credentials, which are a different problem with the same blast radius. |
+| `tools/make_screenshots.py` | Published screenshots come from a throwaway container seeded only with the synthetic fixture. The scanner cannot read a PNG; this is what stands in for it. |
 | `check-added-large-files` | A 5 MB PDF appearing in a diff is a red flag. |
-| CI | Runs the scanner against the checkout *and* against the PR's commits, so an amended-away mistake is still caught. |
+| CI | Runs all of the above against the checkout *and* against the PR's commits, so an amended-away mistake is still caught. Actions are pinned to commit SHAs. |
 
 Run `make check-pii` before every commit. Do not bypass the hooks with `--no-verify`.
+
+### Two things about these layers that are easy to get wrong
+
+**A `fixtures/` directory is the one hole in `.gitignore`, so it is the most
+policed place in the repository.** Report formats are denied everywhere except
+there, and `scan_pii.py` stands its address-shaped rules down inside a generated
+fixtures directory — because byte-identical regeneration from a fixed seed is a
+stronger guarantee than any regex. That trade only works if regeneration covers
+*everything* committed in the directory. It once compared only the filenames the
+generator named, which meant a real report added alongside them reproduced no
+check, tripped no rule, and was reported clean by every safeguard here. `--check`
+now compares both directions. If you need sample data, add it to
+`fixtures/generate.py` and regenerate; do not hand-place a file.
+
+**`.gitignore` and `.dockerignore` look identical and match differently.** A
+`.gitignore` pattern with no slash matches at every depth. A `.dockerignore`
+pattern is matched against the whole relative path, so a bare `*.pdf` excludes
+`./report.pdf` and nothing beneath it. Copying lines across verbatim therefore
+protects the root and leaks every subdirectory. Every wildcard in
+`.dockerignore` carries a `**/` prefix for that reason, and
+`tests/test_packaging.py` fails if one does not.
 
 ### Suppressing a false positive
 
@@ -120,13 +151,18 @@ are what protect everyone else's.
 
 ## Test data
 
-All test data comes from `tools/make_fixtures.py` (landing at M2). If you need a new
+All test data comes from `tools/make_fixtures.py`. If you need a new
 shape, extend the generator rather than hand-writing a fixture from a real report. The
 generator is deterministic under a fixed seed, uses reserved-for-fiction values (`555`
 phone prefixes, `example.com` domains, addresses that do not resolve), and its output is
 verified by the same scanner that guards the rest of the tree.
 
-Screenshots in the README and docs come from synthetic fixtures only.
+Screenshots in the README and docs come from synthetic fixtures only, and
+`make screenshots` is the only way they are made. It starts its own container on a
+scratch directory, ingests the fixture and deletes the directory, so it cannot
+photograph a real database even by accident. Your own instance on :8420 is
+bind-mounted to `./data` and is exactly what must not appear in a screenshot.
+The PII scanner cannot read a PNG, so this is the control that replaces it.
 
 ## Validating against your own report
 

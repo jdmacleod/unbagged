@@ -231,7 +231,7 @@ is a regression.
 | 2026-09-03 | One vendored font (Iosevka), serif and sans from the system | Narrowness is a measurable functional gain for numeric columns; nothing else justified adding a file to a zero-file build |
 | 2026-09-03 | 11px type floor retired | It was the main reason the app read as a spreadsheet; the space is recovered from deleted chrome |
 | 2026-09-03 | Spine measure 76ch → 92ch, prose capped separately at 62ch | A prose measure squeezed the timeline's tabular rows until the store column truncated. Prose was never relying on the spine for its measure |
-| 2026-09-03 | Compliance matrix replaced by a per-retailer ruled list | A one-row matrix is a spreadsheet with nothing to compare, and it hid the evidence behind a click. Departs from HANDOFF section 8 |
+| 2026-09-03 | Compliance matrix replaced by a per-retailer ruled list | A one-row matrix is a spreadsheet with nothing to compare, and it hid the evidence behind a click. Departs from docs/handoff.md section 8 |
 | 2026-09-03 | Categorical palette added for identity | The app read as monochrome. Six hashed hues for stores and product series give the archive recognition value; severity stays banned, so red is untouched |
 | 2026-09-03 | Prices separates priceable products from the rest | A line carries an amount with no quantity and no weight, so 11 of 47 real products were charting quantity buys and per-pound items as inflation |
 | 2026-09-03 | Recharts removed | Its category axis drew irregular dates at equal spacing, which on a time series is a correctness bug. Hand-drawn SVG also satisfies "no frame, no gridlines, no axis box" and cut the bundle from 592KB to 208KB |

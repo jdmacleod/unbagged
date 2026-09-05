@@ -17,7 +17,7 @@ KROGER_FIXTURES = (
 )
 REPORT = KROGER_FIXTURES / "synthetic_report.txt"
 
-# The strip documented in the adapter notes and in HANDOFF.md section 4.
+# The strip documented in the adapter notes and in docs/handoff.md section 4.
 PAGE_NUMBER_LINE = re.compile(r"\n\s*\d{1,3}\r?\n")
 JSON_BLOB = re.compile(r"^\{$.*?^\}$", re.M | re.S)
 
@@ -217,3 +217,32 @@ class TestSafety:
     def test_a_hand_written_fixture_does_not_get_the_relaxation(self):
         # tests/fixtures/ has no generator, so nothing stands down there.
         assert not scan_pii.is_generated_fixture("tests/fixtures/whatever.txt")
+
+
+class TestStrayFixtureFiles:
+    """The other half of the regeneration guarantee.
+
+    `--check` used to compare only the filenames a generator names, which proves
+    those files are synthetic and says nothing about anything sitting beside
+    them. A real report added to a fixtures directory was re-included by
+    .gitignore, exempted from the address rules *because* this check was assumed
+    to cover it, skipped by the scanner if its suffix was binary, and reported
+    clean by every safeguard in the project. These tests are that gap.
+    """
+
+    def test_a_file_no_generator_produces_is_reported(self):
+        stray = make_fixtures.unexplained_files({KROGER_FIXTURES: {"synthetic_report.txt"}})
+        assert stray == []
+
+        # Same directory, but the generator is not credited with the fixture: the
+        # committed file is now unexplained, which is what a dropped-in report is.
+        stray = make_fixtures.unexplained_files({KROGER_FIXTURES: set()})
+        assert "synthetic_report.txt" in " ".join(stray)
+
+    def test_the_generator_itself_is_not_a_stray(self):
+        stray = make_fixtures.unexplained_files({KROGER_FIXTURES: {"synthetic_report.txt"}})
+        assert not any("generate.py" in s for s in stray)
+
+    def test_every_committed_fixture_is_accounted_for(self):
+        """The live assertion, over the real repository."""
+        assert make_fixtures.run(check=True) == 0

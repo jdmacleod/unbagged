@@ -1,11 +1,42 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
-# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
-
+# Dependency updates, opened as PRs so every bump goes through the same CI the
+# PII safeguards run in.
+#
+# The github-actions ecosystem is the reason this file exists. ci.yml pins every
+# action to a commit SHA rather than a tag, because a tag is a movable pointer
+# the action's owner controls. A SHA pin that nobody ever bumps is a security
+# fix that decays into an unpatched dependency, so Dependabot rewrites the SHA
+# and the trailing `# v4` comment together and CI proves the result still works.
 version: 2
 updates:
-  - package-ecosystem: "" # See documentation for possible values
-    directory: "/" # Location of package manifests
+  - package-ecosystem: github-actions
+    directory: /
     schedule:
-      interval: "weekly"
+      interval: monthly
+    commit-message:
+      prefix: "ci"
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "deps"
+
+  # docker/requirements.txt is the shipped image's hash-pinned runtime lock. It
+  # is the entry that matters most: the root entry above covers pyproject's
+  # floors, which the image no longer installs from. A pin nobody bumps decays
+  # into an unpatched dependency, and `make lock` needs Docker, so leaving this
+  # to a human means it does not happen.
+  - package-ecosystem: pip
+    directory: /docker
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "deps"

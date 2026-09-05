@@ -40,14 +40,27 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends gosu \
     && rm -rf /var/lib/apt/lists/*
 
-# Dependency metadata first: the layer that installs 80 MB of wheels should not
-# be invalidated by editing a docstring.
+# The lock first, on its own layer. It changes only when a dependency does, so
+# the 80 MB of wheels is not reinstalled because someone edited a docstring.
+#
+# --require-hashes is the point of the file, and it is all-or-nothing: pip
+# refuses the whole install unless every requirement is pinned to an exact
+# version with a hash, so this cannot silently degrade into a floor-based
+# resolve. What lands in the image is what `make lock` recorded, or the build
+# fails.
+COPY docker/requirements.txt ./
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt
+
 # VERSION travels with pyproject.toml because the build reads the version out
 # of it. Omit it and the build fails outright rather than shipping a wrong
 # number, which is the right way round.
+#
+# --no-deps on both installs: the dependency graph came from the lock above, and
+# without it pip would resolve pyproject's floors again and could pull a
+# different, unhashed version straight over the pinned one.
 COPY pyproject.toml README.md LICENSE VERSION ./
 COPY src/unbagged/__init__.py ./src/unbagged/
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir --no-deps .
 
 COPY src/ ./src/
 RUN pip install --no-cache-dir --no-deps .

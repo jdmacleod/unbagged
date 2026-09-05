@@ -240,7 +240,7 @@ class KrogerAdapter:
                 score = max(score, score + 0.1)
             try:
                 head = extract(document, max_pages=SNIFF_PAGES).text
-            except Exception:
+            except Exception:  # noqa: S112 - see the comment below
                 # sniff() must not raise: an unreadable file is simply not a
                 # Kroger report as far as selection is concerned.
                 continue

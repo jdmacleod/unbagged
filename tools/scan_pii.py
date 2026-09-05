@@ -54,6 +54,18 @@ SKIP_SUFFIXES = {
     ".sqlite3", ".db", ".lock",
 }
 
+# Suffixes that may legitimately sit in a fixtures directory while being
+# unreadable to this scanner. Everything else unreadable is a finding there —
+# see OPAQUE_FIXTURE_HINT.
+FIXTURE_ASSET_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico"}
+
+OPAQUE_FIXTURE_HINT = (
+    "Unreadable file committed in a fixtures directory. .gitignore re-includes "
+    "these directories and several address rules stand down inside them, so a "
+    "file this scanner cannot read is reviewed by nothing. Commit fixtures as "
+    "text, and generate them — see tools/make_fixtures.py."
+)
+
 # Email domains that cannot belong to a real person.
 ALLOWED_EMAIL_DOMAINS = {
     "example.com", "example.org", "example.net", "localhost",
@@ -140,7 +152,31 @@ def _phone_is_real(m: re.Match[str]) -> bool:
 
 def _card_is_real(m: re.Match[str]) -> bool:
     digits = re.sub(r"\D", "", m.group(0))
-    return 13 <= len(digits) <= 19 and luhn_ok(digits)
+    return 13 <= len(digits) <= 19 and luhn_ok(digits) and _not_inside_hash(m)
+
+
+HEX_RUN = re.compile(r"[0-9a-fA-F]{32,}")
+
+
+def _not_inside_hash(m: re.Match[str]) -> bool:
+    """False when the match sits inside a long hex token — a digest, not a number.
+
+    A sha256 is 64 hex characters, and roughly one in three contains a 12-to-14
+    digit run somewhere in the middle; a few of those pass a Luhn check by
+    coincidence. docker/requirements.txt carries 58 of them and produced 71
+    findings, none real.
+
+    The fix is a guard rather than a per-file exemption because a file-level
+    escape hatch is exactly what this scanner must not have: it would silence
+    every rule on the one file, forever, including the day someone pastes
+    something else into it. A digit run inside a 32-plus-character hex token is
+    not a card number in any file, so the rule is the right place for it.
+    """
+    text = m.string
+    return not any(
+        run.start() <= m.start() and m.end() <= run.end()
+        for run in HEX_RUN.finditer(text)
+    )
 
 
 RULES: tuple[Rule, ...] = (
@@ -196,6 +232,7 @@ RULES: tuple[Rule, ...] = (
         pattern=re.compile(r"(?<![\d.])\d{12,14}(?![\d.])"),
         hint="Loyalty-card-length digit run. Move it into a fixture, or suppress "
              "it inline if it is a UPC or other non-identifying code.",
+        accept=_not_inside_hash,
         applies_in_fixtures=False,
     ),
     Rule(
@@ -244,6 +281,20 @@ def is_generated_fixture(path: str) -> bool:
     if "fixtures" not in p.parts:
         return False
     return (REPO_ROOT / p.parent / GENERATOR_NAME).is_file()
+
+
+def opaque_in_fixtures(path: str) -> bool:
+    """True for a fixture file this scanner cannot read and cannot vouch for.
+
+    A binary that a person can look at — an icon, a screenshot — is fine. A PDF,
+    a zip or a spreadsheet is the shape a real report arrives in, and inside a
+    fixtures directory it is exempt from .gitignore's denials and from the rules
+    that would otherwise catch an address. Nothing reads it, so nothing clears it.
+    """
+    p = Path(path)
+    if "fixtures" not in p.parts:
+        return False
+    return p.suffix.lower() not in FIXTURE_ASSET_SUFFIXES
 
 
 def suppressed(line: str, preceding: str = "") -> bool:
@@ -332,6 +383,10 @@ def scan_paths(paths: Iterable[str], denylist: Sequence[str]) -> list[Finding]:
     for rel in paths:
         path = (REPO_ROOT / rel).resolve()
         if not is_scannable(path):
+            if path.is_file() and opaque_in_fixtures(rel):
+                findings.append(
+                    Finding(rel, 1, "OPAQUE_FIXTURE", path.name, OPAQUE_FIXTURE_HINT)
+                )
             continue
         try:
             text = path.read_text(encoding="utf-8", errors="replace")

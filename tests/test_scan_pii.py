@@ -7,10 +7,12 @@ lives in the Python source, not in the string handed to `scan_lines`, so it does
 interfere with what is under test.
 """
 
+import pytest
 from tools import scan_pii
 from tools.scan_pii import Finding, luhn_ok, mask, scan_lines
 
 ADDRESS = "8814 Mockingbird Lane"  # pii-scan: allow synthetic test address
+LOYALTY = "600123456789"  # pii-scan: allow synthetic loyalty-shaped test literal
 
 
 def rules_hit(line: str, **kw) -> set[str]:
@@ -89,6 +91,39 @@ class TestNumbers:
         assert "LOYALTY_NUMBER" not in rules_hit("3.121212121212")
 
 
+class TestHashDigests:
+    """A sha256 is 64 hex characters, and about one in three carries a 12-to-14
+    digit run somewhere inside it; a few pass a Luhn check by coincidence.
+    docker/requirements.txt holds 58 of them and produced 71 findings, none real.
+    The guard is on the rule rather than the file: a file-level exemption would
+    silence every rule on that path forever, including the day someone pastes
+    something else into it."""
+
+    SHA256 = "bfb91aa2d334c61cb35ba9a116fc123b3d3df31640b801cf57a7a78ec3f603b3"
+    GIT_SHA = "af680481f2c3d9e0a7b6c5d4e3f2a1b09c8d7e6f"
+
+    def test_a_pip_hash_line_is_clean(self):
+        assert rules_hit(f"    --hash=sha256:{self.SHA256}") == set()
+
+    def test_a_git_sha_is_clean(self):
+        assert rules_hit(f"commit {self.GIT_SHA}") == set()
+
+    def test_a_real_identifier_beside_a_hash_still_fires(self):
+        # The guard exempts what is *inside* the token, not the whole line.
+        hits = rules_hit(f"sha256:{self.SHA256} loyalty {LOYALTY}")
+        assert "LOYALTY_NUMBER" in hits
+
+    def test_a_short_hex_run_is_not_a_digest(self):
+        # 32 characters is the floor. Below it, a hex-looking string is just text
+        # and a digit run in it is still a finding.
+        assert "LOYALTY_NUMBER" in rules_hit(f"id ab12 {LOYALTY} cd34")
+
+    def test_the_committed_lock_is_clean(self):
+        lock = scan_pii.REPO_ROOT / "docker" / "requirements.txt"
+        assert lock.is_file()
+        assert scan_pii.scan_paths(["docker/requirements.txt"], denylist=()) == []
+
+
 class TestUuid:
     UUID = "9f8b1c2d-3e4f-4a5b-8c9d-0e1f2a3b4c5d"
 
@@ -147,6 +182,49 @@ class TestPathClassification:
         assert scan_pii.classify("tests/fixtures/a.json") == (True, True)
         assert scan_pii.classify("tests/test_kroger.py") == (False, True)
         assert scan_pii.classify("src/unbagged/cli.py") == (False, False)
+
+
+class TestOpaqueFixtures:
+    """A fixtures directory is exempt from .gitignore's denials and stands
+    address rules down. A committed file the scanner cannot read is therefore
+    reviewed by nothing at all — which is how a report-shaped PDF used to pass
+    every check this project has."""
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "src/unbagged/adapters/kroger/fixtures/report.pdf",
+            "src/unbagged/adapters/kroger/fixtures/export.zip",
+            "src/unbagged/adapters/safeway/fixtures/response.xlsx",
+            "tests/fixtures/hand-written.pdf",
+        ],
+    )
+    def test_unreadable_fixture_files_are_findings(self, path):
+        assert scan_pii.opaque_in_fixtures(path)
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "src/unbagged/adapters/kroger/fixtures/screenshot.png",
+            "src/unbagged/adapters/kroger/fixtures/logo.ico",
+        ],
+    )
+    def test_images_a_person_can_look_at_are_allowed(self, path):
+        assert not scan_pii.opaque_in_fixtures(path)
+
+    def test_the_rule_is_scoped_to_fixture_directories(self):
+        # Ordinary binaries elsewhere in the repo are not the scanner's business.
+        assert not scan_pii.opaque_in_fixtures("resources/icon-512.png")
+        assert not scan_pii.opaque_in_fixtures("docs/diagram.pdf")
+
+    def test_a_dropped_in_report_is_reported(self, tmp_path, monkeypatch):
+        fixtures = tmp_path / "src" / "unbagged" / "adapters" / "acme" / "fixtures"
+        fixtures.mkdir(parents=True)
+        (fixtures / "report.pdf").write_bytes(b"%PDF-1.7\n4417 Marbury Lane\n")
+        monkeypatch.setattr(scan_pii, "REPO_ROOT", tmp_path)
+        rel = "src/unbagged/adapters/acme/fixtures/report.pdf"
+        findings = scan_pii.scan_paths([rel], denylist=())
+        assert [f.rule for f in findings] == ["OPAQUE_FIXTURE"]
 
 
 class TestSelfScan:

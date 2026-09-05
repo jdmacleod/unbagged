@@ -3,7 +3,7 @@
 Adapters produce these; the repository writes them; the API reads them back.
 Nothing downstream of an adapter knows which retailer it is looking at.
 
-Two rules from HANDOFF.md §4 are encoded here rather than left to convention:
+Two rules from docs/handoff.md §4 are encoded here rather than left to convention:
 
 * **Every emitted record carries provenance.** `Provenance` is a required field on
   everything an adapter emits, so "where did this come from" is answerable for any

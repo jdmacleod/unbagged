@@ -13,13 +13,24 @@ import sys
 from pathlib import Path
 
 FORBIDDEN_ROOTS = ("data", "output")
+# `make reset` renames ./data to data.bak-<timestamp> and leaves it in the
+# checkout. It holds every report and the database — the same bytes as data/,
+# under a name `data` does not equal. .gitignore denies it, which means a staged
+# path from there arrived by `git add -f`, which is precisely the case this hook
+# exists for.
+FORBIDDEN_PREFIXES = ("data.bak-", "data.bak.")
+
+
+def forbidden(path: str) -> bool:
+    parts = Path(path).parts
+    if not parts:
+        return False
+    root = parts[0]
+    return root in FORBIDDEN_ROOTS or root.startswith(FORBIDDEN_PREFIXES)
 
 
 def main(argv: list[str]) -> int:
-    offenders = [
-        p for p in argv
-        if Path(p).parts[:1] and Path(p).parts[0] in FORBIDDEN_ROOTS
-    ]
+    offenders = [p for p in argv if forbidden(p)]
     if not offenders:
         return 0
 

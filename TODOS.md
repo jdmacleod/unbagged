@@ -69,6 +69,37 @@ zero-external-requests rule has to be weighed first.
 *Four findings were logged here by /devex-review on 2026-09-04 and fixed the
 same day. Kept as a record of what changed and why, not as open work.*
 
+*Two security findings were logged by /cso on 2026-09-04 and fixed the same day.*
+
+- **The Python dependencies were unpinned and unhashed.** `pip install .` in the
+  Dockerfile resolved 29 packages fresh at every build with no hashes, into the
+  container that reads people's reports, while the UI half already had a
+  lockfile. `docker/requirements.txt` is now the image's lock, installed with
+  `--require-hashes`, which is all-or-nothing: pip refuses the whole file unless
+  every requirement is pinned and hashed, so it cannot silently degrade into a
+  floor-based resolve. The four constraints this item was filed on are each
+  answered. *Platform:* `make lock` compiles inside `python:3.12-slim` on
+  linux/amd64, because a lock built in a macOS venv pins wheels the build cannot
+  install. *Two audiences:* the contributor path is untouched and stays
+  `pip install -e ".[dev]"`, which is why the file is in `docker/` rather than at
+  the root looking like the thing you install from. *Decay:* Dependabot has a
+  `/docker` entry. *Verification:* the image builds, the container tier passes
+  against it, and the lock was proved load-bearing by corrupting a hash and
+  watching the build fail — which also established that pip accepts an artifact
+  matching *any* of a package's listed hashes, so a partial tamper is not a
+  valid test.
+- **`sanitize.py` preserved object keys verbatim.** The reasoning was sound for
+  field names and wrong for maps keyed by the user's data, and the counterexample
+  was already in this repository: a Kroger identity blob keys `loyaltyCards` by
+  the card number, which `tests/test_fixtures.py` asserts. `CONTRIBUTING.md`
+  tells people to attach the skeleton to a public issue, so the guarantee had to
+  match the behaviour. Option 1 from the filing: keys matching a long digit run,
+  a UUID or an email address are masked to `<key:len=N>`, keeping the length so
+  the shape of the map stays legible; every field name survives. The patterns
+  mirror `tools/scan_pii.py` rather than importing it, because the shipped
+  application must not depend on repo tooling, and a test asserts the two have
+  not drifted.
+
 - **No way to remove an imported report.** `DELETE /api/requests/{id}` and
   `api.ts`'s `deleteRequest` both existed with zero call sites, so a response
   could be added and never taken back and the only remedy was `make reset`.
@@ -90,7 +121,7 @@ same day. Kept as a record of what changed and why, not as open work.*
 - **The display serif's OS variance was undocumented.** Already closed before
   this pass: `DESIGN.md`'s decisions log carries the row dated 2026-09-04. The
   entry here was itself stale and has been removed.
-- **`HANDOFF.md` §8 described a UI that no longer exists.** §8 and §9 are now
+- **`docs/handoff.md` §8 described a UI that no longer exists.** §8 and §9 are now
   marked historical, with a table of what shipped against what the brief asked
   for and why each departure was made. §§0-7 stay authoritative, because
   `adapters/base.py`, `models.py`, `db.py` and four test modules cite §4 and §5

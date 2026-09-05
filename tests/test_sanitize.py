@@ -76,8 +76,94 @@ class TestFiles:
             sanitize_file(pdf)
 
     def test_roundtrip_leaks_nothing(self, tmp_path):
-        secret = "shopper@gmail.com"  # pii-scan: allow test literal
+        # example.com is reserved by RFC 2606 and cannot be registered. The
+        # literal here used to be a gmail.com address, which is deliverable to
+        # whoever holds it — not something to publish in a repository whose
+        # subject is other people's personal data.
+        identifier = "shopper@example.com"
         src = tmp_path / "report.json"
-        # pii-scan: allow test literal
-        src.write_text(json.dumps({"email": secret, "street": "1428 Elm Street"}))
-        assert secret not in json.dumps(sanitize_file(src))
+        street = "1428 Elm Street"  # pii-scan: allow fictional address, not a real one
+        src.write_text(json.dumps({"email": identifier, "street": street}))
+        assert identifier not in json.dumps(sanitize_file(src))
+
+
+# Named once so the suppressions live in one place rather than down a parametrize
+# list. Both are synthetic: fabricated to the right shape to exercise the rule.
+CARD_KEY = "4166872310945"      # pii-scan: allow synthetic card-shaped test literal
+HOUSEHOLD_KEY = "600123456789"  # pii-scan: allow synthetic household-id test literal
+# The UUID from RFC 4122 section 3, a documentation value with no owner.
+# gitleaks reads any 36-char hyphenated hex string as a high-entropy secret.
+UUID_KEY = "3f2504e0-4f89-11d3-9a0c-0305e82c3301"  # gitleaks:allow
+
+
+class TestIdentifierKeys:
+    """A skeleton is meant to be attachable to a public issue without reading it.
+
+    That guarantee held for values and not for keys. CONTRIBUTING.md tells people
+    to run `unbagged sanitize` and attach the output, so the case below is not
+    hypothetical: the Kroger identity blob keys `loyaltyCards` BY the card number,
+    which tests/test_fixtures.py asserts, and the old skeleton published those keys
+    while faithfully masking everything they pointed at.
+    """
+
+    def test_a_map_keyed_by_loyalty_card_number_is_masked(self):
+        card = CARD_KEY
+        out = sanitize_text(json.dumps({"loyaltyCards": {card: {"status": "ACTIVE"}}}))
+        rendered = json.dumps(out)
+        assert card not in rendered
+        # The schema survives; only the identifier goes.
+        assert "loyaltyCards" in rendered
+        assert "status" in rendered
+
+    def test_the_masked_key_keeps_its_length(self):
+        card = CARD_KEY
+        out = sanitize_text(json.dumps({"cards": {card: 1}}))
+        assert f"<key:len={len(card)}>" in json.dumps(out)
+
+    @pytest.mark.parametrize(
+        "key",
+        [CARD_KEY, HOUSEHOLD_KEY, UUID_KEY, "shopper@example.com"],
+    )
+    def test_identifier_shaped_keys_are_masked(self, key):
+        out = sanitize_text(json.dumps({"m": {key: 1}}))
+        assert key not in json.dumps(out)
+
+    @pytest.mark.parametrize(
+        "key",
+        [
+            "loyaltyCards", "cardNumberWithCD", "ehhn", "householdId",
+            "total_amount_prior_to_discounts", "purchasedescription", "productupc",
+            "2024", "01", "Section 1", "EmailAddress", "store", "orderno",
+        ],
+    )
+    def test_field_names_survive(self, key):
+        """The schema is the reason a skeleton is worth sending. Short numeric keys
+        like a year or a month index stay: masking those would blind a maintainer to
+        the structure without protecting anything."""
+        out = sanitize_text(json.dumps({"m": {key: 1}}))
+        assert key in json.dumps(out)
+
+    def test_csv_headers_go_through_the_same_rule(self):
+        out = sanitize_text(f"{CARD_KEY},name\n1,2\n", filename="x.csv")
+        names = [c["name"] for c in out["columns"]]
+        assert CARD_KEY not in names
+        assert "name" in names
+
+    def test_it_agrees_with_the_pii_scanner_on_what_is_an_identifier(self):
+        """sanitize.py mirrors tools/scan_pii.py's patterns rather than importing
+        them, because the shipped application must not depend on repo tooling. This
+        asserts the duplication has not drifted on the cases that matter."""
+        from tools import scan_pii
+
+        def scanner_flags(value: str) -> bool:
+            return bool(scan_pii.scan_lines([value], "x", denylist=()))
+
+        for identifier in (CARD_KEY, UUID_KEY, "shopper@notreserved.example"):
+            masked = identifier not in json.dumps(sanitize_text(json.dumps({"m": {identifier: 1}})))
+            assert masked, f"sanitize keeps {identifier!r} that the scanner would flag"
+
+        # And neither treats an ordinary field name as an identifier.
+        assert not scanner_flags("purchasedescription")
+        assert "purchasedescription" in json.dumps(
+            sanitize_text(json.dumps({"m": {"purchasedescription": 1}}))
+        )

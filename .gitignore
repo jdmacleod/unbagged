@@ -16,12 +16,35 @@
 *.sqlite3
 *.db
 
-# Common report formats anywhere outside fixtures.
+# Common report formats anywhere outside fixtures. Every suffix here is one a
+# right-to-know response actually arrives as, and every one of them is a format
+# tools/scan_pii.py cannot read — so if one is ever committed, no rule in the
+# scanner gets a look at it. Denying them outright is the only check that works.
 *.pdf
 *.zip
 *.csv
+*.tsv
+*.xls
+*.xlsx
+*.ods
+*.doc
+*.docx
+*.eml
+*.mbox
+*.7z
+*.rar
+*.tar
+*.tar.gz
+*.tgz
+
+# The one re-inclusion, and the reason it is safe: `make fixtures-check` (CI)
+# regenerates every file in these directories from a fixed seed and fails on any
+# file it did not produce, so nothing lands here that a generator did not write.
+# tests/fixtures/** used to be re-included alongside this one and was covered by
+# no such check — an exemption with nothing behind it, which is the shape of the
+# accident this file exists to prevent. Do not re-add a re-inclusion without a
+# corresponding check in tools/make_fixtures.py.
 !src/**/fixtures/**
-!tests/fixtures/**
 
 # The PII scanner's literal denylist is itself a PII file.
 tools/denylist.txt
@@ -30,6 +53,18 @@ tools/denylist.txt
 # the project, not part of it, and they would otherwise land as untracked files
 # in a repo whose whole posture is that stray files are a hazard.
 /.gstack/
+
+# tests/container/test_layout.py bind-mounts this into a real container as
+# /data, so it grows the same db/ and incoming/ pair that data/ has — an
+# ingested report and a SQLite database, in the repo root, created by a test
+# run. The fixture it ingests is synthetic, but the directory is shaped exactly
+# like the one this file exists to keep out, and it was previously left
+# untracked and un-ignored where `git add .` would take it.
+/.pytest-layout-data/
+
+# `make screenshots` mounts this into a throwaway container as /data. Same shape
+# as data/, same reason to keep it out. Removed on success; this covers a crash.
+/.screenshot-data/
 
 # Local overrides
 *.local.*

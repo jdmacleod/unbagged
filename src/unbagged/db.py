@@ -1,6 +1,6 @@
 """SQLite connection and migration handling.
 
-Four-ish tables do not justify an ORM (HANDOFF.md §3), so this is plain
+Four-ish tables do not justify an ORM (docs/handoff.md §3), so this is plain
 ``sqlite3`` with a numbered-migration runner. Migrations are ``.sql`` files in
 ``migrations/``, applied in filename order and recorded in ``schema_migration``.
 Adding a migration means adding a file; there is no downgrade path, because a
@@ -101,7 +101,7 @@ def migrate(conn: sqlite3.Connection) -> list[int]:
         script = "\n".join([
             "BEGIN;",
             path.read_text(encoding="utf-8"),
-            f"INSERT INTO schema_migration (version, name) "
+            f"INSERT INTO schema_migration (version, name) "  # noqa: S608
             f"VALUES ({version}, '{path.name}');",
             "COMMIT;",
         ])

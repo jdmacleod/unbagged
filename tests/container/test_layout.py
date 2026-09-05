@@ -36,6 +36,7 @@ Skips loudly without the browser: `pip install -e ".[dev,browser]"` then
 from __future__ import annotations
 
 import json
+import shutil
 import time
 import urllib.error
 import urllib.request
@@ -168,9 +169,33 @@ def seeded_app(request, image) -> str:
         yield BASE
     finally:
         docker("rm", "-f", name, check=False)
-        for child in sorted(data.rglob("*"), reverse=True):
-            child.unlink() if child.is_file() else child.rmdir()
-        data.rmdir()
+        _remove_data_dir(data, image)
+
+
+def _remove_data_dir(data: Path, image: str) -> None:
+    """Delete the bind-mounted data directory, which the container owns by then.
+
+    The entrypoint chowns /data to uid 10001 so the unprivileged app can write to
+    it. On Linux that is a real chown, and the host user then cannot unlink
+    anything under incoming/ — unlink needs write permission on the *directory*,
+    and the directory now belongs to 10001. On Docker Desktop the file-sharing
+    layer maps ownership back to the host user, so the chown is invisible from the
+    host and a teardown that fails on every Linux machine passes on every
+    developer's laptop. This tier only ever ran on laptops until the repository
+    had somewhere to push to; its first run on a Linux runner failed here.
+
+    So the removal happens where the ownership is: inside a container, as root.
+    `find -mindepth 1 -delete` rather than `rm -rf /data/*`, which leaves dotfiles
+    behind and cannot remove the mount point itself either way. The now-empty top
+    directory was created by the host and is still the host's to remove.
+    """
+    docker(
+        "run", "--rm", "--user", "0", "--entrypoint", "sh",
+        "-v", f"{data}:/data", image,
+        "-c", "find /data -mindepth 1 -delete",
+        check=False,
+    )
+    shutil.rmtree(data, ignore_errors=True)
 
 
 @pytest.fixture(scope="module")
