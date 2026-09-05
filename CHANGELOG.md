@@ -42,6 +42,16 @@ from a specific response. See `CONTRIBUTING.md`.
   `try/except relative_to` did not satisfy it either. Cutting the taint at its
   source did.
 
+- **The timeline's month is a running head that runs.** It used to print once at
+  the moment the month changed and then scroll away, so from about row 40 of a
+  ~5,300px roll nothing on screen answered "when am I". The months are now a
+  sticky rail in the margin, one row each with a bar for what the month cost, and
+  each one jumps. A one-line head names the month you are in. The 148px inline
+  chart comes back as reclaimed space above `lg`; below `lg`, where there is no
+  margin, it stays and its bars became clickable. The page citation moves from
+  the margin onto the row, because a sticky rail and a per-row footnote cannot
+  share one column — recorded in `DESIGN.md`'s decisions log.
+
 ## [0.11.0] - 2026-09-05
 
 ### Changed

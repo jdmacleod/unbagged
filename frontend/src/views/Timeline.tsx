@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { useAsync } from "../components/useAsync";
 import { Aside, Cite, Empty, ErrorBox, Spine, Spinner } from "../components/ui";
@@ -111,7 +111,10 @@ function TimelineBody({
   onClearArrival: () => void;
 }) {
   const { store, setStore, from, setFrom, to, setTo, q, setQ } = controls;
-  const { visible, control } = useShowMore(baskets, 25);
+  const { visible, control, revealThrough } = useShowMore(baskets, 25);
+  const months = monthIndex(baskets);
+  const currentMonth = useCurrentMonth(months, visible.length);
+  const jumpTo = useMonthJump(revealThrough);
 
   // A retailer that answered with a letter disclosed no purchases at all. The
   // stat row used to render that as Visits 0 / Total spend $0.00, which reads
@@ -142,9 +145,14 @@ function TimelineBody({
         <FootingNote baskets={baskets} />
       </Spine>
 
-      <Spine margin={<Aside>paid, by month</Aside>}>
-        <MonthChart baskets={baskets} />
-      </Spine>
+      {/* Below lg the margin does not exist, so the months come inline as the
+          chart they always were — now clickable, which is the half the rail
+          adds. Above lg the rail carries them and this 148px comes back. */}
+      <div className="lg:hidden">
+        <Spine>
+          <MonthChart months={months} current={currentMonth} onJump={jumpTo} />
+        </Spine>
+      </div>
 
       <Spine
         margin={
@@ -187,24 +195,43 @@ function TimelineBody({
           <Empty>No visits match those filters.</Empty>
         </Spine>
       ) : (
-        <div className="border-t border-rule">
-          {visible.map((basket) => {
-            const month = basket.occurred_at.slice(0, 7);
-            // Printed once, at the moment it changes, and never repeated.
-            const label = month === lastMonth ? "" : monthLabel(basket.occurred_at);
-            lastMonth = month;
-            return (
-              <BasketRow
-                key={basket.id}
-                basket={basket}
-                month={label}
-                open={open === basket.id}
-                onToggle={() => setOpen(open === basket.id ? null : basket.id)}
-              />
-            );
-          })}
-          {control}
-        </div>
+        <Spine
+          marginFirst
+          margin={
+            <MonthRail months={months} current={currentMonth} onJump={jumpTo} />
+          }
+        >
+          <RunningHead
+            months={months}
+            current={currentMonth}
+            shown={visible.length}
+            total={baskets.length}
+          />
+          <div className="border-t border-rule">
+            {visible.map((basket) => {
+              const month = basket.occurred_at.slice(0, 7);
+              // Printed once, at the moment it changes, and never repeated.
+              const first = month !== lastMonth;
+              const label = first ? monthLabel(basket.occurred_at) : "";
+              lastMonth = month;
+              return (
+                <BasketRow
+                  key={basket.id}
+                  basket={basket}
+                  month={label}
+                  // The anchor the rail jumps to and the running head reads.
+                  // On the row rather than on a separate marker element: a
+                  // zero-height marker between grid children would be a grid
+                  // child too, and would take a row of its own.
+                  monthKey={first ? month : null}
+                  open={open === basket.id}
+                  onToggle={() => setOpen(open === basket.id ? null : basket.id)}
+                />
+              );
+            })}
+            {control}
+          </div>
+        </Spine>
       )}
     </div>
   );
@@ -286,6 +313,52 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
 function monthLabel(iso: string) {
   const [y, m] = iso.slice(0, 7).split("-");
   return `${MONTHS[Number(m) - 1]} ${y.slice(2)}`;
+}
+
+export type MonthEntry = {
+  /** `YYYY-MM`, and the anchor id is `month-${key}`. */
+  key: string;
+  label: string;
+  paid: number;
+  saved: number;
+  visits: number;
+  /** Index into the *unsliced* basket list of the first visit in this month.
+   *  The rail reveals through this before scrolling, because the roll renders
+   *  25 rows at a time and an anchor that is not mounted scrolls nowhere. */
+  firstIndex: number;
+};
+
+/**
+ * The roll's months, in order, with what each cost and where each begins.
+ *
+ * One pass over the baskets rather than a group-then-sort, because the API
+ * already returns them ordered by `occurred_at` and re-sorting would invent an
+ * order the rows do not have. `firstIndex` is captured on the month's first
+ * sighting, which is what makes it an index into the list as rendered.
+ */
+export function monthIndex(baskets: Basket[]): MonthEntry[] {
+  const out: MonthEntry[] = [];
+  const seen = new Map<string, MonthEntry>();
+  baskets.forEach((basket, index) => {
+    const key = basket.occurred_at.slice(0, 7);
+    let entry = seen.get(key);
+    if (!entry) {
+      entry = {
+        key,
+        label: monthLabel(basket.occurred_at),
+        paid: 0,
+        saved: 0,
+        visits: 0,
+        firstIndex: index,
+      };
+      seen.set(key, entry);
+      out.push(entry);
+    }
+    entry.paid += basket.paid_total ?? 0;
+    entry.saved += basket.saved_total ?? 0;
+    entry.visits += 1;
+  });
+  return out;
 }
 
 /**
@@ -382,7 +455,216 @@ function FootingNote({ baskets }: { baskets: Basket[] }) {
 }
 
 /**
- * Spend by month, drawn as bare ink bars on the roll's own baseline.
+ * The running head, which now runs.
+ *
+ * The month used to print once at the moment it changed and then scroll away,
+ * so from about row 40 of a ~5,300px roll nothing on screen answered "when am
+ * I". A book solves this with a running head at the top of every page; this is
+ * the same device on a surface that has one very long page.
+ *
+ * One line, and only what a running head carries: where you are and how much of
+ * the roll is on the page. The filter row is deliberately not pinned with it —
+ * at 320px those four controls wrap to about 150px of sticky furniture, which
+ * is half a phone screen spent on a set-and-forget control, and the rail
+ * already carries the navigation that made pinning them attractive.
+ */
+function RunningHead({
+  months,
+  current,
+  shown,
+  total,
+}: {
+  months: MonthEntry[];
+  current: string | null;
+  shown: number;
+  total: number;
+}) {
+  const here = months.find((m) => m.key === current);
+  return (
+    <div className="num sticky top-0 z-10 flex items-baseline justify-between gap-3 border-b border-rule bg-page py-2 text-[11.5px] text-faint">
+      {/* Empty above the first month, not an em-rule. A running head is omitted
+          on the opening page of a chapter; printing a placeholder there reads as
+          a value that failed to load, and the first row two lines below is
+          already carrying its own month label. */}
+      <span className="font-semibold text-ink">{here ? here.label : ""}</span>
+      <span>
+        {shown === total
+          ? `${number(total)} visits`
+          : `${number(shown)} of ${number(total)} visits`}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Which month the reader is inside, given where each month's mark currently is.
+ *
+ * Pure so it can be tested: the rule is "the last mark that has passed the
+ * threshold", not "the first mark still on screen". Those differ exactly when a
+ * month is taller than the viewport, which is most of them — with the second
+ * rule a long month reports nothing and the running head goes blank in the
+ * middle of the month it should be naming.
+ */
+export function currentMonthKey(
+  marks: { key: string; top: number }[],
+  threshold = 72,
+): string | null {
+  let current: string | null = null;
+  for (const mark of marks) {
+    if (mark.top > threshold) break;
+    current = mark.key;
+  }
+  return current;
+}
+
+/** Track the month under the running head. Re-reads when more rows appear. */
+function useCurrentMonth(months: MonthEntry[], renderedCount: number) {
+  const [current, setCurrent] = useState<string | null>(null);
+  useEffect(() => {
+    const read = () =>
+      setCurrent(
+        currentMonthKey(
+          months
+            .map((m) => ({ key: m.key, el: document.getElementById(`month-${m.key}`) }))
+            .filter((m): m is { key: string; el: HTMLElement } => m.el !== null)
+            .map((m) => ({ key: m.key, top: m.el.getBoundingClientRect().top })),
+        ),
+      );
+    read();
+    window.addEventListener("scroll", read, { passive: true });
+    window.addEventListener("resize", read);
+    return () => {
+      window.removeEventListener("scroll", read);
+      window.removeEventListener("resize", read);
+    };
+  }, [months, renderedCount]);
+  return current;
+}
+
+/**
+ * Reveal the target row if it is not rendered yet, then scroll to it.
+ *
+ * The scroll cannot simply wait for the next render. `revealThrough` is a
+ * `setState` that returns the same limit when the row is already revealed, and
+ * React bails out of re-rendering on an unchanged value — so the second jump
+ * onward produced no render, the effect never ran, and the rail silently did
+ * nothing. Measured before the fix: the first click revealed 25 rows to 123 and
+ * scrolled; every click after it left the page exactly where it was.
+ *
+ * So the common case scrolls immediately, and only a jump that genuinely needs
+ * more rows waits for them to mount.
+ */
+function useMonthJump(revealThrough: (index: number) => void) {
+  const pending = useRef<string | null>(null);
+  useEffect(() => {
+    if (!pending.current) return;
+    const el = document.getElementById(`month-${pending.current}`);
+    if (!el) return; // still not mounted; try again on the next render
+    pending.current = null;
+    scrollToMonth(el);
+  });
+  return (month: MonthEntry) => {
+    revealThrough(month.firstIndex);
+    const el = document.getElementById(`month-${month.key}`);
+    if (el) {
+      scrollToMonth(el);
+      return;
+    }
+    pending.current = month.key;
+  };
+}
+
+/** `auto`, not `smooth`: DESIGN.md allows exactly one motion in this app and
+ *  this is not it. A jump that animates across 5,000px is also worse at
+ *  answering "where am I now" than one that is simply already there. */
+function scrollToMonth(el: HTMLElement) {
+  el.scrollIntoView({ behavior: "auto", block: "start" });
+}
+
+/**
+ * The months, rotated into the margin as a rail you can steer with.
+ *
+ * The inline chart this replaces was 148px of picture you could not act on, and
+ * it scrolled away after the first screen. Turned ninety degrees it becomes the
+ * one thing the margin was short of: a way to answer "when am I, and take me
+ * somewhere else" from any point in a roll measured at ~5,300px.
+ *
+ * Bar length is quantity, which is one of the three things colour and length are
+ * allowed to mean here. The current month is marked with weight and the accent,
+ * which is interaction, not status.
+ */
+function MonthRail({
+  months,
+  current,
+  onJump,
+}: {
+  months: MonthEntry[];
+  current: string | null;
+  onJump: (month: MonthEntry) => void;
+}) {
+  if (months.length === 0) return null;
+  const peak = Math.max(...months.map((m) => m.paid + m.saved), 1);
+  return (
+    <div className="sticky top-4 pt-2">
+      <div className="num border-b border-rule pb-1 text-[11.5px] text-faint">
+        paid, by month
+      </div>
+      <ol className="mt-2">
+        {months.map((month) => {
+          const here = month.key === current;
+          return (
+            <li key={month.key}>
+              {/* A link in a list, not a button. `@media (pointer: coarse)`
+                  puts a 44px floor under every button and exempts `a` inside
+                  `li`; at two years of months that is the difference between a
+                  rail that fits the margin and one over 1,000px tall on a
+                  tablet, where `sticky` then has nothing to stick. Same
+                  reasoning as the product index, and a real href is the right
+                  semantics for something that navigates. */}
+              <a
+                href={`#month-${month.key}`}
+                onClick={(e) => {
+                  // The href alone would scroll to a row the roll may not have
+                  // rendered yet, so the handler reveals first and then jumps.
+                  e.preventDefault();
+                  onJump(month);
+                }}
+                aria-current={here ? "true" : undefined}
+                title={`${month.label} · ${money(month.paid)} paid · ${number(
+                  month.visits,
+                )} visits`}
+                className={`group flex w-full items-center gap-2 py-[3px] text-left ${
+                  here ? "text-accent" : "text-faint hover:text-ink"
+                }`}
+              >
+                <span
+                  className={`num w-[3.25rem] shrink-0 text-[11.5px] ${
+                    here ? "font-semibold" : ""
+                  }`}
+                >
+                  {month.label}
+                </span>
+                <span aria-hidden className="flex h-[7px] min-w-0 flex-1 items-stretch">
+                  <span
+                    className={here ? "bg-accent" : "bg-ink/55 group-hover:bg-ink"}
+                    style={{ width: `${(month.paid / peak) * 100}%` }}
+                  />
+                  <span
+                    className="bg-line/45"
+                    style={{ width: `${(month.saved / peak) * 100}%` }}
+                  />
+                </span>
+              </a>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
+/**
+ * Spend by month, below `lg`, where the margin and its rail do not exist.
  *
  * Hand-rolled rather than a chart library: the design calls for no frame, no
  * gridlines, no axis box and no legend, and fighting a charting library out of
@@ -391,42 +673,53 @@ function FootingNote({ baskets }: { baskets: Basket[] }) {
  *
  * Paid, not shelf. Plotting the pre-discount sum drew a spending history nobody
  * had: every bar stood taller than the month actually cost.
+ *
+ * Each bar is a button now. The picture was the only thing on this view that
+ * showed the whole two years at once and the only thing you could not act on.
  */
-function MonthChart({ baskets }: { baskets: Basket[] }) {
-  const byMonth = new Map<string, { month: string; paid: number; saved: number }>();
-  for (const basket of baskets) {
-    const month = basket.occurred_at.slice(0, 7);
-    const entry = byMonth.get(month) ?? { month, paid: 0, saved: 0 };
-    entry.paid += basket.paid_total ?? 0;
-    entry.saved += basket.saved_total ?? 0;
-    byMonth.set(month, entry);
-  }
-  const data = [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month));
-  if (data.length === 0) return <Empty>Nothing to plot.</Empty>;
-
-  const peak = Math.max(...data.map((m) => m.paid + m.saved), 1);
+function MonthChart({
+  months,
+  current,
+  onJump,
+}: {
+  months: MonthEntry[];
+  current: string | null;
+  onJump: (month: MonthEntry) => void;
+}) {
+  if (months.length === 0) return <Empty>Nothing to plot.</Empty>;
+  const peak = Math.max(...months.map((m) => m.paid + m.saved), 1);
   return (
     <div>
+      <div className="num pb-1 text-[11.5px] text-faint">paid, by month</div>
       <div className="flex h-24 items-end gap-[3px] border-b border-rule">
-        {data.map((m) => (
-          <div
-            key={m.month}
-            className="flex-1"
-            title={`${m.month} · ${money(m.paid)} paid${
+        {months.map((m) => (
+          <button
+            key={m.key}
+            onClick={() => onJump(m)}
+            aria-current={m.key === current ? "true" : undefined}
+            aria-label={`Jump to ${m.label}`}
+            className="flex h-full flex-1 flex-col justify-end"
+            title={`${m.label} · ${money(m.paid)} paid${
               m.saved > 0 ? `, ${money(m.saved)} saved` : ""
-            }`}
+            } · ${number(m.visits)} visits`}
           >
             {/* The saving sits above the paid amount, so the full bar height is
                 the shelf total. Both readings the response supports, one mark. */}
-            <div className="bg-line/45" style={{ height: `${(m.saved / peak) * 92}px` }} />
-            <div className="bg-ink/75" style={{ height: `${(m.paid / peak) * 92}px` }} />
-          </div>
+            <span
+              className="block bg-line/45"
+              style={{ height: `${(m.saved / peak) * 92}px` }}
+            />
+            <span
+              className={`block ${m.key === current ? "bg-accent" : "bg-ink/75"}`}
+              style={{ height: `${(m.paid / peak) * 92}px` }}
+            />
+          </button>
         ))}
       </div>
       <div className="num flex justify-between pt-1.5 text-[11.5px] text-faint">
-        <span>{data[0].month}</span>
-        {data.length > 2 && <span>{data[Math.floor(data.length / 2)].month}</span>}
-        <span>{data[data.length - 1].month}</span>
+        <span>{months[0].key}</span>
+        {months.length > 2 && <span>{months[Math.floor(months.length / 2)].key}</span>}
+        <span>{months[months.length - 1].key}</span>
       </div>
     </div>
   );
@@ -501,11 +794,14 @@ function Filters({
 function BasketRow({
   basket,
   month,
+  monthKey,
   open,
   onToggle,
 }: {
   basket: Basket;
   month: string;
+  /** Set on the first row of each month; the id the rail scrolls to. */
+  monthKey: string | null;
   open: boolean;
   onToggle: () => void;
 }) {
@@ -516,7 +812,11 @@ function BasketRow({
   const unreconciled = doesNotFoot(basket);
 
   return (
-    <div className="grid grid-cols-[3.25rem_minmax(0,1fr)] gap-x-4 lg:grid-cols-[3.25rem_minmax(0,var(--measure-read))_var(--spacing-margin)] lg:gap-x-12">
+    <div
+      id={monthKey ? `month-${monthKey}` : undefined}
+      // Clears the running head, which is sticky and would otherwise cover the
+      // first row of the month a jump just landed on.
+      className="grid scroll-mt-12 grid-cols-[3.25rem_minmax(0,1fr)] gap-x-4 lg:scroll-mt-14 lg:grid-cols-[3.25rem_minmax(0,1fr)] lg:gap-x-12">
       {/* The month, printed once, hanging in its own column. */}
       <div className="font-serif text-[12.5px] text-faint">
         {month && <span className="block pt-2.5">{month}</span>}
@@ -605,10 +905,15 @@ function BasketRow({
             <span className="num w-16 shrink-0 text-right font-semibold md:w-20">
               {money(basket.paid_total)}
             </span>
-            {/* Below lg the margin collapses, so the citation comes inline. */}
-            <span className="lg:hidden">
-              <Cite provenance={basket.provenance} />
-            </span>
+            {/* The citation rides the row at every width now. The margin
+                beside this roll holds the month rail, and a sticky rail and a
+                per-row footnote cannot share one column — the rows would scroll
+                underneath the rail and disappear behind it. Below lg this was
+                already the shipped behaviour, so the view is now consistent
+                across widths rather than carrying two patterns. Recorded in
+                DESIGN.md's decisions log, which is where a departure from
+                "footnotes belong in the margin" has to be written down. */}
+            <Cite provenance={basket.provenance} />
           </span>
         </button>
 
@@ -620,9 +925,6 @@ function BasketRow({
         )}
       </div>
 
-      <div className="hidden pt-2.5 lg:block">
-        <Cite provenance={basket.provenance} />
-      </div>
     </div>
   );
 }

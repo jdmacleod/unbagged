@@ -3,33 +3,6 @@
 Deferred work, with the measurement that justified deferring it. Each item
 carries enough context to be picked up cold.
 
-## Timeline: the month is a running head that does not run
-
-**What:** Rotate the month chart 90 degrees into the margin as a sticky,
-clickable scroll rail. Pin the month label and the filter row.
-
-**Why:** Measured at ~5,300px for 121 visits, roughly six screens. The month
-prints once at the change and then scrolls away, so from about row 40 onward
-nothing on screen answers "when am I?". The 148px month chart is a picture you
-cannot act on, and the margin beside the roll carries a four-character citation
-per row and nothing else.
-
-**Pros:** Reclaims 148px inline. Replaces roughly 4,500px of scrolling with one
-click. Answers Krug's wayfinding questions for the whole roll. Uses the margin
-DESIGN.md already says must have a job, and introduces no new visual language.
-
-**Cons:** Touches the most-reviewed view in the project, which has a history of
-rewrites dropping prior fixes (see the `rewriting-a-view-silently-drops-its-review-history`
-learning). Any change here needs the prior QA findings re-verified empirically,
-not grepped for.
-
-**Context:** Deferred during /plan-design-review on 2026-09-04 to keep the
-product-index branch's blast radius on the new view. The click-through from the
-index lands the reader on this surface unchanged, which is why D6 in the plan
-adds an explicit arrival statement instead.
-
-**Depends on:** Nothing. Independent of the index work.
-
 ## Compliance: the letter draft is 350px of read-only preview
 
 **What:** Reduce the follow-up draft from `rows={18}` to about 8, with a control
@@ -70,6 +43,37 @@ zero-external-requests rule has to be weighed first.
 same day. Kept as a record of what changed and why, not as open work.*
 
 *Two security findings were logged by /cso on 2026-09-04 and fixed the same day.*
+
+*The Timeline month rail shipped on 2026-09-05.*
+
+- **The month is a running head that runs.** The 148px inline chart is gone above
+  `lg`; the months are rotated into the margin as a sticky rail, each row a label
+  and a bar, each one a link that jumps. A one-line running head names the month
+  you are in and how much of the roll is on the page. Below `lg` the margin does
+  not exist, so the chart stays inline and its bars became buttons — the picture
+  was the only thing showing all two years at once and the only thing you could
+  not act on.
+
+  Three things came out of building it that the filing did not anticipate.
+  **The margin cannot hold both** a sticky rail and a per-row citation: the
+  citations scroll underneath the rail and vanish behind it, so `p.5` moved onto
+  the row at every width and `DESIGN.md`'s decisions log carries the departure
+  from "footnotes belong in the margin". **The filter row is not pinned**, which
+  the filing asked for: at 320px those four controls wrap to about 150px of
+  sticky furniture, half a phone screen given to a set-and-forget control, and
+  the rail now carries the navigation that made pinning attractive. **The rail
+  entries are links, not buttons**, because `@media (pointer: coarse)` puts a
+  44px floor under every button and exempts `a` inside `li` — two years of months
+  as buttons is a 1,000px rail in a 176px column on a tablet, with nothing left
+  for `sticky` to stick to. Same trap the product index logged a decision about.
+
+  Two bugs found by driving it rather than reading it, both now covered in the
+  browser tier: the second jump did nothing at all, because revealing rows is a
+  `setState` that returns an unchanged value once they are revealed and React
+  bails out of the render the scroll was waiting on; and revealing exactly
+  through the target made it the last row on the page, which a browser cannot
+  scroll to the top, so a jump to Jan 25 landed on a screen whose head read
+  Oct 24.
 
 - **The Python dependencies were unpinned and unhashed.** `pip install .` in the
   Dockerfile resolved 29 packages fresh at every build with no hashes, into the
