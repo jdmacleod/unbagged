@@ -57,6 +57,131 @@ app = FastAPI(
 )
 
 
+# What a served document is allowed to do. Every source is `self` because the
+# build genuinely needs nothing else: `index.html` carries one external module
+# script and one external stylesheet, both under /assets, and the built CSS has
+# no `url()`, no `@font-face` and no `data:` URI. There are no font files on
+# disk — the mono is a CSS stack — and React's `style` prop sets properties
+# through the CSSOM rather than emitting a style attribute, which `style-src`
+# does not gate. So no `'unsafe-inline'` is needed anywhere, which is the rare
+# case where a strict policy costs nothing.
+#
+# `img-src 'self'` deliberately omits `data:`. Nothing in the app loads a data:
+# image, and `frontend/vite.config.ts` sets `assetsInlineLimit: 0` so nothing
+# starts to. Allowing it would widen the directive that most limits what
+# injected markup can pull in, to permit something no page uses.
+#
+# `form-action 'none'` because there is not one `<form>` element in the UI;
+# uploads go through the API. A form is otherwise a way to send data somewhere
+# else that `connect-src` never sees.
+#
+# The reason any of this matters here: the SPA route serves every file in the
+# bundle, including `/unbagged-logo.svg`, and a top-level navigation to an SVG
+# executes its script in this origin, next to report data in the same browser
+# profile. `tools/build_brand.py --check` already refuses a served SVG carrying
+# a script, so this is defence that does not depend on that check being right.
+CONTENT_SECURITY_POLICY = "; ".join((
+    "default-src 'self'",
+    "img-src 'self'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'none'",
+))
+
+SECURITY_HEADERS: tuple[tuple[bytes, bytes], ...] = (
+    (b"content-security-policy", CONTENT_SECURITY_POLICY.encode("ascii")),
+    (b"x-content-type-options", b"nosniff"),
+)
+
+
+class SecurityHeaders:
+    """Attach the security headers to every HTTP response.
+
+    A plain ASGI wrapper rather than `@app.middleware("http")`. Both are
+    correct — BaseHTTPMiddleware was measured on starlette 1.6.0 and preserved
+    Content-Length and Accept-Ranges on a 2 MB FileResponse — but it wraps each
+    response in an extra task and re-emits it as a streaming response, which is
+    machinery this does not need to set two constant headers, and which is one
+    more thing to reason about the next time background tasks or exception
+    handling change.
+
+    Setting them here rather than per route is what makes the guarantee whole:
+    the app answers on three paths, and only a wrapper sees all three.
+
+        request ──▶ SecurityHeaders ──┬──▶ API routes        JSON, 200/400/422
+                                      ├──▶ /assets mount     StaticFiles
+                                      └──▶ SPA route         FileResponse
+    """
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def with_headers(message: dict[str, Any]) -> None:
+            if message["type"] == "http.response.start":
+                # Replace rather than append: a route that sets its own copy
+                # later would otherwise ship two, and browsers enforce the
+                # intersection of every policy they are given.
+                ours = {name for name, _ in SECURITY_HEADERS}
+                kept = [(k, v) for k, v in message["headers"] if k.lower() not in ours]
+                message["headers"] = kept + list(SECURITY_HEADERS)
+            await send(message)
+
+        await self.app(scope, receive, with_headers)
+
+
+def _headers_for_a_response_the_middleware_never_sees() -> dict[str, str]:
+    return {name.decode(): value.decode() for name, value in SECURITY_HEADERS}
+
+
+async def unhandled_error(_request: Any, exc: Exception) -> JSONResponse:
+    """The one response `SecurityHeaders` cannot decorate, so it sets its own.
+
+    Starlette builds the stack as ServerErrorMiddleware -> user middleware ->
+    router. An exception nothing else catches unwinds past the wrapper, and
+    ServerErrorMiddleware emits its 500 through the original `send` — so the
+    wrapper never sees the message and the response ships with no policy at all.
+    Measured: 500 with `content-security-policy: None` before this existed.
+
+    Registering a handler does not move the response back inside the wrapper;
+    it still leaves by the outer path. What it does is let the response carry
+    the headers itself, from the same constant, so there is one policy in the
+    codebase and not two that can drift.
+
+    The body says nothing about what failed. A traceback in an error page is a
+    disclosure, and this app's errors are about a document on someone's disk.
+    """
+    log.exception("unhandled error serving a request", exc_info=exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error"},
+        headers=_headers_for_a_response_the_middleware_never_sees(),
+    )
+
+
+def add_security_headers(application: FastAPI = app) -> None:
+    """Install the headers on `application`.
+
+    A function rather than a bare `app.add_middleware` call because tests build
+    their own app: the fast test job never builds the frontend, so `api.app` has
+    no static routes there and `mount_frontend(FastAPI())` against a tmp_path
+    bundle is the only way to exercise a FileResponse. Wiring the middleware
+    only onto the module-level app would leave the header missing from exactly
+    the app that covers that path.
+    """
+    application.add_middleware(SecurityHeaders)
+    # Covers the 500 the middleware structurally cannot reach. See above.
+    application.add_exception_handler(Exception, unhandled_error)
+
+
+add_security_headers()
+
+
 def get_conn() -> Iterator[sqlite3.Connection]:
     conn = db.connect()
     try:

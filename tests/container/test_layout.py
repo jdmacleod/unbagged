@@ -366,6 +366,60 @@ class TestMonthRailNavigates:
 
 
 @requires_docker
+@requires_docker
+class TestTheContentSecurityPolicy:
+    """The policy does not break anything, asserted by the browser rather than
+    by reading the header.
+
+    A test that asserts the header is present proves the middleware fired. It
+    cannot prove the policy lets the app work: a mistyped directive name, or a
+    source the app actually needs, passes that assertion and breaks the page.
+    Chromium reports every refusal to the console, so the check is to walk the
+    views and find none.
+
+    The header assertions live in tests/test_api.py, which runs in the fast job.
+    This is the other half.
+    """
+
+    REFUSAL = re.compile(r"content security policy|refused to (load|execute|connect|frame)", re.I)
+
+    def test_no_view_logs_a_policy_violation(self, browser, seeded_app):
+        violations = []
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
+        page.on("console", lambda m: (
+            violations.append(m.text) if self.REFUSAL.search(m.text) else None
+        ))
+        # A blocked subresource surfaces as a page error on some paths rather
+        # than a console message, so both are collected.
+        page.on("pageerror", lambda e: (
+            violations.append(str(e)) if self.REFUSAL.search(str(e)) else None
+        ))
+        try:
+            for view in VIEWS:
+                page.goto(f"{seeded_app}/?tab={view}&r=1", wait_until="networkidle")
+        finally:
+            page.close()
+        assert not violations, (
+            "the policy blocked something the app needs:\n" + "\n".join(violations)
+        )
+
+    def test_the_header_survives_the_real_container(self, browser, seeded_app):
+        """The fast job asserts this against a TestClient; this is the shipped
+        image answering over a real socket, where a proxy or the ASGI server
+        could in principle drop a header the app set."""
+        page = browser.new_page()
+        try:
+            response = page.goto(f"{seeded_app}/?tab=timeline&r=1")
+            assert response is not None
+            headers = {k.lower(): v for k, v in response.all_headers().items()}
+            assert "content-security-policy" in headers, sorted(headers)
+            assert "unsafe-inline" not in headers["content-security-policy"]
+            assert headers.get("x-content-type-options") == "nosniff"
+        finally:
+            page.close()
+
+
+@requires_docker
 class TestIndexExport:
     """The saved index has to be a file a browser will open as an image.
 
@@ -388,6 +442,22 @@ class TestIndexExport:
         page = browser.new_page(viewport={"width": 1280, "height": 900})
         try:
             saved = self._save(page, seeded_app)
+            # Off the app's origin before decoding. `_save` navigated to the
+            # app, and the app serves `img-src 'self'` with no `data:`, so
+            # setting img.src to a data URL there is refused by the browser and
+            # this test fails with "the browser refused to decode the saved
+            # file" -- which reads exactly like the export broke, when nothing
+            # is wrong with the file at all.
+            #
+            # It also makes the test say what it means: the question is whether
+            # the saved file is a valid image, not whether this app will render
+            # it. about:blank carries no policy.
+            #
+            # This works because page.goto is a driver-initiated top-level
+            # navigation and gets a fresh document. Do not rewrite it as
+            # window.open("about:blank"), which inherits the opener's policy and
+            # would put the failure back without looking like it did.
+            page.goto("about:blank")
             data_url = "data:image/svg+xml;base64," + base64.b64encode(
                 saved.read_bytes()
             ).decode()
