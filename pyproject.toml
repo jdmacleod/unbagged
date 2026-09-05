@@ -39,6 +39,15 @@ dev = [
     "faker>=30",
     "httpx>=0.27",   # fastapi's TestClient
     "pyyaml>=6",     # reading compose files in the packaging tests
+    # tools/build_brand.py strips PNG metadata with it, and `make brand-check`
+    # runs in CI. It arrived only transitively through pdfplumber, so a build
+    # tool depended on an unrelated PDF library's dependency graph. A floor, not
+    # a pin: --check compares decoded pixels, so an encoder change is invisible
+    # to it. Pillow parses images inside user-supplied PDFs at runtime and has a
+    # steady CVE cadence, and an exact pin here would have frozen the developer
+    # and CI environment out of its security updates to stabilise a byte
+    # comparison that no longer exists.
+    "pillow>=11",
     "pytest>=8.0",
     "pre-commit>=3.7",
     "ruff>=0.5",

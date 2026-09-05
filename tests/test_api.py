@@ -877,6 +877,8 @@ class TestStaticRouteTraversal:
         secret = tmp_path / "secret.txt"
         secret.write_text("TOP_SECRET")
         os.symlink(secret, static / "escape.txt")
+        # A root-level asset, which is what the brand files are.
+        (static / "favicon.ico").write_bytes(b"\x00\x00\x01\x00ICONDATA")
 
         monkeypatch.setenv(api.STATIC_DIR_ENV, str(static))
         from fastapi import FastAPI
@@ -914,3 +916,17 @@ class TestStaticRouteTraversal:
 
     def test_an_unknown_path_returns_the_shell(self, served):
         assert served.get("/timeline").text == "INDEX"
+
+    def test_a_root_level_asset_is_served_and_not_the_shell(self, served):
+        """The defect this route's brand wiring exists to fix.
+
+        A browser requests /favicon.ico unprompted on every page load. Before the
+        icons were wired up it fell through to the catch-all and got the SPA
+        shell back with content-type text/html, so no favicon ever rendered.
+        Nothing asserted it over HTTP — the other tests read the built index.html
+        and the file listing, neither of which can see what the route returns.
+        """
+        response = served.get("/favicon.ico")
+        assert response.content == b"\x00\x00\x01\x00ICONDATA"
+        assert response.text != "INDEX"
+        assert "html" not in response.headers.get("content-type", "")

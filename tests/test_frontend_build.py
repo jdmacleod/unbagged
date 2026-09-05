@@ -126,12 +126,9 @@ def test_wide_tables_are_wrapped_in_a_scroll_container():
 # in the suite noticed, because nothing asserted the app has a favicon at all.
 # ---------------------------------------------------------------------------
 
-BRAND_SERVED = (
-    "favicon.ico",
-    "unbagged-logo-small.svg",
-    "apple-touch-icon-180.png",
-    "unbagged-logo.svg",
-)
+# Imported, not restated. A second copy of this list means a fifth served asset
+# is generated and drift-checked by the tool while these tests never look at it.
+from tools.build_brand import SERVED as BRAND_SERVED  # noqa: E402
 
 
 def test_the_page_declares_an_icon():
@@ -142,6 +139,45 @@ def test_the_page_declares_an_icon():
     )
     assert re.search(r'<link[^>]+rel="icon"[^>]+type="image/svg\+xml"', html)
     assert re.search(r'<link[^>]+rel="apple-touch-icon"', html)
+
+
+def test_every_icon_href_declared_resolves_to_a_shipped_file():
+    """Reads the hrefs the page actually declares, rather than a list beside it.
+
+    The tests above assert two of the three links exist without looking at where
+    they point, and the shipped-asset test is parametrized on a fixed tuple. So a
+    typo'd href — /unbagged-logo-smal.svg — left every test in this file green
+    while the browser got the SPA shell back, which is the original defect
+    verbatim.
+    """
+    html = INDEX.read_text(encoding="utf-8")
+    links = re.findall(r'<link[^>]+rel="(?:icon|apple-touch-icon)"[^>]*>', html)
+    assert links, "no icon links declared at all"
+    for tag in links:
+        href = re.search(r'href="([^"]+)"', tag)
+        assert href, f"icon link with no href: {tag}"
+        url = href.group(1)
+        assert url.startswith("/") and not url.startswith("//"), (
+            f"icon href is not same-origin rooted: {url}"
+        )
+        assert (STATIC / url.lstrip("/")).is_file(), (
+            f"{url} is declared in index.html but is not in the build"
+        )
+
+
+def test_shipped_svgs_reference_nothing_off_origin():
+    """An SVG is markup, and these are the first this app ships.
+
+    The origin guarantee above reads index.html only. An SVG can carry <image
+    href>, <use xlink:href>, a <script>, or an @import in a <style> — none of
+    which any other test here covers, and there is no CSP, so a script in one
+    would run on this origin if the file were opened directly.
+    """
+    for svg in STATIC.rglob("*.svg"):
+        text = svg.read_text(encoding="utf-8")
+        assert not ABSOLUTE_SRC.search(text), f"{svg.name} fetches from another origin"
+        for danger in ("<script", "<foreignObject", "xlink:href", "@import"):
+            assert danger not in text, f"{svg.name} contains {danger}"
 
 
 @pytest.mark.parametrize("name", BRAND_SERVED)
@@ -160,9 +196,15 @@ def test_the_first_run_screen_ships_the_mark():
     assert any("/unbagged-logo.svg" in b.read_text(encoding="utf-8") for b in bundles)
 
 
-@pytest.mark.parametrize("name", [n for n in BRAND_SERVED if n.endswith((".svg", ".png"))])
+@pytest.mark.parametrize("name", BRAND_SERVED)
 def test_served_brand_assets_carry_no_content_credential_manifest(name):
-    """The sources are 90-94% C2PA manifest; the served copies must not be.
+    """The sources carry a C2PA manifest; the served copies must not.
+
+    Every served asset, `.ico` included. It was excluded here at first on the
+    grounds that it carries no manifest — true today, and an assumption about a
+    file `resources/build_icons.py` regenerates from PNGs that do carry one. The
+    `.ico` is also the asset fetched on every page load, so it is the last one
+    that should go unchecked.
 
     Inert, but the favicon is fetched on every page load, and the manifest also
     names c2pa.org — a host this app otherwise never mentions. `make brand`

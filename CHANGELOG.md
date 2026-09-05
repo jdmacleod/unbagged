@@ -72,9 +72,8 @@ from a specific response. See `CONTRIBUTING.md`.
   against the real download in a browser. It exports what is on screen, filters
   included.
 
-## [Unreleased]
-
 ### Fixed
+
 
 - **The favicon and logo never appeared, because the assets were never wired to
   anything.** They were committed to `resources/` in a commit named "add the
@@ -85,15 +84,62 @@ from a specific response. See `CONTRIBUTING.md`.
   in the suite noticed, because nothing asserted the app has a favicon at all.
 
   The tab now carries the mark (`.ico` plus an SVG for browsers that take one,
-  and an apple-touch-icon), and the first-run screen carries it once — the only
-  surface `DESIGN.md` leaves open to illustration, and it is gone the moment a
-  report loads.
+  and an apple-touch-icon), and the first-run screen carries it once. That
+  needed `DESIGN.md` to change: it banned illustration outright, and the first
+  version of this claimed a first-run exception the file did not contain. The
+  ban is now scoped to surfaces carrying report data, with the tab and the
+  empty state named as exceptions in a dated decisions row.
 
   `make brand` produces the served copies from the sources, stripping a C2PA
-  content-credential manifest that is 90-94% of each file: 21.6 KB of provenance
-  record that would otherwise be fetched on every page load, and which named
-  `c2pa.org` in a build that references no other host. `make brand-check` runs in
-  CI and compares both directions, so a hand-copied source or a stray file fails.
+  content-credential manifest that is most of each file: 93% and 90% of the two
+  SVGs and 64% of the touch icon. The `.ico` carries none and ships as authored,
+  which is now asserted rather than assumed — it is a container of complete PNG
+  streams, and the sources it could have been assembled from each carry a `caBX`
+  chunk. Not a bandwidth argument: this is a local-first app served over
+  loopback, where transfer cost is not a cost. The reason is that the manifest
+  names `c2pa.org` and carries a provenance record, in a build whose README
+  promises it reaches no other host.
+
+  `make brand-check` runs in CI and compares both directions, so a hand-copied
+  source or a stray file fails. It also asserts a property of the bytes rather
+  than only equality with what is committed: both sides of an equality check run
+  through the same stripper, so equality alone would stay green forever if the
+  stripper silently stopped matching. One `<metadata id="...">` from an editor
+  that writes attributes was enough. The served SVGs are checked for more than
+  metadata: they are navigable same-origin documents, so a `<script>`,
+  a `<foreignObject>`, an inline event handler or an off-origin `href` in the
+  artwork would run in the app's origin. The realistic way one arrives is an
+  optimiser round-trip on the logo, not an attacker; the artwork is clean, and
+  nothing had been enforcing that it stays clean.
+
+  Four ways it could have shipped a manifest anyway, each now closed and each
+  with a test that fails without the fix:
+
+  - A **symlink** under `frontend/public/` was invisible. `Path.rglob` yields a
+    symlinked directory but does not descend it, so `public/vendor ->
+    ../../resources` reported "4 served asset(s) match their sources" while
+    Vite, which stats through symlinks, copied every raw source into the build.
+    The walk now follows links and reports the link itself.
+  - **Any unrecognised suffix** was shipped verbatim: the `.ico` pass-through
+    was the `else` branch for everything, so a `.webp` or `.jpg` added to the
+    served set would have shipped its EXIF and XMP with the check green. It is
+    an allowlist now, and anything else stops the build.
+  - **`make brand` could not produce a green tree.** It reported a stray to
+    stderr and exited 0, and the repair text named `make brand`, which writes
+    the served files and removes nothing. It exits non-zero now and says so.
+  - **PNG comparison was byte-for-byte**, which made the check a function of
+    whichever zlib the local Pillow wheel bundles: anyone on a platform with no
+    wheel hit permanent drift on a file they never touched. It compares decoded
+    pixels and chunk types now, which also let the exact `pillow==12.3.0` pin go
+    back to a floor. That pin had frozen the dev and CI environment out of
+    security updates for a library that parses images inside user-supplied PDFs.
+
+  The strip itself was rebuilding each PNG from `tobytes()` to make it lossless
+  by construction. It was lossy instead: `Image.frombytes` attaches a default
+  palette to what `tobytes()` returned as palette indices, so a paletted icon
+  came back black, and tRNS transparency went the same way. Today's touch icon
+  is RGB and was safe by accident. Copying and emptying `info` keeps the palette
+  and drops the manifest.
 
 ## [0.11.0] - 2026-09-05
 

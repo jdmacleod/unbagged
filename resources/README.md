@@ -48,10 +48,21 @@ Browsers that support SVG favicons take the second line and scale the small mark
 
 ```bash
 pip install cairosvg pillow
-python3 build_icons.py
+python3 build_icons.py   # regenerate the rasters in this directory
+make brand               # refresh the served copies in frontend/public/
 ```
 
 Edit the SVGs, never the PNGs.
+
+Both steps are needed. This directory holds the sources; `frontend/public/` holds
+what the app actually serves, with the C2PA content-credential manifest stripped
+— 90-93% of each SVG and 64% of the touch icon, on a favicon fetched every page
+load. `make brand-check` runs in CI and fails if the two fall out of step or if a
+file appears in `frontend/public/` that no source produces, so stopping after
+`build_icons.py` gets you a red build.
+
+The HTML above is what `frontend/index.html` declares; a test asserts every href
+there resolves to a shipped file, so change the two together.
 
 ## Notes on the small variant
 

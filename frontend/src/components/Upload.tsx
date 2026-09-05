@@ -85,11 +85,13 @@ export function Upload({
     <Spine margin={prominent ? undefined : <span />}>
       {prominent && (
         <div className="mt-8 mb-5">
-          {/* The one place the mark appears in the app, and the only surface
-              DESIGN.md leaves open to it: illustration is forbidden on the
-              reading surface, and this screen has no report on it yet. It
-              greets at the door and is gone the moment data loads; identity
-              persists in the tab from there. Decorative, so it is hidden from
+          {/* The one place the mark appears in the app. DESIGN.md bans
+              illustration on any surface carrying report data and names two
+              exceptions — the tab and this screen — in its 2026-09-05
+              decisions row. That row was written after this shipped, because
+              review caught the comment asserting a permission the design
+              system had never granted. It greets at the door and is gone the
+              moment data loads; identity persists in the tab from there. Decorative, so it is hidden from
               assistive technology — the heading below says the same thing in
               words.
 
