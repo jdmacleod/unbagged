@@ -226,3 +226,35 @@ def test_the_served_assets_match_what_their_sources_produce():
     from tools import build_brand
 
     assert build_brand.run(check=True) == 0
+
+
+def test_the_build_inlines_nothing_as_a_data_url():
+    """A `data:` URI in the bundle would be blocked by the shipped CSP.
+
+    `api.py` serves `img-src 'self'` with no `data:`, because the app loads no
+    data URLs and allowing them would widen the directive that most limits what
+    injected markup can pull in. `vite.config.ts` sets `assetsInlineLimit: 0` so
+    none can appear.
+
+    This is the guard on that setting. Raise the limit again and a small
+    imported asset silently becomes a data URL that the browser refuses to load,
+    on whichever view happens to use it. Neither the fast test job (which never
+    builds the frontend) nor the container sweep (which only sees views it
+    traverses) would reliably catch that. This fails here instead, at build time,
+    naming the cause.
+    """
+    offenders = []
+    for path in sorted(STATIC.rglob("*")):
+        if not path.is_file() or path.suffix not in {".html", ".css", ".js"}:
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        # `data:` inside a JS string literal is not a fetched resource; what
+        # matters is a URL the browser is asked to load. Both forms Vite emits
+        # for an inlined asset are covered: url(data:...) in CSS, and a bare
+        # data: URI assigned in HTML or as a module's default export.
+        if "url(data:" in text or 'src="data:' in text or "href=\"data:" in text:
+            offenders.append(path.relative_to(ROOT).as_posix())
+    assert not offenders, (
+        f"built assets carry a data: URL, which img-src 'self' blocks: {offenders}. "
+        "Check assetsInlineLimit in vite.config.ts."
+    )

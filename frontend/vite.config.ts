@@ -11,8 +11,17 @@ export default defineConfig({
     outDir: "../src/unbagged/static",
     emptyOutDir: true,
     // No CDN requests, ever: a request to a third party leaks usage timing, and
-    // the app has to work with the network cable pulled out.
-    assetsInlineLimit: 4096,
+    // the app has to work with the network cable pulled out. That guarantee
+    // comes from importing nothing external, not from this setting.
+    //
+    // 0, not Vite's default 4096. An inlined asset becomes a `data:` URI, and
+    // the Content-Security-Policy in api.py serves `img-src 'self'` with no
+    // `data:` — the app loads none today, and allowing them would widen the
+    // directive that most limits what injected markup can pull in. At 0 every
+    // asset stays a same-origin file under /assets, which the policy already
+    // permits. tests/test_frontend_build.py asserts no data: URI survives the
+    // build, so raising this again fails there rather than in a browser.
+    assetsInlineLimit: 0,
   },
   server: {
     // 0.0.0.0 only inside a container; the compose file publishes it on

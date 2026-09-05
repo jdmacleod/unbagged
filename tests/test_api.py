@@ -930,3 +930,202 @@ class TestStaticRouteTraversal:
         assert response.content == b"\x00\x00\x01\x00ICONDATA"
         assert response.text != "INDEX"
         assert "html" not in response.headers.get("content-type", "")
+
+
+class TestSecurityHeaders:
+    """Every response carries the policy, on all three paths the app answers on.
+
+    The app serves JSON from API routes, hashed bundles from a StaticFiles mount
+    and everything else through a FileResponse handler. A header set per route
+    would cover whichever path its author was thinking about; these assert all
+    three, plus the error responses, which are the ones most easily missed
+    because they are produced by exception handlers rather than by a route.
+
+    The last test in this class is the load-bearing one: it builds an app
+    without `add_security_headers` and asserts the headers are absent. Without
+    it, everything above would pass just as happily against a middleware that
+    had been deleted, which is the shape this repository has shipped before.
+    """
+
+    @pytest.fixture
+    def served(self, tmp_path, monkeypatch):
+        """A static bundle served by an app wired the way production is.
+
+        Deliberately mirrors `TestStaticRouteTraversal.served`: the fast test
+        job never builds the frontend, so `api.app` has no static routes there
+        and this is the only way to exercise a FileResponse in it.
+        """
+        static = tmp_path / "static"
+        (static / "assets").mkdir(parents=True)
+        (static / "index.html").write_text("INDEX")
+        (static / "assets" / "app.js").write_text("APP_JS")
+        (static / "favicon.ico").write_bytes(b"\x00\x00\x01\x00ICONDATA")
+
+        monkeypatch.setenv(api.STATIC_DIR_ENV, str(static))
+        from fastapi import FastAPI
+
+        app = FastAPI()
+        api.add_security_headers(app)
+        assert api.mount_frontend(app), "the frontend did not mount"
+        return TestClient(app)
+
+    @staticmethod
+    def _assert_carries(response):
+        assert response.headers.get("content-security-policy") == (
+            api.CONTENT_SECURITY_POLICY
+        ), response.headers
+        assert response.headers.get("x-content-type-options") == "nosniff"
+
+    def test_a_json_response_carries_them(self, client):
+        response = client.get("/api/health")
+        assert response.status_code == 200
+        self._assert_carries(response)
+
+    def test_a_400_carries_them(self, client):
+        # An empty upload. Produced by an exception handler, not a route.
+        response = client.post(
+            "/api/requests", files={"files": ("empty.txt", b"", "text/plain")}
+        )
+        assert response.status_code == 400
+        self._assert_carries(response)
+
+    def test_a_404_carries_them(self, client):
+        response = client.get("/api/requests/999")
+        assert response.status_code == 404
+        self._assert_carries(response)
+
+    def test_a_response_with_no_body_carries_them(self, client, uploaded):
+        # 204 takes a different path through the response machinery than any
+        # response that writes bytes.
+        response = client.delete(f"/api/requests/{uploaded['request_id']}")
+        assert response.status_code == 204
+        self._assert_carries(response)
+
+    def test_a_served_asset_carries_them(self, served):
+        response = served.get("/favicon.ico")
+        assert response.status_code == 200
+        assert response.content == b"\x00\x00\x01\x00ICONDATA"
+        self._assert_carries(response)
+
+    def test_the_spa_shell_carries_them(self, served):
+        # The fallback branch: a client-side route the bundle has no file for.
+        response = served.get("/some/client/side/route")
+        assert response.text == "INDEX"
+        self._assert_carries(response)
+
+    def test_the_assets_mount_carries_them(self, served):
+        # StaticFiles is a sub-application, so it is the path most likely to be
+        # missed by anything that decorates routes rather than wrapping the app.
+        response = served.get("/assets/app.js")
+        assert response.status_code == 200
+        assert response.text == "APP_JS"
+        self._assert_carries(response)
+
+    def test_the_policy_allows_nothing_inline_and_no_data_urls(self):
+        """The built output needs neither, so the policy grants neither.
+
+        `'unsafe-inline'` would undo most of what a CSP is for. `data:` on
+        `img-src` is the usual first concession and is not needed here:
+        `vite.config.ts` sets `assetsInlineLimit: 0`, so no asset becomes a
+        data URL, and `tests/test_frontend_build.py` asserts that stays true.
+        """
+        policy = api.CONTENT_SECURITY_POLICY
+        assert "unsafe-inline" not in policy
+        assert "unsafe-eval" not in policy
+        assert "data:" not in policy
+        for directive in (
+            "default-src 'self'",
+            "img-src 'self'",
+            "object-src 'none'",
+            "base-uri 'none'",
+            "frame-ancestors 'none'",
+            "form-action 'none'",
+        ):
+            assert directive in policy, directive
+
+    def test_a_response_that_sets_its_own_policy_ends_up_with_one(self):
+        """Browsers enforce the intersection of every policy they are given.
+
+        Two copies is not twice the protection; it is a second policy that has
+        to agree with the first. Nothing in the app sets its own today, so
+        asserting on a live response would prove nothing — this drives the
+        middleware directly against a response that does, which is the branch
+        that would otherwise never be exercised.
+        """
+        import anyio
+
+        async def emits_its_own(scope, receive, send):
+            await send({
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [
+                    (b"content-type", b"text/plain"),
+                    (b"content-security-policy", b"default-src *"),
+                ],
+            })
+            await send({"type": "http.response.body", "body": b""})
+
+        sent = []
+
+        async def record(message):
+            sent.append(message)
+
+        async def drive():
+            await api.SecurityHeaders(emits_its_own)(
+                {"type": "http"}, None, record
+            )
+
+        anyio.run(drive)
+
+        headers = sent[0]["headers"]
+        names = [k.lower() for k, _ in headers]
+        assert names.count(b"content-security-policy") == 1
+        assert dict(headers)[b"content-security-policy"] == (
+            api.CONTENT_SECURITY_POLICY.encode()
+        )
+        # The response's own unrelated headers survive.
+        assert (b"content-type", b"text/plain") in headers
+
+    def test_a_websocket_scope_passes_straight_through(self):
+        """Only HTTP responses have headers to decorate.
+
+        Without the scope check the middleware would wrap a non-HTTP scope and
+        look for a message type that never arrives.
+        """
+        import anyio
+
+        seen = {}
+
+        async def inner(scope, receive, send):
+            seen["scope"] = scope
+            seen["send"] = send
+
+        async def sentinel(message):
+            pass
+
+        anyio.run(
+            lambda: api.SecurityHeaders(inner)(
+                {"type": "websocket"}, None, sentinel
+            )
+        )
+        assert seen["scope"]["type"] == "websocket"
+        # Handed the original send, not a wrapper.
+        assert seen["send"] is sentinel
+
+    def test_an_app_without_the_middleware_has_no_headers(self, tmp_path, monkeypatch):
+        """The negative case, so the assertions above cannot pass vacuously.
+
+        Remove `add_security_headers` and every other test in this class fails.
+        Without this one, they would all pass against a deleted middleware.
+        """
+        static = tmp_path / "static"
+        static.mkdir()
+        (static / "index.html").write_text("INDEX")
+        monkeypatch.setenv(api.STATIC_DIR_ENV, str(static))
+        from fastapi import FastAPI
+
+        bare = FastAPI()
+        assert api.mount_frontend(bare)
+        response = TestClient(bare).get("/")
+        assert response.headers.get("content-security-policy") is None
+        assert response.headers.get("x-content-type-options") is None
