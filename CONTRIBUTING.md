@@ -198,6 +198,44 @@ Adding a retailer should not require editing anything outside its own package,
 apart from one import line in `src/unbagged/adapters/__init__.py`. If it does,
 that is a bug in the abstraction — please open an issue.
 
+## Cutting a release
+
+Distribution is `git clone` and `docker compose up`, so a release is a tag and a
+GitHub release page. Nothing is published to PyPI or a container registry: the
+compatibility contract is read against your database rather than a code API, and
+a prebuilt image would ask people to trust a binary in a project whose whole
+pitch is that they can read every line first.
+
+    git tag -s v0.13.0 -m "unbagged 0.13.0"
+    git push origin v0.13.0
+
+That is the whole procedure. `.github/workflows/release.yml` fires on the tag,
+runs `tools/release_notes.py`, and creates the release from the CHANGELOG
+section for that version.
+
+The notes are **extracted, never retyped**. Release notes written again at tag
+time are a second description of the same release, and the two drift — usually
+toward the notes being cheerier than the record, because one is written to
+announce and the other to remember.
+
+Three ways the workflow refuses, each of which would otherwise publish quietly:
+
+| Refusal | Why it matters |
+|---|---|
+| the tag names a version `CHANGELOG.md` does not describe | a release nobody can read |
+| `VERSION` disagrees with the tag | the app reports `__version__` from that file, so the running software would name a version that was never released |
+| the section exists but is empty | same as the first, with a heading |
+
+So bump `VERSION` and write the CHANGELOG section **before** tagging. The tag
+ruleset blocks deletion and non-fast-forward updates, so a tag cut from a bad
+commit cannot be quietly moved — it has to be superseded by a new version.
+
+Tags are signed. `git config gpg.format ssh` and `user.signingkey` are set
+repo-locally; the public half is registered on GitHub as a *signing* key, which
+is a separate entry from an authentication key. A signature is how someone
+checks that the source they cloned is the source you published, which is the
+claim this project asks people to take on trust.
+
 ## Style
 
 `ruff` for lint and format, 100-column lines, Python 3.12. `make lint` and `make test`
