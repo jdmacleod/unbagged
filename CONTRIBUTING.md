@@ -165,6 +165,12 @@ photograph a real database even by accident. Your own instance on :8420 is
 bind-mounted to `./data` and is exactly what must not appear in a screenshot.
 The PII scanner cannot read a PNG, so this is the control that replaces it.
 
+It rewrites all five images every run, and the PNG bytes are not stable across
+runs even when nothing about the view changed. Compare the pixels before you
+commit — `ImageChops.difference(a, b).getbbox()` returning `None` means the only
+thing that moved was zlib, and the file should be left alone. Committing those
+is churn that makes a real screenshot change hard to spot in a diff.
+
 ## Validating against your own report
 
 You will want to. Do it locally:
