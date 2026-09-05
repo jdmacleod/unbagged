@@ -3,6 +3,7 @@ import { api } from "../api";
 import { useAsync } from "../components/useAsync";
 import { Aside, Empty, ErrorBox, Spine, Spinner } from "../components/ui";
 import { number } from "../format";
+import { canvasMeasure, downloadSvg, indexSvg } from "../export";
 import type { IndexEntry, IndexTier, ProductIndex as Index } from "../types";
 
 /**
@@ -200,6 +201,12 @@ function IndexBody({
 
           <InlineLegend tiers={data.tiers} />
 
+          {/* Under the index rather than beside the filters: it acts on what the
+              filters produced, so it belongs after the thing it saves. */}
+          <div className="mt-4">
+            <SaveIndex data={data} />
+          </div>
+
           {data.truncated && (
             <p className="num mt-4 max-w-[62ch] text-[11.5px] text-faint">
               Showing {number(data.limit)} of {number(data.product_count)} products.
@@ -232,6 +239,56 @@ function IndexBody({
  * fact the response contains and it is otherwise invisible, and the same mark
  * opens Profile, Compliance, Compare and Prices. Recorded rather than lost.
  */
+/**
+ * Save the index as a file, built here rather than fetched or rasterised.
+ *
+ * SVG, not PNG: this page is a field of type, so an image of it should be text.
+ * The result is selectable, searchable, scales to a wall print, weighs tens of
+ * KB instead of several MB, and — the reason it is not html2canvas — needs no
+ * library in a build that vendors everything and asserts it loads nothing from
+ * another origin. See `export.ts`.
+ *
+ * Exports what is on screen, filters and all. Exporting the unfiltered index
+ * from a filtered view would hand the reader a file that does not match the
+ * page they asked to save.
+ */
+function SaveIndex({ data }: { data: Index }) {
+  const [saved, setSaved] = useState(false);
+  if (data.products.length === 0) return null;
+
+  const coverage = () => {
+    const seen = data.products.flatMap((p) => [p.first_seen, p.last_seen]).filter(Boolean);
+    if (seen.length === 0) return "";
+    return `${seen.reduce((a, b) => (a < b ? a : b)).slice(0, 7)} \u2192 ${seen
+      .reduce((a, b) => (a > b ? a : b))
+      .slice(0, 7)}`;
+  };
+
+  function save() {
+    const svg = indexSvg(
+      data.products.map((p) => ({ description: p.description, tier: p.tier })),
+      {
+        retailer: "Everything you bought",
+        productCount: data.product_count,
+        coverage: coverage(),
+      },
+      canvasMeasure(),
+    );
+    downloadSvg(svg, "product-index.svg");
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  return (
+    <button
+      onClick={save}
+      className="rounded-[2px] border border-line px-3 py-1.5 hover:bg-sunken"
+    >
+      {saved ? "Saved" : "Save as an image"}
+    </button>
+  );
+}
+
 function Headline({ data }: { data: Index }) {
   return (
     <div className="flex items-baseline gap-5">

@@ -4,18 +4,6 @@ Deferred work, with the measurement that justified deferring it. Each item
 carries enough context to be picked up cold.
 
 
-## Product index: export the portrait as an image
-
-**What:** Let the reader save the index as an image.
-
-**Why:** Fits the local-first framing. Deferred by the CEO review on 2026-09-03,
-carried forward here unchanged.
-
-**Cons:** Adds a canvas dependency to a build that vendors everything, and the
-zero-external-requests rule has to be weighed first.
-
-**Depends on:** The index shipping.
-
 ---
 
 ## Resolved
@@ -134,3 +122,26 @@ same day. Kept as a record of what changed and why, not as open work.*
   genuinely holding something back, measured against the rendered box so
   wrapping counts, and the letter was already behind a "Draft a follow-up"
   button before this change.
+
+*The product index export shipped on 2026-09-05.*
+
+- **The index saves as an image, with no new dependency.** The filing's one
+  stated con was that this "adds a canvas dependency to a build that vendors
+  everything, and the zero-external-requests rule has to be weighed first". It
+  does not need one. The index is a field of type, so the image is an SVG of
+  text rather than a rasterised screenshot: the browser measures the strings, a
+  greedy line-breaker places them at their five tier sizes, and the result is a
+  self-contained document. 399 products came out at 36 KB. The whole feature
+  cost 2.3 KB of bundle; html2canvas alone is around fifty times that, and its
+  entire job is re-implementing text layout slightly wrong.
+
+  The output is text, so it is selectable, searchable, scales to a wall print,
+  and references nothing it would have to fetch — asserted both in the unit
+  tests and against the real saved file in the browser tier. Fonts are named,
+  not embedded, which is the same accepted variance `DESIGN.md` already records
+  for the display serif: on the machine that produced the file, which is where a
+  local-first tool's output lives, it renders identically.
+
+  It exports what is on screen, filters included. Exporting the unfiltered index
+  from a filtered view would hand the reader a file that does not match the page
+  they asked to save.

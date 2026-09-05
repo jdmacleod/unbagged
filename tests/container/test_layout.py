@@ -35,8 +35,11 @@ Skips loudly without the browser: `pip install -e ".[dev,browser]"` then
 
 from __future__ import annotations
 
+import base64
 import json
+import re
 import shutil
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -358,5 +361,76 @@ class TestMonthRailNavigates:
                 f"{month_key}"
             )
             assert page.locator('a[aria-current="true"][href^="#month-"]').count() == 1
+        finally:
+            page.close()
+
+
+@requires_docker
+class TestIndexExport:
+    """The saved index has to be a file a browser will open as an image.
+
+    The unit tests cover the string this builds; nothing there can tell whether
+    the result is a well-formed document, because checking that in vitest would
+    mean adding jsdom to a feature whose entire justification is that it adds no
+    dependency. So the check lives here, where a real browser decodes it.
+    """
+
+    def _save(self, page, seeded_app):
+        page.goto(f"{seeded_app}/?tab=products&r=1", wait_until="networkidle")
+        with page.expect_download() as caught:
+            page.get_by_role("button", name="Save as an image").click()
+        download = caught.value
+        target = Path(tempfile.mkdtemp()) / (download.suggested_filename or "index.svg")
+        download.save_as(target)
+        return target
+
+    def test_the_file_decodes_as_an_image(self, browser, seeded_app):
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
+        try:
+            saved = self._save(page, seeded_app)
+            data_url = "data:image/svg+xml;base64," + base64.b64encode(
+                saved.read_bytes()
+            ).decode()
+            size = page.evaluate(
+                """url => new Promise(resolve => {
+                    const img = new Image();
+                    img.onload = () => resolve({w: img.naturalWidth, h: img.naturalHeight});
+                    img.onerror = () => resolve(null);
+                    img.src = url;
+                })""",
+                data_url,
+            )
+            assert size is not None, "the browser refused to decode the saved file"
+            assert size["w"] > 0 and size["h"] > 0, size
+            # An index of several hundred products is a tall document; a height
+            # that collapsed to the heading would mean the entries never laid out.
+            assert size["h"] > 400, f"the saved index is only {size['h']}px tall"
+        finally:
+            page.close()
+
+    def test_it_contains_the_products_it_claims_to(self, browser, seeded_app):
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
+        try:
+            saved = self._save(page, seeded_app)
+            svg = saved.read_text(encoding="utf-8")
+            on_screen = page.locator("main a[href*='tab=timeline']").count()
+            written = svg.count("<text")
+            # Two <text> nodes are the heading and its subtitle.
+            assert written - 2 >= on_screen > 0, (
+                f"{on_screen} entries on screen, {written - 2} in the file — an index "
+                "of everything you bought must not quietly drop entries"
+            )
+        finally:
+            page.close()
+
+    def test_the_saved_file_fetches_nothing(self, browser, seeded_app):
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
+        try:
+            svg = self._save(page, seeded_app).read_text(encoding="utf-8")
+            without_namespace = re.sub(r'xmlns="[^"]*"', "", svg)
+            assert "http://" not in without_namespace
+            assert "https://" not in without_namespace
+            for ref in ("<image", "xlink:href", "@import", "url("):
+                assert ref not in svg, f"the saved index references {ref}"
         finally:
             page.close()

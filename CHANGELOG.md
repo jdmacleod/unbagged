@@ -60,6 +60,18 @@ from a specific response. See `CONTRIBUTING.md`.
   without touching the control, and the control appears only when the collapsed
   box is actually holding something back.
 
+### Added
+
+- **The product index saves as an image.** SVG of text, not a rasterised
+  screenshot: the page is a field of type, so the file is selectable,
+  searchable, scales to a wall print, and came out at 36 KB for 399 products.
+  It needs no library — the obvious route is html2canvas, which is around fifty
+  times the 2.3 KB this cost and re-implements text layout slightly wrong, in a
+  build that vendors everything and asserts it loads nothing from another
+  origin. The saved file references nothing it would have to fetch, asserted
+  against the real download in a browser. It exports what is on screen, filters
+  included.
+
 ## [0.11.0] - 2026-09-05
 
 ### Changed
