@@ -23,6 +23,25 @@ from a specific response. See `CONTRIBUTING.md`.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/
 
+## [Unreleased]
+
+### Changed
+
+- **The SPA route serves from an allowlist built at startup, not a path built
+  per request.** Same behaviour, different construction: every file in the
+  bundle is mapped once from its request path to the `Path` that serves it, so a
+  request selects an entry rather than assembling one. Nothing to validate,
+  because nothing is built. The containment check that used to run per request
+  now runs over the map as it is built — still load-bearing, and asserted:
+  remove it and the symlink case in `TestStaticRouteTraversal` fails.
+
+  This also clears three `py/path-injection` alerts that CodeQL raised against
+  the old form. They were false positives — the old guard blocked all thirteen
+  traversal vectors the tests cover — but CodeQL does not model
+  `Path.is_relative_to` as a sanitizer, and rewriting the check as
+  `try/except relative_to` did not satisfy it either. Cutting the taint at its
+  source did.
+
 ## [0.11.0] - 2026-09-05
 
 ### Changed

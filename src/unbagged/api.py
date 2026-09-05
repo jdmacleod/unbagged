@@ -298,20 +298,51 @@ def mount_frontend(application: FastAPI = app) -> bool:
     with no payoff for a single local user.
     """
     directory = static_dir()
-    if not (directory / "index.html").is_file():
+    root = directory.resolve()
+    if not (root / "index.html").is_file():
         return False
 
-    if (directory / "assets").is_dir():
+    if (root / "assets").is_dir():
         application.mount(
-            "/assets", StaticFiles(directory=directory / "assets"), name="assets"
+            "/assets", StaticFiles(directory=root / "assets"), name="assets"
         )
+
+    # Every file the bundle contains, mapped from its request path to the Path
+    # that serves it. The request then only *selects* an entry, so no path is
+    # ever built out of user input — the handler below has nothing to validate
+    # because it constructs nothing.
+    #
+    # `is_file()` follows symlinks, so a link inside the bundle pointing out of
+    # it reads as a perfectly good file and would be served. Each entry is
+    # therefore resolved and checked for containment here. That is the same
+    # guard the handler used to run per request, moved to startup where it runs
+    # on paths that came from the filesystem rather than from a request. It is
+    # not decoration: without it this map serves the link's target, which is a
+    # real traversal escape and the one no static analyser has ever flagged. The
+    # symlink case in TestStaticRouteTraversal is what caught it.
+    #
+    # The bundle is written at image build time and does not change under a
+    # running container, so reading it once is a fact about the image rather
+    # than a cache. Hashed assets never reach this map at all: /assets is a
+    # StaticFiles mount that reads the filesystem per request. What remains here
+    # is index.html and any root-level file a build emits beside it, so a new
+    # one added while `make serve` is running needs a restart to be served.
+    servable: dict[str, Path] = {}
+    for candidate in root.rglob("*"):
+        if not candidate.is_file():
+            continue
+        resolved = candidate.resolve()
+        if resolved.is_relative_to(root):
+            servable[candidate.relative_to(root).as_posix()] = resolved
+    shell = root / "index.html"
 
     @application.get("/{path:path}", include_in_schema=False)
     def spa(path: str) -> FileResponse:
-        candidate = (directory / path).resolve()
-        if path and candidate.is_file() and candidate.is_relative_to(directory.resolve()):
-            return FileResponse(candidate)
-        return FileResponse(directory / "index.html")
+        target = servable.get(path)
+        if target is not None:
+            return FileResponse(target)
+        # Anything else is a client-side route, so the shell answers it.
+        return FileResponse(shell)
 
     return True
 
