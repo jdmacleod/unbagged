@@ -230,11 +230,34 @@ So bump `VERSION` and write the CHANGELOG section **before** tagging. The tag
 ruleset blocks deletion and non-fast-forward updates, so a tag cut from a bad
 commit cannot be quietly moved — it has to be superseded by a new version.
 
-Tags are signed. `git config gpg.format ssh` and `user.signingkey` are set
-repo-locally; the public half is registered on GitHub as a *signing* key, which
-is a separate entry from an authentication key. A signature is how someone
-checks that the source they cloned is the source you published, which is the
-claim this project asks people to take on trust.
+### Signatures
+
+Tags are signed, and `.github/allowed_signers` is what lets you check one:
+
+    git config gpg.ssh.allowedSignersFile .github/allowed_signers
+    git verify-tag v0.12.0
+    # Good "git" signature for ... with ED25519 key SHA256:...
+
+GitHub verifies independently and shows a Verified badge either way. The file
+matters for the case where someone has cloned the repository and wants to check
+a release without asking GitHub to vouch for it — which is the whole claim this
+project makes, so it should be checkable without a third party.
+
+`tools/check_signers.py` runs in CI and asserts every tag still verifies against
+that file. It **fails when there are no tags**, rather than verifying an empty
+set and reporting success; `actions/checkout` fetches no tags unless asked, and
+a check that passes on nothing is the shape this repository has shipped four
+times (issue #32).
+
+Rotating a key means **adding** a line, never replacing one. Tags already signed
+have to keep verifying, and they can never be re-signed: the tag ruleset blocks
+deletion and non-fast-forward. Remove a key and you orphan every tag it signed,
+which is exactly what `check_signers.py` will tell you.
+
+To sign as a new maintainer: set `gpg.format ssh` and `user.signingkey` locally,
+register the public half on GitHub as a **Signing** key (a separate entry from
+an authentication key), and add yourself to `.github/allowed_signers` with
+`namespaces="git"`.
 
 ## Style
 
