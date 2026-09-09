@@ -300,6 +300,15 @@ export default function App() {
                   // otherwise name a response that no longer exists, and `?q=`
                   // would keep filtering a timeline that just changed under it.
                   go({ request: null, query: null, label: null });
+                  // And the upload panel, for the same reason one line up. It
+                  // survives the uploader that made it now, which is the point
+                  // — but removing the last response drops the reader back to
+                  // the first-run screen, and a panel there reading "Read as
+                  // H Mart · 108 visits" describes a response that was just
+                  // deleted. Cleared on any removal rather than only when it
+                  // names the one removed: after a deliberate delete, a "just
+                  // read" panel is noise either way.
+                  setLastUpload(null);
                   requests.reload();
                 }}
               />
