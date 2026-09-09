@@ -7,7 +7,12 @@ expect when a real response arrives.
 
 from __future__ import annotations
 
-from unbagged.adapters.base import AdapterError, ParseResult, SourceBundle
+from unbagged.adapters.base import (
+    AdapterError,
+    ParseResult,
+    SniffResult,
+    SourceBundle,
+)
 
 RETAILER_ID = "safeway"
 DISPLAY_NAME = "Safeway"
@@ -20,11 +25,19 @@ class SafewayAdapter:
     # 0 means "no format has been observed yet". Bump to 1 with the first parse.
     schema_version = SCHEMA_VERSION
 
-    def sniff(self, bundle: SourceBundle) -> float:
+    def sniff(self, bundle: SourceBundle) -> SniffResult:
         # Deliberately never claims a bundle. Recognising Safeway's format
         # without being able to parse it would take the response away from the
         # generic fallback, which can at least record what is missing.
-        return 0.0
+        #
+        # The zero carries its reason rather than travelling alone: "nobody has
+        # written this yet" and "this is not a Safeway response" are different
+        # facts, and a bare score reports them identically.
+        return SniffResult(
+            0.0,
+            "The Safeway adapter has not been written yet, so this response was "
+            "read by the generic fallback instead.",
+        )
 
     def parse(self, bundle: SourceBundle) -> ParseResult:
         raise AdapterError(

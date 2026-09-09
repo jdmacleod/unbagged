@@ -147,7 +147,16 @@ class TestStubs:
     def test_a_stub_never_claims_a_bundle(self, adapter, tmp_path):
         # Winning a sniff() it cannot honour would take the response away from
         # the fallback, which can at least record what is missing.
-        assert adapter.sniff(bundle(tmp_path, LETTER)) == 0.0
+        outcome = adapter.sniff(bundle(tmp_path, LETTER))
+        assert outcome.confidence == 0.0
+
+    @pytest.mark.parametrize("adapter", [SafewayAdapter(), HMartAdapter()])
+    def test_a_stub_says_why_it_declined(self, adapter, tmp_path):
+        # "Nobody has written this yet" and "this is not that retailer" are
+        # different facts. A bare zero reports them identically; the reason is
+        # what keeps them apart.
+        outcome = adapter.sniff(bundle(tmp_path, LETTER))
+        assert "has not been written yet" in outcome.reason
 
     @pytest.mark.parametrize("adapter", [SafewayAdapter(), HMartAdapter()])
     def test_a_stub_explains_itself_when_called_directly(self, adapter, tmp_path):

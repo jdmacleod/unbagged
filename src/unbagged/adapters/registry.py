@@ -9,9 +9,10 @@ a Safeway response.
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 
-from unbagged.models import RetailerAdapter, SourceBundle
+from unbagged.models import RetailerAdapter, SniffResult, SourceBundle
 
 log = logging.getLogger(__name__)
 
@@ -34,6 +35,10 @@ def is_fallback(adapter: RetailerAdapter) -> bool:
 class Match:
     adapter: RetailerAdapter
     confidence: float
+    #: Why the adapter scored what it did, when it had something to say. Almost
+    #: always None: a score that speaks for itself does not need explaining. The
+    #: case it exists for is a bounded read that ran out before it could decide.
+    reason: str | None = None
 
     @property
     def is_confident(self) -> bool:
@@ -63,18 +68,37 @@ class AdapterRegistry:
     def score(self, bundle: SourceBundle) -> list[Match]:
         """Every adapter's confidence, best first.
 
+        `sniff()` may return a bare float or a `SniffResult` carrying a reason;
+        both are normalised here, so an adapter with nothing to explain keeps
+        returning a number and nothing about it changes.
+
         `sniff()` must not raise, but an adapter that does raise must not take the
         upload down with it: a broken third-party adapter would otherwise make
         every report unparseable. It scores zero and is logged.
+
+        Every step of reading the adapter's answer stays inside the try, not just
+        the call: an adapter that returns a string, `None`, or a malformed result
+        is as broken as one that raises, and coercing it outside the guard would
+        take the upload down by the back door.
         """
         matches = []
         for adapter in self.all():
+            confidence, reason = 0.0, None
             try:
-                confidence = float(adapter.sniff(bundle))
+                outcome = adapter.sniff(bundle)
+                if isinstance(outcome, SniffResult):
+                    confidence, reason = float(outcome.confidence), outcome.reason
+                else:
+                    confidence = float(outcome)
+                # NaN compares false against everything, so it survives the clamp
+                # below and then sorts arbitrarily — an adapter could win or lose
+                # the contest at random with nothing on screen to show for it.
+                if not math.isfinite(confidence):
+                    raise ValueError(f"non-finite confidence {confidence!r}")
             except Exception:
                 log.exception("adapter %s raised in sniff()", adapter.retailer_id)
-                confidence = 0.0
-            matches.append(Match(adapter, max(0.0, min(1.0, confidence))))
+                confidence, reason = 0.0, None
+            matches.append(Match(adapter, max(0.0, min(1.0, confidence)), reason))
         return sorted(matches, key=lambda m: (-m.confidence, m.adapter.retailer_id))
 
     def select(self, bundle: SourceBundle) -> Match | None:

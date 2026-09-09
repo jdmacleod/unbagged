@@ -62,14 +62,14 @@ tests/test_<retailer>_adapter.py
 ## The protocol
 
 ```python
-from unbagged.adapters.base import ParseResult, SourceBundle
+from unbagged.adapters.base import ParseResult, SniffResult, SourceBundle
 
 class MyAdapter:
     retailer_id = "example"       # stable; it is a database value
     display_name = "Example Mart"
     schema_version = 1            # bump when the retailer changes their format
 
-    def sniff(self, bundle: SourceBundle) -> float:
+    def sniff(self, bundle: SourceBundle) -> float | SniffResult:
         """Confidence 0.0-1.0. Must be cheap and must not raise."""
 
     def parse(self, bundle: SourceBundle) -> ParseResult:
@@ -101,7 +101,16 @@ whatever the form said.
 
 `sniff()` must not raise. The registry catches anyway and scores a raising
 adapter zero, because one broken adapter must not make every report unparseable
-— but do not rely on that.
+— but do not rely on that. The same guard covers a nonsense *return*: a score
+the registry cannot read is treated exactly like one that raised.
+
+**Returning a reason.** A bare float is the normal answer and most adapters give
+one. Return `SniffResult(confidence, reason)` when the number does not speak for
+itself — above all when your read is bounded and the bound was reached before you
+could decide. A budget spent looking is not the same answer as "this is not my
+format", and scoring both 0.0 tells the person holding the file that their
+response is unrecognised when the truth is that nobody finished looking at it.
+The reason may reach them, so write it for a person.
 
 If you are writing a fallback rather than a retailer, set `fallback = True`. The
 registry only consults fallbacks when no real adapter scores above zero.

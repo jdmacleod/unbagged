@@ -300,14 +300,40 @@ class AdapterError(Exception):
     """Raised by parse() with a message that can be shown to the user verbatim."""
 
 
+@dataclass(frozen=True)
+class SniffResult:
+    """A confidence, and optionally why.
+
+    A bare score has nowhere to say *"I stopped looking"*. An adapter whose read
+    is bounded — and a read that decides ownership has to be bounded, or choosing
+    an adapter costs a full parse of every candidate — can exhaust its budget
+    before it finds what it needs. That scores 0.0, which is the same number as
+    "this is plainly somebody else's format", and the two are not the same fact.
+    The person holding the file is the one who cannot tell them apart.
+
+    `sniff()` may still return a plain float, and most do: the reason is for the
+    cases that have one. See `registry.score()`, which accepts either.
+    """
+
+    confidence: float
+    #: Written for a person, not a log line — it may reach the uploader.
+    reason: str | None = None
+
+
 class RetailerAdapter(Protocol):
     retailer_id: str        # "kroger"
     display_name: str       # "Kroger"
     schema_version: int     # bump when the retailer changes their format
 
-    def sniff(self, bundle: SourceBundle) -> float:
+    def sniff(self, bundle: SourceBundle) -> float | SniffResult:
         """Confidence 0.0-1.0 that this adapter handles this bundle.
-        Must be cheap and must not raise. The registry picks the highest scorer."""
+
+        Must be cheap and must not raise. The registry picks the highest scorer.
+
+        Return a bare float when the score speaks for itself. Return a
+        `SniffResult` when it does not — above all when a bounded read gave up
+        before it could decide, because that is not the same answer as "not my
+        format" and must not be reported as one."""
 
     def parse(self, bundle: SourceBundle) -> ParseResult:
         """Full parse. May raise AdapterError with a user-readable message."""
