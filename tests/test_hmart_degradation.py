@@ -222,3 +222,31 @@ class TestABundleWithMoreThanOneSheet:
             "Workbook",
             "Second",
         }
+
+    def test_a_companion_file_that_could_not_be_read_is_named(self, tmp_path):
+        # extract_all drops an unreadable document and logs it server-side. The
+        # report then looks complete while part of the upload is missing from
+        # it, and the person holding the files is the only one who can say
+        # whether the missing one mattered.
+        broken = doc(tmp_path, sheet(HEADER)[:80], "half.xls")
+        theirs = doc(
+            tmp_path,
+            sheet(HEADER + row("c", "2024-01-01 09:00:00.0", "b", "10.00", "10")),
+            "history.xls",
+        )
+        parsed = HMartAdapter().parse(SourceBundle(documents=(broken, theirs)))
+        assert len(parsed.transactions) == 1
+        assert any(
+            "half.xls could not be read at all" in w.message for w in parsed.warnings
+        )
+
+    def test_a_companion_file_with_no_spreadsheet_in_it_is_named(self, tmp_path):
+        notes = doc(tmp_path, "Dear customer, thank you for writing.\n", "notes.txt")
+        theirs = doc(
+            tmp_path,
+            sheet(HEADER + row("c", "2024-01-01 09:00:00.0", "b", "10.00", "10")),
+            "history.xls",
+        )
+        parsed = HMartAdapter().parse(SourceBundle(documents=(notes, theirs)))
+        assert len(parsed.transactions) == 1
+        assert any("notes.txt was read but holds no" in w.message for w in parsed.warnings)

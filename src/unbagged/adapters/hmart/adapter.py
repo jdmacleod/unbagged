@@ -137,9 +137,33 @@ class HMartAdapter:
         entry point.
         """
         warnings = WarningCollector()
-        documents = [
-            document for document in extract_all(bundle.documents) if document.tables
-        ]
+        extracted = extract_all(bundle.documents)
+        documents = [document for document in extracted if document.tables]
+
+        # Every file the person uploaded is accounted for, out loud.
+        #
+        # `extract_all` drops a document it cannot read and logs it server-side,
+        # and the filter above drops one that read but holds no sheets. Both are
+        # reasonable on their own and both are invisible: the report then looks
+        # complete while part of the upload is missing from it. Which file, and
+        # why, is the reader's business — they are the only person who can say
+        # whether the missing one mattered.
+        readable = {document.filename for document in extracted}
+        for source in bundle.documents:
+            if source.original_filename not in readable:
+                warnings.add(
+                    f"{source.original_filename} could not be read at all, so "
+                    "nothing from it is in this report.",
+                    locator=source.original_filename,
+                )
+        for document in extracted:
+            if not document.tables:
+                warnings.add(
+                    f"{document.filename} was read but holds no spreadsheet, so "
+                    "nothing from it is in this report.",
+                    locator=document.filename,
+                )
+
         if not documents:
             raise AdapterError(
                 "None of the uploaded files could be read as a spreadsheet. The "
