@@ -10,7 +10,10 @@ import {
 /** A predictable stand-in for the browser: every glyph is half the font size. */
 const measure = (text: string, size: number) => text.length * size * 0.5;
 
-const entry = (description: string, tier = 1): ExportEntry => ({ description, tier });
+const entry = (description: string, tier = 1): ExportEntry => ({
+  description,
+  tier,
+});
 
 describe("layoutIndex", () => {
   it("packs entries onto a line until the measure runs out", () => {
@@ -25,7 +28,9 @@ describe("layoutIndex", () => {
   it("never drops an entry, whatever the width", () => {
     // An index of everything you bought that quietly omits something is a lie
     // of omission, so the count out must equal the count in.
-    const entries = Array.from({ length: 137 }, (_, i) => entry(`ITEM ${i}`, (i % 5) + 1));
+    const entries = Array.from({ length: 137 }, (_, i) =>
+      entry(`ITEM ${i}`, (i % 5) + 1),
+    );
     const { lines } = layoutIndex(entries, measure);
     expect(lines.flatMap((l) => l.items)).toHaveLength(137);
   });
@@ -35,13 +40,18 @@ describe("layoutIndex", () => {
       [entry("SHORT"), entry("X".repeat(400), 5), entry("ALSO SHORT")],
       measure,
     );
-    const alone = lines.find((l) => l.items.some((i) => i.description.length === 400));
+    const alone = lines.find((l) =>
+      l.items.some((i) => i.description.length === 400),
+    );
     expect(alone!.items).toHaveLength(1);
   });
 
   it("makes a line as tall as its tallest entry", () => {
     // A line holding a 48px name must not be squeezed to the 13px one beside it.
-    const { lines } = layoutIndex([entry("BIG", 5), entry("small", 1)], measure);
+    const { lines } = layoutIndex(
+      [entry("BIG", 5), entry("small", 1)],
+      measure,
+    );
     expect(lines[0].height).toBeCloseTo(48 * DEFAULTS.lineHeight);
   });
 
@@ -50,7 +60,9 @@ describe("layoutIndex", () => {
     // on-screen index fixed with an em-based margin.
     const { lines } = layoutIndex([entry("A", 5), entry("B", 5)], measure);
     const [first, second] = lines[0].items;
-    expect(second.x - (first.x + measure("A", 48))).toBeCloseTo(48 * DEFAULTS.gapEm);
+    expect(second.x - (first.x + measure("A", 48))).toBeCloseTo(
+      48 * DEFAULTS.gapEm,
+    );
   });
 
   it("handles an empty index without inventing a line", () => {
@@ -74,7 +86,11 @@ describe("escapeXml", () => {
 });
 
 describe("indexSvg", () => {
-  const meta = { retailer: "Kroger", productCount: 3, coverage: "2024-02 → 2026-01" };
+  const meta = {
+    retailer: "Kroger",
+    productCount: 3,
+    coverage: "2024-02 → 2026-01",
+  };
 
   // No DOMParser here on purpose. Adding jsdom to check the output of a feature
   // whose whole justification is "no dependency" would be a poor trade, and the
@@ -84,7 +100,7 @@ describe("indexSvg", () => {
   const textNodes = (svg: string) => svg.match(/<text\b/g) ?? [];
 
   it("survives a product name full of markup characters", () => {
-    const svg = indexSvg([entry('M&M\'S 5" <BIG>')], meta, measure);
+    const svg = indexSvg([entry("M&M'S 5\" <BIG>")], meta, measure);
     expect(svg).toContain("M&amp;M'S 5&quot; &lt;BIG&gt;");
     // The raw forms must not survive, or the document is malformed.
     expect(svg).not.toContain("<BIG>");
@@ -109,7 +125,9 @@ describe("indexSvg", () => {
   });
 
   it("writes every entry into the document", () => {
-    const entries = Array.from({ length: 60 }, (_, i) => entry(`ITEM${i}`, (i % 5) + 1));
+    const entries = Array.from({ length: 60 }, (_, i) =>
+      entry(`ITEM${i}`, (i % 5) + 1),
+    );
     const svg = indexSvg(entries, meta, measure);
     // Two of the text nodes are the heading and its subtitle.
     expect(textNodes(svg)).toHaveLength(62);

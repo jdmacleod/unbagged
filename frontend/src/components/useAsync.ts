@@ -7,7 +7,10 @@ type State<T> = { data: T | null; error: string | null; loading: boolean };
  * against its own origin, and a cache layer would be more code than the code it
  * manages.
  */
-export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]): State<T> & {
+export function useAsync<T>(
+  fn: () => Promise<T>,
+  deps: unknown[],
+): State<T> & {
   reload: () => void;
 } {
   const [state, setState] = useState<State<T>>({
@@ -26,7 +29,8 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]): State<T> & {
         if (!cancelled) setState({ data, error: null, loading: false });
       })
       .catch((error: Error) => {
-        if (!cancelled) setState({ data: null, error: error.message, loading: false });
+        if (!cancelled)
+          setState({ data: null, error: error.message, loading: false });
       });
     return () => {
       cancelled = true;

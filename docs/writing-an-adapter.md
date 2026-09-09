@@ -187,6 +187,54 @@ fallback follows this rule and is worth reading as an example.
 that should *not* be scored as failures: the 12-month lookback with its
 supplemental-request path, and a refusal on verification grounds.
 
+## When the response is a table, not text
+
+`extraction.py` hands you one of two things. A PDF or a text file arrives as
+`pages`; a spreadsheet arrives as `tables`, and `text` renders those on demand so
+code that only wants words never has to know the difference.
+
+A `Table` is a sheet: `rows`, the size the sheet declares of itself, and
+`locator(row, column)` for the A1 cell reference this guide has always promised
+you as a locator. A `Row` places every cell at the column it declares:
+
+```python
+for table in extracted.tables:
+    for row in table.rows:
+        amount = row.value(4)                      # 1-based, None if absent
+        where = table.locator(row.number, 4)       # "Workbook!D4"
+```
+
+Three things about that will bite you if you write your own reader instead.
+
+**Cells are placed, not appended.** SpreadsheetML omits empty cells and marks
+the next present one with `ss:Index` naming its real column. Appending in
+encounter order shifts every value after a gap one column left, and the header
+row stays dense so matching headers by name does not save you — the damage is in
+the data rows. `ss:Index` appears on rows too, where it moves the row number
+instead.
+
+**Map columns by header name, never by position.** A column that moves then
+makes your `sniff()` decline, which is loud. Reading the next column along is
+silent, and silence is how a rounded value ends up in a money field.
+
+**`page` may be None.** A spreadsheet has no printed pages, so `Cite` falls back
+to the locator. Do not invent a `1`; a cell reference is a better citation than a
+page number that does not exist.
+
+### A bounded read that gives up is not a rejection
+
+`extract(document, max_pages=n)` bounds *rows* for a tabular document, and the
+reader also stops on a byte budget so a document whose preamble never reaches a
+row cannot cost a full parse. If your read is bounded, say so when it runs out:
+
+```python
+if extracted.spent_budget:
+    return SniffResult(0.0, "…so no header row was reached.")
+```
+
+A budget spent looking and a file that is somebody else's format both score
+0.0, and the person holding the file is the one who cannot tell them apart.
+
 ## Fixtures
 
 ```bash

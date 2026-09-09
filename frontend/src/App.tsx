@@ -143,10 +143,12 @@ export default function App() {
     // to fill a 27-inch display, because a document does not. See DESIGN.md.
     <div className="mx-auto min-h-screen max-w-[64rem] bg-page px-6 py-10 sm:px-12">
       <header>
-        <h1 className="font-serif text-[26px] leading-none font-semibold">unbagged</h1>
+        <h1 className="font-serif text-[26px] leading-none font-semibold">
+          unbagged
+        </h1>
         <p className="mt-2 max-w-[62ch] text-muted">
-          Read what the grocery store knows about you. Everything here stays on this
-          machine.
+          Read what the grocery store knows about you. Everything here stays on
+          this machine.
         </p>
       </header>
 
@@ -287,8 +289,8 @@ export default function App() {
 
       <footer className="mt-10 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-rule pt-4 text-[11.5px] text-faint">
         <span className="max-w-[62ch]">
-          unbagged reports what a response contained and what it did not. It is not
-          legal advice, and it never sends anything anywhere.
+          unbagged reports what a response contained and what it did not. It is
+          not legal advice, and it never sends anything anywhere.
         </span>
         <Version />
       </footer>

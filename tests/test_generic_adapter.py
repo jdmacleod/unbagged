@@ -7,7 +7,6 @@ import pytest
 
 import unbagged.adapters  # noqa: F401  (registers everything)
 from unbagged.adapters.generic.adapter import GenericAdapter
-from unbagged.adapters.hmart.adapter import HMartAdapter
 from unbagged.adapters.registry import registry
 from unbagged.adapters.safeway.adapter import SafewayAdapter
 from unbagged.models import (
@@ -143,14 +142,16 @@ class TestGenericParse:
 
 
 class TestStubs:
-    @pytest.mark.parametrize("adapter", [SafewayAdapter(), HMartAdapter()])
+    # H Mart left this list when its adapter was written. Safeway is the only
+    # stub now, and the shape of these tests is what a stub has to satisfy.
+    @pytest.mark.parametrize("adapter", [SafewayAdapter()])
     def test_a_stub_never_claims_a_bundle(self, adapter, tmp_path):
         # Winning a sniff() it cannot honour would take the response away from
         # the fallback, which can at least record what is missing.
         outcome = adapter.sniff(bundle(tmp_path, LETTER))
         assert outcome.confidence == 0.0
 
-    @pytest.mark.parametrize("adapter", [SafewayAdapter(), HMartAdapter()])
+    @pytest.mark.parametrize("adapter", [SafewayAdapter()])
     def test_a_stub_says_why_it_declined(self, adapter, tmp_path):
         # "Nobody has written this yet" and "this is not that retailer" are
         # different facts. A bare zero reports them identically; the reason is
@@ -158,12 +159,12 @@ class TestStubs:
         outcome = adapter.sniff(bundle(tmp_path, LETTER))
         assert "has not been written yet" in outcome.reason
 
-    @pytest.mark.parametrize("adapter", [SafewayAdapter(), HMartAdapter()])
+    @pytest.mark.parametrize("adapter", [SafewayAdapter()])
     def test_a_stub_explains_itself_when_called_directly(self, adapter, tmp_path):
         with pytest.raises(AdapterError, match="not been written yet"):
             adapter.parse(bundle(tmp_path, LETTER))
 
-    @pytest.mark.parametrize("adapter", [SafewayAdapter(), HMartAdapter()])
+    @pytest.mark.parametrize("adapter", [SafewayAdapter()])
     def test_a_stub_declares_schema_version_zero(self, adapter):
         # 0 means "no format observed yet"; the first real parse bumps it to 1.
         assert adapter.schema_version == 0

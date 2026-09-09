@@ -10,11 +10,7 @@ export function Empty({ children }: { children: ReactNode }) {
 }
 
 export function Spinner({ label = "Loading" }: { label?: string }) {
-  return (
-    <p className="px-4 py-8 text-center text-muted">
-      {label}…
-    </p>
-  );
+  return <p className="px-4 py-8 text-center text-muted">{label}…</p>;
 }
 
 export function ErrorBox({ error }: { error: string }) {
@@ -49,12 +45,16 @@ export function Spine({
   children: ReactNode;
 }) {
   const content = (
-    <div className={`min-w-0 ${marginFirst ? "lg:col-start-1 lg:row-start-1" : ""}`}>
+    <div
+      className={`min-w-0 ${marginFirst ? "lg:col-start-1 lg:row-start-1" : ""}`}
+    >
       {children}
     </div>
   );
   const aside = (
-    <div className={`hidden lg:block ${marginFirst ? "lg:col-start-2 lg:row-start-1" : ""}`}>
+    <div
+      className={`hidden lg:block ${marginFirst ? "lg:col-start-2 lg:row-start-1" : ""}`}
+    >
       {margin}
     </div>
   );

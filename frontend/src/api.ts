@@ -25,10 +25,14 @@ export class ApiError extends Error {
   }
 }
 
-async function get<T>(path: string, params?: Record<string, string | number | undefined>) {
+async function get<T>(
+  path: string,
+  params?: Record<string, string | number | undefined>,
+) {
   const url = new URL(BASE + path, window.location.origin);
   for (const [key, value] of Object.entries(params ?? {})) {
-    if (value !== undefined && value !== "") url.searchParams.set(key, String(value));
+    if (value !== undefined && value !== "")
+      url.searchParams.set(key, String(value));
   }
   const response = await fetch(url);
   if (!response.ok) throw new ApiError(await detail(response), response.status);
@@ -52,10 +56,17 @@ export const api = {
   adapters: () => get<{ adapters: AdapterInfo[] }>("/adapters"),
   requests: () => get<{ requests: RequestMeta[] }>("/requests"),
   request: (id: number) =>
-    get<RequestMeta & { warnings: unknown[]; documents: unknown[] }>(`/requests/${id}`),
+    get<RequestMeta & { warnings: unknown[]; documents: unknown[] }>(
+      `/requests/${id}`,
+    ),
   timeline: (
     id: number,
-    filters: { store?: string; date_from?: string; date_to?: string; q?: string } = {},
+    filters: {
+      store?: string;
+      date_from?: string;
+      date_to?: string;
+      q?: string;
+    } = {},
   ) => get<Timeline>(`/requests/${id}/timeline`, filters),
   transaction: (txnId: number) => get<BasketDetail>(`/transactions/${txnId}`),
   profile: (id: number) => get<Profile>(`/requests/${id}/profile`),
@@ -69,19 +80,30 @@ export const api = {
     id: number,
     filters: { q?: string; min_purchases?: number } = {},
   ) => get<ProductIndex>(`/requests/${id}/product-index`, filters),
-  followUpLetter: (id: number) => get<FollowUpLetter>(`/requests/${id}/follow-up-letter`),
+  followUpLetter: (id: number) =>
+    get<FollowUpLetter>(`/requests/${id}/follow-up-letter`),
 
-  async upload(files: File[], declaredRetailer?: string): Promise<UploadResult> {
+  async upload(
+    files: File[],
+    declaredRetailer?: string,
+  ): Promise<UploadResult> {
     const form = new FormData();
     for (const file of files) form.append("files", file);
     if (declaredRetailer) form.append("declared_retailer", declaredRetailer);
-    const response = await fetch(`${BASE}/requests`, { method: "POST", body: form });
-    if (!response.ok) throw new ApiError(await detail(response), response.status);
+    const response = await fetch(`${BASE}/requests`, {
+      method: "POST",
+      body: form,
+    });
+    if (!response.ok)
+      throw new ApiError(await detail(response), response.status);
     return (await response.json()) as UploadResult;
   },
 
   async deleteRequest(id: number): Promise<void> {
-    const response = await fetch(`${BASE}/requests/${id}`, { method: "DELETE" });
-    if (!response.ok) throw new ApiError(await detail(response), response.status);
+    const response = await fetch(`${BASE}/requests/${id}`, {
+      method: "DELETE",
+    });
+    if (!response.ok)
+      throw new ApiError(await detail(response), response.status);
   },
 };

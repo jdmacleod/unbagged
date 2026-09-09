@@ -116,21 +116,31 @@ function TimelineBody({
   const currentMonth = useCurrentMonth(months, visible.length);
   const jumpTo = useMonthJump(revealThrough);
 
-  // A retailer that answered with a letter disclosed no purchases at all. The
-  // stat row used to render that as Visits 0 / Total spend $0.00, which reads
-  // as a fact about the retailer rather than the silence it actually was.
+  // Two branches, and collapsing them loses the second one.
+  //
+  // The first is a response with no purchases at all — a letter. The stat row
+  // used to render that as Visits 0 / Total spend $0.00, which reads as a fact
+  // about the retailer rather than the silence it actually was.
+  //
+  // The second, below, is a response that gave totals and no contents. It has
+  // real visits to plot, so it must NOT take this branch — but it still needs
+  // the sentence pointing at Compliance, which is the only route to that view
+  // anywhere in the app and is where a response like this is worth reading.
   if (!stats.disclosed) {
     return (
       <Spine margin={<Aside>no purchase data</Aside>}>
-        <h2 className="font-serif text-[17px] font-semibold">Nothing to show here</h2>
+        <h2 className="font-serif text-[17px] font-semibold">
+          Nothing to show here
+        </h2>
         <p className="mt-2 max-w-[62ch] text-muted">
           This response contained no purchase data, so there is nothing to plot.
           That is not the same as having made no purchases: the retailer did not
           disclose the specific pieces of personal information it holds.
         </p>
         <p className="mt-2 max-w-[62ch] text-muted">
-          The absence is recorded as a finding in the <strong>Compliance</strong>{" "}
-          view, which is where a response like this is worth reading.
+          The absence is recorded as a finding in the{" "}
+          <strong>Compliance</strong> view, which is where a response like this
+          is worth reading.
         </p>
       </Spine>
     );
@@ -201,6 +211,18 @@ function TimelineBody({
             <MonthRail months={months} current={currentMonth} onJump={jumpTo} />
           }
         >
+          {stats.lines_disclosed ? null : (
+            // Said once, above the roll, instead of 67 times inside it. Each
+            // row used to open onto this same sentence, which is a control
+            // that cannot pay out — the failure this view fixes elsewhere.
+            <p className="mb-4 max-w-[62ch] text-muted">
+              This retailer disclosed what each visit cost and never what was in
+              it. Every row below carries a date, a store and a total, and
+              nothing else. The absence is recorded as a finding in the{" "}
+              <strong>Compliance</strong> view, which is where a response like
+              this is worth reading.
+            </p>
+          )}
           <RunningHead
             months={months}
             current={currentMonth}
@@ -225,7 +247,9 @@ function TimelineBody({
                   // child too, and would take a row of its own.
                   monthKey={first ? month : null}
                   open={open === basket.id}
-                  onToggle={() => setOpen(open === basket.id ? null : basket.id)}
+                  onToggle={() =>
+                    setOpen(open === basket.id ? null : basket.id)
+                  }
                 />
               );
             })}
@@ -307,8 +331,20 @@ function StoreKey({ stats }: { stats: Stats }) {
   );
 }
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
 
 function monthLabel(iso: string) {
   const [y, m] = iso.slice(0, 7).split("-");
@@ -319,9 +355,15 @@ export type MonthEntry = {
   /** `YYYY-MM`, and the anchor id is `month-${key}`. */
   key: string;
   label: string;
+  /** What the bar is drawn from: summed line amounts, or — when no basket in
+   *  the month was itemised — summed stated totals. Never a mixture. */
   paid: number;
   saved: number;
+  /** Stated basket totals, kept separately so the two are never added. */
+  stated: number;
   visits: number;
+  itemised: number;
+  unitemised: number;
   /** Index into the *unsliced* basket list of the first visit in this month.
    *  The rail reveals through this before scrolling, because the roll renders
    *  25 rows at a time and an anchor that is not mounted scrolls nowhere. */
@@ -336,6 +378,59 @@ export type MonthEntry = {
  * order the rows do not have. `firstIndex` is captured on the month's first
  * sighting, which is what makes it an index into the list as rendered.
  */
+/** What the bars are drawn from, said out loud.
+ *
+ *  "paid" means summed line amounts everywhere else in the app. When no basket
+ *  in the response was itemised the bars carry summed STATED totals instead —
+ *  a different quantity — so the label changes with the figure rather than
+ *  keeping one word for two things.
+ */
+function barLabel(months: MonthEntry[]): string {
+  const anyItemised = months.some((m) => m.itemised > 0);
+  return anyItemised ? "paid, by month" : "spent, by month";
+}
+
+/** Every month from the first to the last, including the ones with no visit.
+ *
+ *  `monthIndex` emits only months that have a basket, which renders a run of
+ *  bars as if it were continuous: a 104-month window with 80 visits reads as 80
+ *  contiguous months and the 24 empty ones do not exist. A gap where you
+ *  stopped shopping is a thing a person remembers, and it was invisible.
+ */
+export function fillMonths(months: MonthEntry[]): MonthEntry[] {
+  if (months.length === 0) return months;
+  const by = new Map(months.map((m) => [m.key, m]));
+  const out: MonthEntry[] = [];
+  const [firstYear, firstMonth] = months[0].key.split("-").map(Number);
+  const [lastYear, lastMonth] = months[months.length - 1].key
+    .split("-")
+    .map(Number);
+  let year = firstYear;
+  let month = firstMonth;
+  while (year < lastYear || (year === lastYear && month <= lastMonth)) {
+    const key = `${year}-${String(month).padStart(2, "0")}`;
+    out.push(
+      by.get(key) ?? {
+        key,
+        label: monthLabel(`${key}-01T00:00:00`),
+        paid: 0,
+        saved: 0,
+        stated: 0,
+        visits: 0,
+        itemised: 0,
+        unitemised: 0,
+        firstIndex: -1,
+      },
+    );
+    month += 1;
+    if (month > 12) {
+      month = 1;
+      year += 1;
+    }
+  }
+  return out;
+}
+
 export function monthIndex(baskets: Basket[]): MonthEntry[] {
   const out: MonthEntry[] = [];
   const seen = new Map<string, MonthEntry>();
@@ -348,16 +443,45 @@ export function monthIndex(baskets: Basket[]): MonthEntry[] {
         label: monthLabel(basket.occurred_at),
         paid: 0,
         saved: 0,
+        stated: 0,
         visits: 0,
+        itemised: 0,
+        unitemised: 0,
         firstIndex: index,
       };
       seen.set(key, entry);
       out.push(entry);
     }
-    entry.paid += basket.paid_total ?? 0;
-    entry.saved += basket.saved_total ?? 0;
+    // A month draws from ONE quantity, never a sum of two.
+    //
+    // `?? 0` used to coalesce a null straight into the total, so a response
+    // with no disclosed lines summed to zero, the peak fell to its floor of 1,
+    // and every bar rendered at 0px under a heading reading "paid, by month" —
+    // no error, no empty state, a blank margin where the response's best asset
+    // should be.
+    //
+    // A month with both kinds of basket in it is the case nobody had defined.
+    // It draws from the itemised ones only and says how many visits it could
+    // not include, rather than adding a stated total to a summed one and
+    // presenting the result as a single figure.
+    if (basket.lines_disclosed) {
+      entry.paid += basket.paid_total ?? 0;
+      entry.saved += basket.saved_total ?? 0;
+      entry.itemised += 1;
+    } else {
+      entry.stated += basket.total_pre_discount ?? 0;
+      entry.unitemised += 1;
+    }
     entry.visits += 1;
   });
+  // A month is drawn from stated totals only when NONE of its baskets was
+  // itemised. Mixed months keep the summed figure and carry the count of what
+  // it leaves out.
+  for (const entry of out) {
+    if (entry.itemised === 0) {
+      entry.paid = entry.stated;
+    }
+  }
   return out;
 }
 
@@ -373,7 +497,10 @@ function Header({ stats }: { stats: Stats }) {
     <div className="flex flex-wrap items-baseline gap-x-8 gap-y-5">
       <div>
         <div className="text-[11.5px] tracking-[0.07em] text-muted uppercase">
-          Total paid
+          {/* "Paid" means summed line amounts everywhere else. With no lines
+              disclosed this carries the retailer's own stated totals, which is
+              a different quantity and says so rather than reusing the word. */}
+          {stats.lines_disclosed ? "Total paid" : "Total spent"}
         </div>
         <div className="font-serif text-[34px] leading-none font-semibold tabular-nums">
           {money(stats.total_paid)}
@@ -385,21 +512,41 @@ function Header({ stats }: { stats: Stats }) {
         ) : null}
       </div>
       <Figure label="Visits" value={number(stats.basket_count)} />
+      {/* When no lines were disclosed, two of these figures are em dashes and
+          the coverage window is the only remarkable thing on the line. Leaving
+          the order alone puts the reader's eye on two blanks and sets the
+          finding smaller than either of them, so the ranking follows the
+          content. The dashes keep their places and say why, in the note slot
+          this component already has. */}
+      {stats.lines_disclosed ? null : (
+        <Figure
+          label="Covered"
+          value={`${day(stats.first_visit)} → ${day(stats.last_visit)}`}
+        />
+      )}
       <Figure
         label="Products"
         value={number(stats.distinct_products)}
         note={
-          stats.zero_value_lines
-            ? `${number(stats.zero_value_lines)} lines name none`
-            : undefined
+          !stats.lines_disclosed
+            ? "not disclosed"
+            : stats.zero_value_lines
+              ? `${number(stats.zero_value_lines)} lines name none`
+              : undefined
         }
       />
-      <Figure label="Line items" value={number(stats.line_count)} />
       <Figure
-        label="Covered"
-        value={`${day(stats.first_visit)} → ${day(stats.last_visit)}`}
-        small
+        label="Line items"
+        value={number(stats.line_count)}
+        note={stats.lines_disclosed ? undefined : "not disclosed"}
       />
+      {stats.lines_disclosed ? (
+        <Figure
+          label="Covered"
+          value={`${day(stats.first_visit)} → ${day(stats.last_visit)}`}
+          small
+        />
+      ) : null}
     </div>
   );
 }
@@ -417,7 +564,9 @@ function Figure({
 }) {
   return (
     <div>
-      <div className="text-[11.5px] tracking-[0.07em] text-muted uppercase">{label}</div>
+      <div className="text-[11.5px] tracking-[0.07em] text-muted uppercase">
+        {label}
+      </div>
       <div
         className={
           small
@@ -443,13 +592,16 @@ function Figure({
 function FootingNote({ baskets }: { baskets: Basket[] }) {
   const off = baskets.filter(doesNotFoot);
   if (off.length === 0) return null;
-  const worst = Math.max(...off.map((b) => Math.abs(b.stated_pre_discount_delta ?? 0)));
+  const worst = Math.max(
+    ...off.map((b) => Math.abs(b.stated_pre_discount_delta ?? 0)),
+  );
   return (
     <p className="mt-5 max-w-[62ch] text-muted">
-      {number(off.length)} of {number(baskets.length)} baskets do not add up to the
-      shelf total the retailer stated for them, the largest by {money(worst)}. They
-      are marked below. The difference is in the response as it arrived, not in how
-      it was read, so there is nothing here to correct.
+      {number(off.length)} of {number(baskets.length)} baskets do not add up to
+      the shelf total the retailer stated for them, the largest by{" "}
+      {money(worst)}. They are marked below. The difference is in the response
+      as it arrived, not in how it was read, so there is nothing here to
+      correct.
     </p>
   );
 }
@@ -525,9 +677,15 @@ function useCurrentMonth(months: MonthEntry[], renderedCount: number) {
       setCurrent(
         currentMonthKey(
           months
-            .map((m) => ({ key: m.key, el: document.getElementById(`month-${m.key}`) }))
+            .map((m) => ({
+              key: m.key,
+              el: document.getElementById(`month-${m.key}`),
+            }))
             .filter((m): m is { key: string; el: HTMLElement } => m.el !== null)
-            .map((m) => ({ key: m.key, top: m.el.getBoundingClientRect().top })),
+            .map((m) => ({
+              key: m.key,
+              top: m.el.getBoundingClientRect().top,
+            })),
         ),
       );
     read();
@@ -603,79 +761,100 @@ function MonthRail({
   onJump: (month: MonthEntry) => void;
 }) {
   if (months.length === 0) return null;
-  const peak = Math.max(...months.map((m) => m.paid + m.saved), 1);
+  const filled = fillMonths(months);
+  const peak = Math.max(...filled.map((m) => m.paid + m.saved), 1);
+
+  // Grouped by year, one row each, with the year's months as ticks.
+  //
+  // A row per month was built for a two-year response and does not survive a
+  // longer one: at 23px a row, a 49-month response makes a rail over 1,100px
+  // tall, which is past every common viewport — and `sticky` on something
+  // taller than the viewport has nothing to stick to, so the months at the top
+  // scroll away and cannot be reached. The comment on the version this
+  // replaces names 1,000px as the failure point and was written expecting to
+  // reach it through touch-target height, not through row count.
+  //
+  // Grouping fixes the height and buys the gaps at the same time: a month with
+  // no visit is a tick with no bar, which is legible as "I stopped going" in a
+  // way that an absent row never was.
+  const years = new Map<string, MonthEntry[]>();
+  for (const month of filled) {
+    const year = month.key.slice(0, 4);
+    (years.get(year) ?? years.set(year, []).get(year)!).push(month);
+  }
+
   return (
     <div className="sticky top-4 pt-2">
       <div className="num border-b border-rule pb-1 text-[11.5px] text-faint">
-        paid, by month
+        {barLabel(months)}
       </div>
       <ol className="mt-2">
-        {months.map((month) => {
-          const here = month.key === current;
-          return (
-            <li key={month.key}>
-              {/* A link in a list, not a button. `@media (pointer: coarse)`
-                  puts a 44px floor under every button and exempts `a` inside
-                  `li`; at two years of months that is the difference between a
-                  rail that fits the margin and one over 1,000px tall on a
-                  tablet, where `sticky` then has nothing to stick. Same
-                  reasoning as the product index, and a real href is the right
-                  semantics for something that navigates. */}
-              <a
-                href={`#month-${month.key}`}
-                onClick={(e) => {
-                  // The href alone would scroll to a row the roll may not have
-                  // rendered yet, so the handler reveals first and then jumps.
-                  e.preventDefault();
-                  onJump(month);
-                }}
-                aria-current={here ? "true" : undefined}
-                title={`${month.label} · ${money(month.paid)} paid · ${number(
-                  month.visits,
-                )} visits`}
-                className={`group flex w-full items-center gap-2 py-[3px] text-left ${
-                  here ? "text-accent" : "text-faint hover:text-ink"
-                }`}
-              >
-                <span
-                  className={`num w-[3.25rem] shrink-0 text-[11.5px] ${
-                    here ? "font-semibold" : ""
-                  }`}
-                >
-                  {month.label}
-                </span>
-                <span aria-hidden className="flex h-[7px] min-w-0 flex-1 items-stretch">
-                  <span
-                    className={here ? "bg-accent" : "bg-ink/55 group-hover:bg-ink"}
-                    style={{ width: `${(month.paid / peak) * 100}%` }}
-                  />
-                  <span
-                    className="bg-line/45"
-                    style={{ width: `${(month.saved / peak) * 100}%` }}
-                  />
-                </span>
-              </a>
-            </li>
-          );
-        })}
+        {[...years].map(([year, entries]) => (
+          <li key={year} className="mb-2 flex items-end gap-2">
+            <span className="num w-[2.25rem] shrink-0 pb-[3px] text-[11.5px] text-faint">
+              {year}
+            </span>
+            <span className="flex h-[18px] min-w-0 flex-1 items-end gap-[2px]">
+              {entries.map((month) => {
+                const here = month.key === current;
+                const height = Math.round(
+                  ((month.paid + month.saved) / peak) * 16,
+                );
+                if (month.visits === 0) {
+                  // A month with no visit is not a missing row, it is a gap —
+                  // and a gap is the shape of a period you stopped shopping.
+                  return (
+                    <span
+                      key={month.key}
+                      aria-hidden
+                      title={`${month.label} · no visits`}
+                      className="block h-full flex-1 border-b border-rule"
+                    />
+                  );
+                }
+                return (
+                  <a
+                    key={month.key}
+                    href={`#month-${month.key}`}
+                    onClick={(e) => {
+                      // The href alone would scroll to a row the roll may not
+                      // have rendered yet, so the handler reveals first.
+                      e.preventDefault();
+                      onJump(month);
+                    }}
+                    aria-current={here ? "true" : undefined}
+                    aria-label={`Jump to ${month.label}`}
+                    title={`${month.label} · ${money(
+                      month.itemised > 0 ? month.paid : month.stated,
+                    )} · ${number(month.visits)} visits`}
+                    // A link in a list, not a button. `@media (pointer: coarse)`
+                    // puts a 44px floor under every button and exempts `a`
+                    // inside `li`; the same reasoning as the product index, and
+                    // a real href is the right semantics for something that
+                    // navigates. The rail is margin-only and the margin does
+                    // not exist below lg, so a coarse pointer meets the inline
+                    // chart instead.
+                    className="group flex h-full flex-1 items-end"
+                  >
+                    <span
+                      className={`block w-full ${
+                        here ? "bg-accent" : "bg-ink/55 group-hover:bg-ink"
+                      }`}
+                      style={{ height: `${Math.max(height, 2)}px` }}
+                    />
+                  </a>
+                );
+              })}
+            </span>
+          </li>
+        ))}
       </ol>
     </div>
   );
 }
 
 /**
- * Spend by month, below `lg`, where the margin and its rail do not exist.
- *
- * Hand-rolled rather than a chart library: the design calls for no frame, no
- * gridlines, no axis box and no legend, and fighting a charting library out of
- * its chrome is more work than a row of divs. It also removes a mount animation
- * that had to be suppressed for reduced-motion.
- *
- * Paid, not shelf. Plotting the pre-discount sum drew a spending history nobody
- * had: every bar stood taller than the month actually cost.
- *
- * Each bar is a button now. The picture was the only thing on this view that
- * showed the whole two years at once and the only thing you could not act on.
+ * The same months, inline, for widths where the margin does not exist.
  */
 function MonthChart({
   months,
@@ -687,21 +866,32 @@ function MonthChart({
   onJump: (month: MonthEntry) => void;
 }) {
   if (months.length === 0) return <Empty>Nothing to plot.</Empty>;
-  const peak = Math.max(...months.map((m) => m.paid + m.saved), 1);
+  const filled = fillMonths(months);
+  const peak = Math.max(...filled.map((m) => m.paid + m.saved), 1);
   return (
     <div>
-      <div className="num pb-1 text-[11.5px] text-faint">paid, by month</div>
+      <div className="num pb-1 text-[11.5px] text-faint">
+        {barLabel(months)}
+      </div>
       <div className="flex h-24 items-end gap-[3px] border-b border-rule">
-        {months.map((m) => (
+        {filled.map((m) => (
           <button
             key={m.key}
             onClick={() => onJump(m)}
             aria-current={m.key === current ? "true" : undefined}
             aria-label={`Jump to ${m.label}`}
             className="flex h-full flex-1 flex-col justify-end"
-            title={`${m.label} · ${money(m.paid)} paid${
-              m.saved > 0 ? `, ${money(m.saved)} saved` : ""
-            } · ${number(m.visits)} visits`}
+            title={
+              m.visits === 0
+                ? `${m.label} · no visits`
+                : `${m.label} · ${money(m.itemised > 0 ? m.paid : m.stated)}${
+                    m.saved > 0 ? `, ${money(m.saved)} saved` : ""
+                  } · ${number(m.visits)} visits${
+                    m.itemised > 0 && m.unitemised > 0
+                      ? ` · ${number(m.unitemised)} not itemised`
+                      : ""
+                  }`
+            }
           >
             {/* The saving sits above the paid amount, so the full bar height is
                 the shelf total. Both readings the response supports, one mark. */}
@@ -718,7 +908,9 @@ function MonthChart({
       </div>
       <div className="num flex justify-between pt-1.5 text-[11.5px] text-faint">
         <span>{months[0].key}</span>
-        {months.length > 2 && <span>{months[Math.floor(months.length / 2)].key}</span>}
+        {months.length > 2 && (
+          <span>{months[Math.floor(months.length / 2)].key}</span>
+        )}
         <span>{months[months.length - 1].key}</span>
       </div>
     </div>
@@ -751,8 +943,21 @@ function Filters({
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="product or UPC"
-          className={`${field} w-44 normal-case`}
+          disabled={!stats.lines_disclosed}
+          className={`${field} w-44 normal-case ${
+            stats.lines_disclosed ? "" : "cursor-not-allowed text-faint"
+          }`}
         />
+        {/* The filter matches line items, so with none disclosed it can only
+            ever return nothing — and "no results" reads as "you never bought
+            that" rather than "they never said". Left in place and disabled
+            rather than removed: a control that vanishes between retailers
+            reads as a bug, and the sentence is the finding. */}
+        {stats.lines_disclosed ? null : (
+          <span className="mt-1 block max-w-[22ch] text-[11.5px] normal-case text-faint">
+            No line items were disclosed, so there is nothing here to search.
+          </span>
+        )}
       </label>
       <label className={legend}>
         Store
@@ -805,9 +1010,14 @@ function BasketRow({
   open: boolean;
   onToggle: () => void;
 }) {
+  // Nothing was disclosed to reveal, so the row is a row rather than a
+  // control, and no request is made for contents that do not exist.
+  const revealable = basket.lines_disclosed;
+  const Element = revealable ? "button" : "div";
   const detail = useAsync<BasketDetail | null>(
-    () => (open ? api.transaction(basket.id) : Promise.resolve(null)),
-    [open, basket.id],
+    () =>
+      open && revealable ? api.transaction(basket.id) : Promise.resolve(null),
+    [open, revealable, basket.id],
   );
   const unreconciled = doesNotFoot(basket);
 
@@ -816,16 +1026,22 @@ function BasketRow({
       id={monthKey ? `month-${monthKey}` : undefined}
       // Clears the running head, which is sticky and would otherwise cover the
       // first row of the month a jump just landed on.
-      className="grid scroll-mt-12 grid-cols-[3.25rem_minmax(0,1fr)] gap-x-4 lg:scroll-mt-14 lg:grid-cols-[3.25rem_minmax(0,1fr)] lg:gap-x-12">
+      className="grid scroll-mt-12 grid-cols-[3.25rem_minmax(0,1fr)] gap-x-4 lg:scroll-mt-14 lg:grid-cols-[3.25rem_minmax(0,1fr)] lg:gap-x-12"
+    >
       {/* The month, printed once, hanging in its own column. */}
       <div className="font-serif text-[12.5px] text-faint">
         {month && <span className="block pt-2.5">{month}</span>}
       </div>
 
       <div className="min-w-0 border-b border-rule">
-        <button
-          onClick={onToggle}
-          aria-expanded={open}
+        {/* A row with no disclosed lines has nothing to reveal, so it is not a
+            button and carries no caret. Sixty-seven rows each opening onto the
+            same sentence is the failure this view already fixes elsewhere: a
+            control that cannot pay out. The fact is stated once above the roll
+            instead, and the app stops making a request per basket to find
+            nothing. Content, not chrome, decides which element this is. */}
+        <Element
+          {...(revealable ? { onClick: onToggle, "aria-expanded": open } : {})}
           // Wraps to two lines when the row cannot hold one. Measured at 375px
           // on a single line, the store column was squeezed to 0px and the page
           // scrolled sideways: 160px of that row is two fixed-width money
@@ -843,10 +1059,12 @@ function BasketRow({
           <span
             aria-hidden
             // text-line clears the 3:1 floor for a UI component. It is the only
-            // thing showing open/closed to a sighted user.
+            // thing showing open/closed to a sighted user. Kept as an empty
+            // span when there is nothing to open, so every row's columns still
+            // line up down the roll.
             className={`shrink-0 select-none text-line ${open ? "rotate-90" : ""}`}
           >
-            ›
+            {revealable ? "›" : "\u00a0"}
           </span>
           <span className="num shrink-0 text-[12.5px]">
             {dayAndTime(basket.occurred_at).slice(8)}
@@ -890,20 +1108,29 @@ function BasketRow({
                 className="shrink-0 text-muted underline decoration-dotted underline-offset-2"
                 title="These line items do not add up to the total the retailer stated for this basket. The difference is in the response as supplied, not in how it was read."
               >
-                {(basket.stated_pre_discount_delta ?? 0) > 0 ? "over" : "under"} by{" "}
-                {money(Math.abs(basket.stated_pre_discount_delta ?? 0))}
+                {(basket.stated_pre_discount_delta ?? 0) > 0 ? "over" : "under"}{" "}
+                by {money(Math.abs(basket.stated_pre_discount_delta ?? 0))}
               </span>
             )}
             <span className="num shrink-0 text-muted">
-              {number(basket.item_count)} items
+              {basket.lines_disclosed
+                ? `${number(basket.item_count)} items`
+                : ""}
             </span>
             {/* w-16 below sm: the widest amount here is about 53px of Iosevka,
                 so 80px was reserving space this row cannot spare on a phone. */}
             <span className="num w-16 shrink-0 text-right text-muted md:w-20">
-              {basket.saved_total > 0 ? `−${money(basket.saved_total)}` : ""}
+              {saving(basket.saved_total)}
             </span>
             <span className="num w-16 shrink-0 text-right font-semibold md:w-20">
-              {money(basket.paid_total)}
+              {/* The stated total when no lines were disclosed: it is the only
+                  real money in a response like that, and an em dash here would
+                  sit directly above a chart drawn from the same figure. */}
+              {money(
+                basket.lines_disclosed
+                  ? basket.paid_total
+                  : basket.total_pre_discount,
+              )}
             </span>
             {/* The citation rides the row at every width now. The margin
                 beside this roll holds the month rail, and a sticky rail and a
@@ -915,16 +1142,15 @@ function BasketRow({
                 "footnotes belong in the margin" has to be written down. */}
             <Cite provenance={basket.provenance} />
           </span>
-        </button>
+        </Element>
 
-        {open && (
+        {open && revealable && (
           <div className="pb-4">
             {detail.loading && <Spinner label="Opening the basket" />}
             {detail.data && <LineItems detail={detail.data} />}
           </div>
         )}
       </div>
-
     </div>
   );
 }
@@ -957,7 +1183,8 @@ function LineItems({ detail }: { detail: BasketDetail }) {
             // A row naming no product at zero cost is a placeholder in the
             // export, not something you bought. Shown, but marked.
             const placeholder =
-              item.description_raw === "UNKNOWN" && (item.retail_amt ?? 0) === 0;
+              item.description_raw === "UNKNOWN" &&
+              (item.retail_amt ?? 0) === 0;
             return (
               <tr
                 key={item.id}
@@ -977,7 +1204,9 @@ function LineItems({ detail }: { detail: BasketDetail }) {
                 <td className="num py-1.5 pr-3 text-[11.5px] text-faint">
                   {item.upc ?? "—"}
                 </td>
-                <td className="num py-1.5 text-right">{money(item.retail_amt)}</td>
+                <td className="num py-1.5 text-right">
+                  {money(item.retail_amt)}
+                </td>
                 <td className="num py-1.5 text-right font-semibold">
                   {money(item.paid_amt)}
                 </td>
@@ -997,9 +1226,15 @@ function LineItems({ detail }: { detail: BasketDetail }) {
             <td className="py-1.5" colSpan={2}>
               {number(detail.item_count)} lines
             </td>
-            <td className="num py-1.5 text-right">{money(detail.shelf_total)}</td>
-            <td className="num py-1.5 text-right">{money(detail.paid_total)}</td>
-            <td className="num py-1.5 text-right">{saving(detail.saved_total)}</td>
+            <td className="num py-1.5 text-right">
+              {money(detail.shelf_total)}
+            </td>
+            <td className="num py-1.5 text-right">
+              {money(detail.paid_total)}
+            </td>
+            <td className="num py-1.5 text-right">
+              {saving(detail.saved_total)}
+            </td>
           </tr>
         </tfoot>
       </table>
@@ -1010,15 +1245,15 @@ function LineItems({ detail }: { detail: BasketDetail }) {
         <p className="mt-2 max-w-[62ch] text-[11.5px] text-muted">
           {delta !== null && Math.abs(delta) >= FOOTING_TOLERANCE ? (
             <>
-              These lines add up to {money(detail.shelf_total)} before discounts; the
-              retailer states {money(stated)}, a difference of {money(Math.abs(delta))}.
-              Both figures come from the response as supplied and it does not
-              reconcile them.
+              These lines add up to {money(detail.shelf_total)} before
+              discounts; the retailer states {money(stated)}, a difference of{" "}
+              {money(Math.abs(delta))}. Both figures come from the response as
+              supplied and it does not reconcile them.
             </>
           ) : (
             <>
-              Matches the {money(stated)} the retailer states for this basket, before
-              discounts.
+              Matches the {money(stated)} the retailer states for this basket,
+              before discounts.
             </>
           )}
         </p>

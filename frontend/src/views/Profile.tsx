@@ -62,6 +62,29 @@ export function Profile({ requestId }: { requestId: number }) {
         )}
       </Movement>
 
+      {/* Said out loud rather than left as an absence.
+          Every inference section below is gated on having something to show, so
+          a response with none of them rendered one identity row and then simply
+          stopped — a page that ends early reads as a bug, and the reader has no
+          way to tell "they disclosed nothing" from "we could not read it". That
+          distinction is the one this whole app refuses to blur. */}
+      {mine.length === 0 && bought.length === 0 && unclear.length === 0 && (
+        <Movement
+          heading="What they worked out about you"
+          blurb="Nothing. This response carried no inferred attributes at all —
+                 no scores computed from your baskets, and nothing bought in
+                 from anywhere else."
+          count={0}
+          marginalia={<Aside>none disclosed</Aside>}
+        >
+          <Empty>
+            That is what the response contained, not what this tool could read.
+            A retailer that holds inferences and does not disclose them looks
+            exactly like this from here, which is itself worth knowing.
+          </Empty>
+        </Movement>
+      )}
+
       {mine.length > 0 && (
         <Movement
           heading="What they worked out by watching you"

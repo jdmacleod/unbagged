@@ -143,15 +143,18 @@ function IndexBody({
   if (!data.disclosed) {
     return (
       <Spine margin={<Aside>no purchase data</Aside>}>
-        <h2 className="font-serif text-[17px] font-semibold">Nothing to show here</h2>
+        <h2 className="font-serif text-[17px] font-semibold">
+          Nothing to show here
+        </h2>
         <p className="mt-2 max-w-[62ch] text-muted">
           This response contained no purchase data, so there are no products to
-          list. That is not the same as having bought nothing: the retailer did not
-          disclose the specific pieces of personal information it holds.
+          list. That is not the same as having bought nothing: the retailer did
+          not disclose the specific pieces of personal information it holds.
         </p>
         <p className="mt-2 max-w-[62ch] text-muted">
-          The absence is recorded as a finding in the <strong>Compliance</strong>{" "}
-          view, which is where a response like this is worth reading.
+          The absence is recorded as a finding in the{" "}
+          <strong>Compliance</strong> view, which is where a response like this
+          is worth reading.
         </p>
       </Spine>
     );
@@ -180,11 +183,16 @@ function IndexBody({
                 ? `No product name contains “${q}”.`
                 : minPurchases > 1
                   ? `No product was bought at least ${number(minPurchases)} times.`
-                  : "This response disclosed no products."}
+                  : data.lines_disclosed
+                    ? "This response disclosed no products."
+                    : "This retailer disclosed what each visit cost and never what was in it, so there are no products to list. What they did disclose is on the Timeline; what they did not is in Compliance."}
           </Empty>
         </Spine>
       ) : (
-        <Spine marginFirst margin={<Rail letters={letters} tiers={data.tiers} />}>
+        <Spine
+          marginFirst
+          margin={<Rail letters={letters} tiers={data.tiers} />}
+        >
           {/* Below lg the margin does not exist, so the rail comes inline as a
               strip. Without this the jump control and the legend simply vanish
               on a phone, which is how a fix has been silently lost here before. */}
@@ -209,9 +217,9 @@ function IndexBody({
 
           {data.truncated && (
             <p className="num mt-4 max-w-[62ch] text-[11.5px] text-faint">
-              Showing {number(data.limit)} of {number(data.product_count)} products.
-              The rest are in the response; this page stops here so it stays
-              readable.
+              Showing {number(data.limit)} of {number(data.product_count)}{" "}
+              products. The rest are in the response; this page stops here so it
+              stays readable.
             </p>
           )}
 
@@ -225,7 +233,9 @@ function IndexBody({
         </Spine>
       )}
 
-      {stopped.length > 0 && <Stopped entries={stopped} staleBefore={data.stale_before} />}
+      {stopped.length > 0 && (
+        <Stopped entries={stopped} staleBefore={data.stale_before} />
+      )}
     </div>
   );
 }
@@ -257,7 +267,9 @@ function SaveIndex({ data }: { data: Index }) {
   if (data.products.length === 0) return null;
 
   const coverage = () => {
-    const seen = data.products.flatMap((p) => [p.first_seen, p.last_seen]).filter(Boolean);
+    const seen = data.products
+      .flatMap((p) => [p.first_seen, p.last_seen])
+      .filter(Boolean);
     if (seen.length === 0) return "";
     return `${seen.reduce((a, b) => (a < b ? a : b)).slice(0, 7)} \u2192 ${seen
       .reduce((a, b) => (a > b ? a : b))
@@ -300,9 +312,9 @@ function Headline({ data }: { data: Index }) {
           of {number(data.total_products)} products you bought exactly once
         </h2>
         <p className="mt-0.5 max-w-[62ch] text-muted">
-          Two years of shopping, in the words the retailer files it under. Size is
-          how often you bought it, in five steps. Most of this page is a single
-          trip.
+          Two years of shopping, in the words the retailer files it under. Size
+          is how often you bought it, in five steps. Most of this page is a
+          single trip.
         </p>
       </div>
     </div>
@@ -444,10 +456,18 @@ function Block({
 }
 
 /** The thumb index and the size legend, in the margin, at lg and up. */
-function Rail({ letters, tiers }: { letters: Set<string>; tiers: IndexTier[] }) {
+function Rail({
+  letters,
+  tiers,
+}: {
+  letters: Set<string>;
+  tiers: IndexTier[];
+}) {
   return (
     <div className="sticky top-4 pt-2">
-      <div className="num border-b border-rule pb-1 text-[11.5px] text-faint">jump</div>
+      <div className="num border-b border-rule pb-1 text-[11.5px] text-faint">
+        jump
+      </div>
       <div className="num mt-2 flex flex-wrap gap-x-2 gap-y-0.5 text-[12px]">
         {["#", ...ALPHABET].map((letter) =>
           letters.has(letter) ? (
@@ -498,7 +518,13 @@ function StripRail({ letters }: { letters: Set<string> }) {
  * size is a mark nobody can read: the screen-reader path carries the count in
  * the accessible name, and everyone else was left guessing.
  */
-function Legend({ tiers, className = "" }: { tiers: IndexTier[]; className?: string }) {
+function Legend({
+  tiers,
+  className = "",
+}: {
+  tiers: IndexTier[];
+  className?: string;
+}) {
   return (
     <div className={className}>
       <div className="num text-[11.5px] text-faint">size = times bought</div>
@@ -507,7 +533,9 @@ function Legend({ tiers, className = "" }: { tiers: IndexTier[]; className?: str
           <span aria-hidden className={`${LEGEND_CLASS[tier]} w-7 shrink-0`}>
             Aa
           </span>
-          <span className="num text-[11px] text-faint">{tierRange(tiers, tier)}</span>
+          <span className="num text-[11px] text-faint">
+            {tierRange(tiers, tier)}
+          </span>
         </div>
       ))}
     </div>

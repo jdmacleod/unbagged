@@ -23,6 +23,46 @@ from a specific response. See `CONTRIBUTING.md`.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/
 
+## Unreleased
+
+### Added
+
+- **An H Mart adapter**, and with it the tabular half of the extraction
+  boundary. `extraction.py` spoke PDF and text, so a spreadsheet never reached
+  an adapter at all; it now reads SpreadsheetML into placed cells, routed by
+  content because `.xls` covers two unrelated formats. `Table.locator()` finally
+  delivers the A1 cell reference `docs/writing-an-adapter.md` has always
+  promised adapters as a locator.
+- **A response can now disclose what a visit cost without disclosing what was in
+  it.** The model had only met itemised baskets. Line-derived figures go null
+  rather than zero for such a response — zero would say the retailer disclosed
+  baskets costing nothing — and the headline figure carries the stated totals,
+  which are the only real money in it.
+- `sniff()` may return a `SniffResult` carrying a reason as well as a score. A
+  bounded read that spends its budget scores the same 0.0 as a file in somebody
+  else's format, and those are different answers.
+- `unbagged sanitize` understands spreadsheets, so a maintainer can be sent the
+  shape of one without the values.
+
+### Fixed
+
+- **The em dash meant two things.** It renders for a null, which is absence, and
+  it also rendered for a *zero saving*, which is a disclosed fact. Settled in
+  `DESIGN.md`: absence only, and a disclosed zero renders blank.
+- **A response in a format without pages rendered no citations at all.** `Cite`
+  returned nothing unless a page number was set, which retired the footnote
+  apparatus this design is built on for a whole class of response. It falls back
+  to the locator.
+- The Profile margin claimed "all individual" for identifiers whose scope the
+  response never stated.
+- Price History said "nothing bought often enough" — a claim about the shopper,
+  offering a threshold control that could not help — when the retailer had
+  disclosed no line items at all.
+- The month rail was built for two years of months and became unreachable past
+  about forty: taller than the viewport, so `sticky` had nothing to stick to. It
+  is grouped by year, and months with no visit are now visible as gaps rather
+  than absent rows.
+
 ## [0.12.0] - 2026-09-05
 
 ### Changed

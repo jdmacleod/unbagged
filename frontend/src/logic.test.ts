@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { currentMonthKey, doesNotFoot, monthIndex } from "./views/Timeline";
+import {
+  currentMonthKey,
+  doesNotFoot,
+  fillMonths,
+  monthIndex,
+} from "./views/Timeline";
 import { scale } from "./views/PriceHistory";
 import { gaugeWidth, scopeNote } from "./views/Profile";
 import { draftRows } from "./views/Compliance";
@@ -102,8 +107,24 @@ describe("gaugeWidth", () => {
   });
 });
 
+/** An itemised visit: the retailer said what was in the basket. */
 const visit = (occurred_at: string, paid = 10, saved = 0): Basket =>
-  ({ occurred_at, paid_total: paid, saved_total: saved }) as Basket;
+  ({
+    occurred_at,
+    paid_total: paid,
+    saved_total: saved,
+    lines_disclosed: true,
+  }) as Basket;
+
+/** A visit the retailer priced but never itemised. */
+const totalOnly = (occurred_at: string, stated = 10): Basket =>
+  ({
+    occurred_at,
+    paid_total: null,
+    saved_total: null,
+    total_pre_discount: stated,
+    lines_disclosed: false,
+  }) as Basket;
 
 describe("monthIndex", () => {
   it("groups the roll into months in the order the rows appear", () => {
@@ -144,10 +165,73 @@ describe("monthIndex", () => {
         occurred_at: "2024-02-20T10:00:00",
         paid_total: null,
         saved_total: null,
+        lines_disclosed: true,
       } as unknown as Basket,
     ]);
     expect(months[0].paid).toBe(0);
     expect(months[0].saved).toBe(0);
+  });
+
+  it("draws an unitemised month from the stated totals", () => {
+    // Every line-derived figure on these baskets is null. Coalescing those to
+    // zero summed the month to nothing, the peak fell to its floor, and every
+    // bar rendered at 0px under a heading that still said "paid".
+    const months = monthIndex([
+      totalOnly("2024-02-20T10:00:00", 12.5),
+      totalOnly("2024-02-27T10:00:00", 7.5),
+    ]);
+    expect(months[0].paid).toBe(20);
+    expect(months[0].unitemised).toBe(2);
+    expect(months[0].itemised).toBe(0);
+  });
+
+  it("never adds a stated total to a summed one in a mixed month", () => {
+    // Two different quantities under one mark, with no note, is the failure
+    // this rule exists to prevent. The bar draws from what was itemised and
+    // says how many visits it left out.
+    const months = monthIndex([
+      visit("2024-02-20T10:00:00", 10, 0),
+      totalOnly("2024-02-27T10:00:00", 99),
+    ]);
+    expect(months[0].paid).toBe(10);
+    expect(months[0].stated).toBe(99);
+    expect(months[0].itemised).toBe(1);
+    expect(months[0].unitemised).toBe(1);
+  });
+});
+
+describe("fillMonths", () => {
+  it("puts the empty months back", () => {
+    // monthIndex emits only months that have a basket, so a gap where you
+    // stopped shopping rendered as no gap at all: the bars ran continuously
+    // and the months in between did not exist.
+    const filled = fillMonths(
+      monthIndex([visit("2024-01-10T10:00:00"), visit("2024-05-10T10:00:00")]),
+    );
+    expect(filled.map((m) => m.key)).toEqual([
+      "2024-01",
+      "2024-02",
+      "2024-03",
+      "2024-04",
+      "2024-05",
+    ]);
+    expect(filled.map((m) => m.visits)).toEqual([1, 0, 0, 0, 1]);
+  });
+
+  it("crosses a year boundary", () => {
+    const filled = fillMonths(
+      monthIndex([visit("2023-11-10T10:00:00"), visit("2024-02-10T10:00:00")]),
+    );
+    expect(filled.map((m) => m.key)).toEqual([
+      "2023-11",
+      "2023-12",
+      "2024-01",
+      "2024-02",
+    ]);
+  });
+
+  it("is a no-op on an empty roll", () => {
+    expect(fillMonths([])).toEqual([]);
   });
 
   it("labels the month the way the roll prints it", () => {

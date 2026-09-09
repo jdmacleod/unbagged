@@ -117,7 +117,7 @@ and scales to a wall print. It exports what is on screen, filters included.
 |---|---|
 | Kroger | Full adapter — purchases, identity graph, inferred attributes, disclosures |
 | Safeway (Albertsons) | Stub. Expectations recorded in its `NOTES.md`; no real response seen |
-| H Mart | Stub. A letter is handled by the fallback already |
+| H Mart | Full adapter — a spreadsheet export of basket totals with no line items |
 | Anything else | Fallback: read as text, disclosures recorded, no data extracted |
 
 Kroger is the only full adapter, because it is the only format anyone has had a real
