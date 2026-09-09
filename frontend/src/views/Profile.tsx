@@ -24,13 +24,18 @@ export function Profile({ requestId }: { requestId: number }) {
   if (profile.error) return <ErrorBox error={profile.error} />;
   if (!profile.data) return <Spinner label="Reading the profile" />;
 
-  const { identities, inferences_by_origin, household_scoped_count } = profile.data;
+  const { identities, inferences_by_origin, household_scoped_count } =
+    profile.data;
   const mine = inferences_by_origin.first_party_model ?? [];
   const bought = inferences_by_origin.appended_third_party ?? [];
   const unclear = inferences_by_origin.unknown ?? [];
 
   if (identities.length === 0 && mine.length === 0 && bought.length === 0) {
-    return <Empty>This response contained no identifiers or inferred attributes.</Empty>;
+    return (
+      <Empty>
+        This response contained no identifiers or inferred attributes.
+      </Empty>
+    );
   }
 
   return (
@@ -40,7 +45,11 @@ export function Profile({ requestId }: { requestId: number }) {
         blurb="The separate keys this retailer holds for you. Each one is another way
                to find you in their systems."
         count={identities.length}
-        marginalia={<Aside>{scopeNote(identities)}</Aside>}
+        marginalia={
+          scopeNote(identities) ? (
+            <Aside>{scopeNote(identities)}</Aside>
+          ) : undefined
+        }
       >
         {identities.length === 0 ? (
           <Empty>No identifiers were found in this response.</Empty>
@@ -69,7 +78,9 @@ export function Profile({ requestId }: { requestId: number }) {
         </Movement>
       )}
 
-      {bought.length > 0 && <Bought inferences={bought} householdCount={household_scoped_count} />}
+      {bought.length > 0 && (
+        <Bought inferences={bought} householdCount={household_scoped_count} />
+      )}
 
       {unclear.length > 0 && (
         <Movement
@@ -90,10 +101,26 @@ export function Profile({ requestId }: { requestId: number }) {
 }
 
 /** How many identifiers cover the household rather than the person. */
-function scopeNote(identities: Identity[]): string {
+/** What the margin says about who these identifiers describe.
+ *
+ *  "All individual" is a claim, and it used to be made by default whenever no
+ *  identity was household-scoped — including when the response never said. An
+ *  adapter that deliberately records `scope: null` rather than inventing one is
+ *  making the honest choice, and the margin must not undo it. Silence and a
+ *  stated fact are different, which is the distinction this whole app exists to
+ *  keep. */
+export function scopeNote(identities: Identity[]): string {
+  // Nothing to characterise. Both branches below read `0 === 0` as true on an
+  // empty list, so this said "scope not stated" in the margin beside a section
+  // reading "No identifiers were found in this response" — which is reachable,
+  // because the whole-view empty state needs the inferences to be empty too.
+  if (identities.length === 0) return "";
   const household = identities.filter((i) => i.scope === "household").length;
-  if (household === 0) return "all individual";
-  return `${household} household-scoped`;
+  if (household > 0) return `${household} household-scoped`;
+  const unstated = identities.filter((i) => !i.scope).length;
+  if (unstated === identities.length) return "scope not stated";
+  if (unstated > 0) return `${unstated} with no scope stated`;
+  return "all individual";
 }
 
 /**
@@ -156,8 +183,13 @@ function Cite({ provenance }: { provenance: Provenance }) {
 function IdentityRow({ identity }: { identity: Identity }) {
   return (
     <li className="flex items-baseline gap-4 border-b border-rule py-2.5">
-      <span className="w-40 shrink-0 text-muted">{humanise(identity.id_type)}</span>
-      <span className="num min-w-0 flex-1 truncate text-[12.5px]" title={identity.value}>
+      <span className="w-40 shrink-0 text-muted">
+        {humanise(identity.id_type)}
+      </span>
+      <span
+        className="num min-w-0 flex-1 truncate text-[12.5px]"
+        title={identity.value}
+      >
         {identity.value}
       </span>
       {/* A word, not a coloured pill. Colour is reserved for provenance. */}
@@ -188,13 +220,18 @@ function Derived({ inference }: { inference: Inference }) {
         <div className="flex items-baseline gap-2">
           <span>{humanise(inference.label)}</span>
           {inference.subject === "household" && (
-            <span className="text-faint italic" title="Describes your household, not you.">
+            <span
+              className="text-faint italic"
+              title="Describes your household, not you."
+            >
               household
             </span>
           )}
         </div>
         {inference.scale && (
-          <div className="mt-0.5 text-[11.5px] text-faint">{humanise(inference.scale)}</div>
+          <div className="mt-0.5 text-[11.5px] text-faint">
+            {humanise(inference.scale)}
+          </div>
         )}
         {pct !== null && (
           <div className="mt-1.5 h-0.5 max-w-md bg-rule">
@@ -269,9 +306,9 @@ function Bought({
 
           {householdCount > 0 && (
             <p className="mt-5 max-w-[62ch] text-foreign/85">
-              {householdCount} of these describe your <strong>household</strong> rather
-              than you, which means they describe people who never signed up for
-              anything.
+              {householdCount} of these describe your <strong>household</strong>{" "}
+              rather than you, which means they describe people who never signed
+              up for anything.
             </p>
           )}
         </div>
@@ -289,10 +326,14 @@ function BoughtEntry({ inference }: { inference: Inference }) {
   return (
     <li className="border-b border-foreign-rule py-2">
       <div className="flex items-baseline gap-2">
-        <span className="min-w-0 flex-1 text-[12px]">{humanise(inference.label)}</span>
+        <span className="min-w-0 flex-1 text-[12px]">
+          {humanise(inference.label)}
+        </span>
         <Cite provenance={inference.provenance} />
       </div>
-      <div className="num text-[12.5px] text-foreign">{inference.value_raw}</div>
+      <div className="num text-[12.5px] text-foreign">
+        {inference.value_raw}
+      </div>
       {/* The honest field value, and the whole point of the view. Repeated on
           purpose: an inventory that keeps saying the same thing lands harder
           than one badge would. */}
