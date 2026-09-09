@@ -8,6 +8,7 @@ import {
 import { scale } from "./views/PriceHistory";
 import { gaugeWidth, scopeNote } from "./views/Profile";
 import { draftRows } from "./views/Compliance";
+import { nothingWasItemised } from "./views/ProductIndex";
 import type { Basket, Identity, Inference, PricePoint } from "./types";
 
 const basket = (delta: number | null): Basket =>
@@ -328,5 +329,31 @@ describe("scopeNote", () => {
     expect(scopeNote([id("individual"), id("individual")])).toBe(
       "all individual",
     );
+  });
+});
+
+describe("nothingWasItemised", () => {
+  // Regression: ISSUE-004 — the index was gated on `disclosed`, which a
+  // response carrying a total for every visit and no line items satisfies.
+  // Found by /qa on 2026-09-09.
+  // Report: .gstack/qa-reports/qa-report-hmart-2026-09-09.md
+  const index = (total_products: number, lines_disclosed: boolean) => ({
+    total_products,
+    lines_disclosed,
+  });
+
+  it("is true for a response that priced its visits and itemised none", () => {
+    expect(nothingWasItemised(index(0, false))).toBe(true);
+  });
+
+  it("is false once anything was itemised", () => {
+    expect(nothingWasItemised(index(399, true))).toBe(false);
+  });
+
+  it("is false for an itemised response whose index is empty", () => {
+    // Reachable and different: lines were disclosed and none named a product.
+    // "This response disclosed no products" is true there; "they never said
+    // what was in any basket" is not.
+    expect(nothingWasItemised(index(0, true))).toBe(false);
   });
 });

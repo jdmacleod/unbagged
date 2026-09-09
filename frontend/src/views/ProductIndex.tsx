@@ -137,13 +137,7 @@ function IndexBody({
     />
   );
 
-  // A response that priced every visit and itemised none of them. `disclosed`
-  // is true — it disclosed purchases — so the guard below does not catch it,
-  // and it fell through to a headline reading "0 of 0 products you bought
-  // exactly once" above an empty state explaining that nothing was itemised.
-  // Two zeros presented as facts about the shopper, contradicted three lines
-  // further down. Same shape, and same reasoning, as the Prices view's branch.
-  if (data.total_products === 0 && !data.lines_disclosed) {
+  if (nothingWasItemised(data)) {
     return (
       <Spine margin={<Aside>no line items</Aside>}>
         <h2 className="font-serif text-[17px] font-semibold">
@@ -321,6 +315,30 @@ function SaveIndex({ data }: { data: Index }) {
       {saved ? "Saved" : "Save as an image"}
     </button>
   );
+}
+
+/** Did this response price its visits and itemise none of them?
+ *
+ *  `disclosed` and `lines_disclosed` answer different questions and the
+ *  difference is the whole distinction this app exists to keep. `disclosed`
+ *  asks whether the retailer disclosed the specific pieces it holds; a
+ *  response carrying a date, a store and a total for every visit answers yes.
+ *  `lines_disclosed` asks whether it said what was in any of them.
+ *
+ *  Gating the index on `disclosed` alone let such a response through to a
+ *  headline reading "0 of 0 products you bought exactly once" — two zeros
+ *  stated as facts about the shopper — directly above an empty state
+ *  explaining that nothing was itemised. The counts are not facts here; there
+ *  was nothing to count.
+ *
+ *  Not `product_count`, which the filters move. `total_products` is the whole
+ *  index, so this cannot fire because a search box has something typed in it.
+ */
+export function nothingWasItemised(data: {
+  total_products: number;
+  lines_disclosed: boolean;
+}): boolean {
+  return data.total_products === 0 && !data.lines_disclosed;
 }
 
 function Headline({ data }: { data: Index }) {
