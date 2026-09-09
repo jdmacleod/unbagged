@@ -7,7 +7,30 @@ What the adapter has to survive, and therefore what this reproduces:
 
 * SpreadsheetML 2003 under an ``.xls`` extension, with the element order the
   real export uses: DocumentProperties, ExcelWorkbook, Styles, then Worksheet
-* a single-cell banner row above the header row
+* a banner row above the header row whose single cell is **merged across the
+  full width** with ``ss:MergeAcross``, carries its text inside ``html:B`` /
+  ``html:U`` / ``html:Font`` markup, and is followed by an ``ss:NamedCell``
+  sibling rather than ending at its ``ss:Data``. All three are what the real
+  export writes, and all three stand between a reader and the header row. The
+  merge is the one that bites: a merged cell occupies the columns it spans and
+  those columns are not written, so a reader taking the next element as the
+  next column shifts every value after it — the same corruption ``ss:Index``
+  causes, from a different attribute. The banner was previously generated as a
+  plain single cell, which is exactly why nothing caught it.
+
+  **This row cannot catch the shift on its own, and neither can the real
+  export.** Nothing follows the banner's merged cell, so there is no value left
+  to displace; a reader that ignores ``ss:MergeAcross`` entirely reads this
+  fixture correctly. What it reproduces is the shape arriving at all. The
+  displacement is exercised in ``tests/test_merged_cells.py`` against
+  documents built for it, because putting a merged cell mid-row here would
+  mean a data row that legitimately has no amount, and the fixture-wide
+  invariant that every visit carries a total is worth more than the overlap
+* ``ss:StyleID`` on every cell, and the ``ss:Column`` widths the real export
+  writes ahead of its rows
+* the worksheet's structural siblings — ``ss:Names`` before the table and
+  ``x:WorksheetOptions`` after it — because they are what a reader meets
+  immediately before the first row and immediately after the last
 * ``ss:Type="String"`` on every cell, including dates, amounts and points
 * a Java ``Timestamp.toString()`` date: ``YYYY-MM-DD HH:MM:SS.0``, seconds
   always ``00``, so the real resolution is minutes
@@ -33,6 +56,13 @@ Two deliberate departures from the observed file, both recorded in NOTES.md:
 * the scale differs from the reference file, as the Kroger generator's does, so
   the fixture cannot be mistaken for a reproduction of a real response.
 
+One class of difference is left in place on purpose: the bodies of the styles
+themselves — ``ss:Font``, ``ss:Border``, ``ss:Interior``, ``ss:NumberFormat``.
+Nothing reads them, they cannot move a value into the wrong column, and
+generating them would add bytes and diff noise to every regeneration for no
+coverage. The style *identifiers* are reproduced, because those appear as an
+attribute on every cell.
+
 Output is deterministic: the same seed produces byte-identical text.
 """
 
@@ -47,6 +77,16 @@ FILENAME = "synthetic_history.xls"
 SS = "urn:schemas-microsoft-com:office:spreadsheet"
 
 HEADERS = ("Smartcard", "Date of Purchase", "Branch", "Amount", "Point")
+
+# The style names the real export uses. Carried because they put an attribute
+# on every cell, which is what a reader walking `ss:Cell` children has to step
+# over, and because the banner's `title` is the cell that is merged.
+BANNER_STYLE = "title"
+HEADER_STYLE = "headercell"
+ROW_STYLES = ("odd", "even")
+
+#: Invented, and deliberately not a heading any real export uses.
+BANNER_TEXT = "Smart Card Purchase History"
 
 # Places that do not exist, so a fabricated branch cannot name a real store.
 # The long one is deliberate: the basket row's width budget is measured at
@@ -85,12 +125,31 @@ def _escape(value: str) -> str:
     )
 
 
-def _cell(value: str, index: int | None = None) -> str:
+def _cell(value: str, index: int | None = None, style: str | None = None) -> str:
     """One cell. Every value is `ss:Type="String"`, as the real export emits."""
-    at = f' ss:Index="{index}"' if index is not None else ""
+    at = f' ss:StyleID="{style}"' if style else ""
+    at += f' ss:Index="{index}"' if index is not None else ""
     return (
         f"      <ss:Cell{at}><ss:Data ss:Type=\"String\">"
         f"{_escape(value)}</ss:Data></ss:Cell>"
+    )
+
+
+def _banner_cell() -> str:
+    """The banner exactly as the export writes it, which is three hazards.
+
+    Merged across the remaining four columns, so anything placed after it in
+    the row belongs at column 6; its text wrapped in HTML markup, so a reader
+    taking only `ss:Data.text` sees an empty string; and an `ss:NamedCell`
+    sibling after the `ss:Data`, so `ss:Cell` is not a one-child element.
+    """
+    return (
+        f'      <ss:Cell ss:StyleID="{BANNER_STYLE}"'
+        f' ss:MergeAcross="{len(HEADERS) - 1}">'
+        '<ss:Data xmlns:html="http://www.w3.org/TR/REC-html40" ss:Type="String">'
+        f'<html:B><html:U><html:Font html:Size="14">{_escape(BANNER_TEXT)}'
+        "</html:Font></html:U></html:B></ss:Data>"
+        '<ss:NamedCell ss:Name="Print_Titles" /></ss:Cell>'
     )
 
 
@@ -119,11 +178,13 @@ def build(seed: int = DEFAULT_SEED) -> str:
     end = datetime(2026, 8, 31, tzinfo=UTC)
     rows: list[str] = []
 
-    # The banner row: one cell, repeating the worksheet name.
-    rows.append("    <ss:Row ss:Height=\"38\">\n" + _cell("Workbook") + "\n    </ss:Row>")
+    # The banner row: one merged, marked-up cell spanning the full width.
+    rows.append(
+        "    <ss:Row ss:Height=\"38\">\n" + _banner_cell() + "\n    </ss:Row>"
+    )
     rows.append(
         "    <ss:Row ss:AutoFitHeight=\"1\">\n"
-        + "\n".join(_cell(header) for header in HEADERS)
+        + "\n".join(_cell(header, style=HEADER_STYLE) for header in HEADERS)
         + "\n    </ss:Row>"
     )
 
@@ -150,22 +211,24 @@ def build(seed: int = DEFAULT_SEED) -> str:
             row_number += 1
             declared = row_number
 
+        # The export banks its rows, so every cell carries one of two styles.
+        style = ROW_STYLES[data_rows % len(ROW_STYLES)]
         if data_rows in sparse_at:
             # Branch omitted. The next cell declares column 4, which is what a
             # positional reader gets wrong.
             cells = [
-                _cell(SMARTCARD),
-                _cell(stamp),
-                _cell(amount, index=4),
-                _cell(str(points)),
+                _cell(SMARTCARD, style=style),
+                _cell(stamp, style=style),
+                _cell(amount, index=4, style=style),
+                _cell(str(points), style=style),
             ]
         else:
             cells = [
-                _cell(SMARTCARD),
-                _cell(stamp),
-                _cell(branch),
-                _cell(amount),
-                _cell(str(points)),
+                _cell(SMARTCARD, style=style),
+                _cell(stamp, style=style),
+                _cell(branch, style=style),
+                _cell(amount, style=style),
+                _cell(str(points), style=style),
             ]
 
         at = f' ss:Index="{declared}"' if declared else ""
@@ -179,14 +242,49 @@ def build(seed: int = DEFAULT_SEED) -> str:
         ' xmlns:x="urn:schemas-microsoft-com:office:excel"'
         ' xmlns:o="urn:schemas-microsoft-com:office:office">\n'
         "  <o:DocumentProperties><o:Title>Workbook</o:Title></o:DocumentProperties>\n"
-        "  <ss:ExcelWorkbook><ss:WindowHeight>9000</ss:WindowHeight></ss:ExcelWorkbook>\n"
-        "  <ss:Styles><ss:Style ss:ID=\"Default\"/></ss:Styles>\n"
+        "  <ss:ExcelWorkbook>"
+        "<ss:WindowHeight>9000</ss:WindowHeight>"
+        "<ss:WindowWidth>50000</ss:WindowWidth>"
+        "<ss:ProtectStructure>false</ss:ProtectStructure>"
+        "<ss:ProtectWindows>false</ss:ProtectWindows>"
+        "</ss:ExcelWorkbook>\n"
+        "  <ss:Styles>\n"
+        '    <ss:Style ss:ID="Default"/>\n'
+        + "".join(
+            f'    <ss:Style ss:ID="{style}"/>\n'
+            for style in (BANNER_STYLE, HEADER_STYLE, *ROW_STYLES)
+        )
+        + "  </ss:Styles>\n"
         '  <ss:Worksheet ss:Name="Workbook">\n'
+        # Between the worksheet's start tag and its table, where a reader that
+        # takes the first child of a worksheet to be its table meets it first.
+        '    <ss:Names><ss:NamedRange ss:Name="Print_Titles"'
+        ' ss:RefersTo="=\'Workbook\'!R1:R2" /></ss:Names>\n'
         f'    <ss:Table x:FullRows="1" x:FullColumns="1"'
         f' ss:ExpandedColumnCount="{len(HEADERS)}"'
         f' ss:ExpandedRowCount="{row_number - 1}">\n'
-        f"{body}\n"
+        # Column widths, which the export writes ahead of its rows. They are
+        # children of ss:Table and not of any row, so a reader that walks a
+        # row's children has to not meet them — which is worth generating.
+        + "".join(
+            '      <ss:Column ss:AutoFitWidth="1" ss:Width="164" />\n'
+            for _ in HEADERS
+        )
+        + f"{body}\n"
         "    </ss:Table>\n"
+        # Print setup, after the table and still inside the worksheet. Nothing
+        # reads it; it is generated because it is the last thing between the
+        # final row and the end of the sheet, which is where a reader deciding
+        # it has finished can get the answer wrong.
+        "    <x:WorksheetOptions><x:PageSetup>"
+        '<x:Layout x:CenterHorizontal="1" x:Orientation="Portrait" />'
+        "</x:PageSetup><x:FitToPage /><x:Print>"
+        "<x:PrintErrors>Blank</x:PrintErrors><x:FitWidth>1</x:FitWidth>"
+        "<x:ValidPrinterInfo /><x:VerticalResolution>600</x:VerticalResolution>"
+        "</x:Print><x:Selected /><x:DoNotDisplayGridlines />"
+        "<x:ProtectObjects>False</x:ProtectObjects>"
+        "<x:ProtectScenarios>False</x:ProtectScenarios>"
+        "</x:WorksheetOptions>\n"
         "  </ss:Worksheet>\n"
         "</ss:Workbook>\n"
     )
