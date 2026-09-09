@@ -372,9 +372,27 @@ def _as_int(value: str | None) -> int | None:
 def _cells_of(row: ET.Element) -> tuple[str | None, ...]:
     """Place a row's cells at the columns they declare, filling the gaps.
 
-    `ss:Index` on a cell names its real column; without honouring it every value
-    after an omitted cell shifts left. Cells carry their text in an `ss:Data`
-    child rather than directly.
+    Two attributes move a cell away from its position in encounter order, and
+    ignoring either shifts every value after it one or more columns left.
+
+    `ss:Index` names a cell's real column, because SpreadsheetML omits an empty
+    cell entirely rather than writing a blank one.
+
+    `ss:MergeAcross` names how many further columns this cell occupies. The
+    columns it swallows are not written either, so the next cell along is the
+    one after the span, not the one after this element — a cell with
+    `ss:MergeAcross="1"` sits in columns 1 and 2, and the element following it
+    is column 3. The observed H Mart export merges its banner cell across four
+    columns, so this is a shape the format really does arrive in.
+
+    Against a dense header row neither omission raises anything: the values
+    simply land one field to the left. Measured on a constructed row, a merged
+    `Branch` moved the points value into the amount column, so a $12.34 basket
+    recorded as $12.00 with no error anywhere.
+
+    Cells carry their text in an `ss:Data` child rather than directly, and that
+    child may itself hold markup — the banner cell's `ss:Data` wraps its text in
+    `html:B` and `html:U` — so the text is gathered from the whole subtree.
     """
     placed: list[str | None] = []
     column = 0
@@ -386,6 +404,9 @@ def _cells_of(row: ET.Element) -> tuple[str | None, ...]:
             placed.append(None)
         data = cell.find(f"{{{SS}}}Data")
         placed.append(None if data is None else "".join(data.itertext()))
+        # Clamped at zero: a negative span would walk the next cell backwards
+        # over one already placed, which is worse than ignoring the attribute.
+        column += max(0, _as_int(cell.get(f"{{{SS}}}MergeAcross")) or 0)
     return tuple(placed)
 
 
