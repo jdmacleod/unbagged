@@ -161,3 +161,64 @@ class TestTheAmountColumn:
             SourceBundle(documents=(doc(tmp_path, body),))
         )
         assert parsed.transactions[0].total_pre_discount == expected
+
+
+class TestABundleWithMoreThanOneSheet:
+    """`sniff()` claims a bundle if ANY sheet in it matches, so `parse()` has to
+    read all of them. Reading only the first made an accepted response fail, and
+    silently dropped a response split across files or worksheets."""
+
+    def test_a_non_matching_spreadsheet_alongside_does_not_lose_the_response(
+        self, tmp_path
+    ):
+        other = doc(tmp_path, sheet(row("Something", "Else")), "other.xls")
+        theirs = doc(
+            tmp_path,
+            sheet(HEADER + row("c", "2024-01-01 09:00:00.0", "b", "10.00", "10")),
+            "history.xls",
+        )
+        bundle = SourceBundle(documents=(other, theirs))
+        assert HMartAdapter().sniff(bundle) == 0.9
+        parsed = HMartAdapter().parse(bundle)
+        assert len(parsed.transactions) == 1
+        # The sheet nobody could read is named rather than passed over.
+        assert any("did not carry the H Mart columns" in w.message for w in parsed.warnings)
+
+    def test_a_response_split_across_two_files_keeps_both_halves(self, tmp_path):
+        first = doc(
+            tmp_path,
+            sheet(HEADER + row("c", "2024-01-01 09:00:00.0", "b", "10.00", "10")),
+            "one.xls",
+        )
+        second = doc(
+            tmp_path,
+            sheet(HEADER + row("c", "2024-02-01 09:00:00.0", "b", "20.00", "20")),
+            "two.xls",
+        )
+        parsed = HMartAdapter().parse(SourceBundle(documents=(first, second)))
+        assert len(parsed.transactions) == 2
+        # In date order, not upload order: a timeline built from several files
+        # would otherwise jump between them.
+        assert [t.occurred_at for t in parsed.transactions] == sorted(
+            t.occurred_at for t in parsed.transactions
+        )
+
+    def test_two_matching_worksheets_in_one_file_are_both_read(self, tmp_path):
+        both = sheet(
+            HEADER + row("c", "2024-01-01 09:00:00.0", "b", "10.00", "10")
+        ).replace(
+            "</ss:Worksheet>",
+            '</ss:Worksheet><ss:Worksheet ss:Name="Second"><ss:Table>'
+            + HEADER
+            + row("c", "2024-03-01 09:00:00.0", "b", "30.00", "30")
+            + "</ss:Table></ss:Worksheet>",
+        )
+        parsed = HMartAdapter().parse(
+            SourceBundle(documents=(doc(tmp_path, both),))
+        )
+        assert len(parsed.transactions) == 2
+        # Each row still cites the sheet it actually came from.
+        assert {t.provenance.locator.split("!")[0] for t in parsed.transactions} == {
+            "Workbook",
+            "Second",
+        }

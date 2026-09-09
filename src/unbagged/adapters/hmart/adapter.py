@@ -126,6 +126,16 @@ class HMartAdapter:
         return 0.0
 
     def parse(self, bundle: SourceBundle) -> ParseResult:
+        """Read every sheet that carries the columns, in every document.
+
+        Not just the first. `sniff()` claims a bundle if ANY document has a
+        matching sheet, so reading only `documents[0]` made an accepted response
+        fail whenever something else was uploaded alongside it — and, worse,
+        silently dropped the rest of a response split across files or sheets.
+        Half a history disappearing without a warning is the failure this whole
+        adapter is careful about; it does not get an exception for its own
+        entry point.
+        """
         warnings = WarningCollector()
         documents = [
             document for document in extract_all(bundle.documents) if document.tables
@@ -137,40 +147,57 @@ class HMartAdapter:
                 "pick XML Spreadsheet 2003, or export CSV."
             )
 
-        document = documents[0]
-        table = next((t for t in document.tables if _columns(t)), None)
-        if table is None:
+        # (table, its column map, the document it came from), for every sheet
+        # that carries the header — across every file in the bundle.
+        matched: list[tuple[Table, dict[str, int], int | None]] = []
+        skipped = 0
+        for document in documents:
+            for table in document.tables:
+                columns = _columns(table)
+                if columns is None:
+                    skipped += 1
+                    continue
+                matched.append((table, columns, document.document_id))
+
+        if not matched:
             raise AdapterError(
                 "This spreadsheet does not carry the columns an H Mart export "
                 "has. If the format has changed, the response is still worth "
                 "keeping — see docs/writing-an-adapter.md."
             )
 
-        # `table` was chosen because _columns() answered, so this cannot be
-        # None; re-reading it keeps the type honest without an assert, which
-        # ruff rejects in shipped code and -O removes anyway.
-        columns = _columns(table) or {}
-        header_row = next(
-            row.number
-            for row in table.rows[:SNIFF_ROWS]
-            if all(h in {_normalise(c) for c in row.cells} for h in EXPECTED)
-        )
-
-        _check_declared(table, warnings)
+        if skipped:
+            # Named rather than passed over: a sheet nobody read is a gap in the
+            # archive, and the reader is the one who can say whether it mattered.
+            warnings.info(
+                f"{skipped} sheet(s) in this upload did not carry the H Mart "
+                "columns and were not read."
+            )
 
         transactions: list[Transaction] = []
         cards: dict[str, Provenance] = {}
-        for row in table.rows:
-            if row.number <= header_row:
-                continue
-            txn = _transaction(table, row, columns, document.document_id, warnings)
-            if txn is not None:
-                transactions.append(txn)
-            card = row.value(columns["smartcard"])
-            if card and card not in cards:
-                cards[card] = _provenance(
-                    table, row.number, columns["smartcard"], document.document_id
-                )
+        for table, columns, document_id in matched:
+            _check_declared(table, warnings)
+            header_row = next(
+                row.number
+                for row in table.rows[:SNIFF_ROWS]
+                if all(h in {_normalise(c) for c in row.cells} for h in EXPECTED)
+            )
+            for row in table.rows:
+                if row.number <= header_row:
+                    continue
+                txn = _transaction(table, row, columns, document_id, warnings)
+                if txn is not None:
+                    transactions.append(txn)
+                card = row.value(columns["smartcard"])
+                if card and card not in cards:
+                    cards[card] = _provenance(
+                        table, row.number, columns["smartcard"], document_id
+                    )
+
+        # Sorted, because a bundle of several files arrives in upload order and
+        # a timeline built from it would otherwise jump between them.
+        transactions.sort(key=lambda t: t.occurred_at)
 
         if not transactions:
             warnings.add(
@@ -180,8 +207,15 @@ class HMartAdapter:
                 severity=Severity.WARNING,
             )
 
+        table, _, document_id = matched[0]
+        header_row = next(
+            row.number
+            for row in table.rows[:SNIFF_ROWS]
+            if all(h in {_normalise(c) for c in row.cells} for h in EXPECTED)
+        )
+
         first = min((t.occurred_at for t in transactions), default=None)
-        provenance = _provenance(table, header_row, 1, document.document_id)
+        provenance = _provenance(table, header_row, 1, document_id)
 
         return ParseResult(
             request=RequestMeta(
