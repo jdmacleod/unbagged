@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { currentMonthKey, doesNotFoot, monthIndex } from "./views/Timeline";
 import { scale } from "./views/PriceHistory";
-import { gaugeWidth } from "./views/Profile";
+import { gaugeWidth, scopeNote } from "./views/Profile";
 import { draftRows } from "./views/Compliance";
-import type { Basket, Inference, PricePoint } from "./types";
+import type { Basket, Identity, Inference, PricePoint } from "./types";
 
 const basket = (delta: number | null): Basket =>
   ({ stated_pre_discount_delta: delta }) as Basket;
@@ -30,13 +30,23 @@ describe("doesNotFoot", () => {
 });
 
 const point = (date: string, retail: number, paid = retail): PricePoint =>
-  ({ date, retail_amt: retail, paid_amt: paid, saved_amt: 0, multiple_of: null }) as PricePoint;
+  ({
+    date,
+    retail_amt: retail,
+    paid_amt: paid,
+    saved_amt: 0,
+    multiple_of: null,
+  }) as PricePoint;
 
 describe("scale", () => {
   it("places points by date, not by position in the array", () => {
     // The reason Recharts was removed: its category axis drew irregular dates
     // at equal spacing, which on a time series is a correctness bug.
-    const pts = [point("2024-01-01", 1), point("2024-01-02", 1), point("2024-12-31", 1)];
+    const pts = [
+      point("2024-01-01", 1),
+      point("2024-01-02", 1),
+      point("2024-12-31", 1),
+    ];
     const s = scale(pts);
     const [a, b, c] = pts.map(s.x);
     expect(b - a).toBeLessThan((c - b) / 10);
@@ -130,8 +140,11 @@ describe("monthIndex", () => {
   it("treats a missing amount as zero rather than NaN", () => {
     // A bar of width NaN renders as no bar at all, silently.
     const months = monthIndex([
-      { occurred_at: "2024-02-20T10:00:00", paid_total: null, saved_total: null } as
-        unknown as Basket,
+      {
+        occurred_at: "2024-02-20T10:00:00",
+        paid_total: null,
+        saved_total: null,
+      } as unknown as Basket,
     ]);
     expect(months[0].paid).toBe(0);
     expect(months[0].saved).toBe(0);
@@ -195,5 +208,41 @@ describe("draftRows", () => {
     expect(draftRows(long, 40)).toBe(40);
     // And still does not invent height the draft does not have.
     expect(draftRows("a\nb", 40)).toBe(3);
+  });
+});
+
+describe("scopeNote", () => {
+  const id = (scope: string | null) => ({ scope }) as unknown as Identity;
+
+  it("says nothing when there are no identifiers to characterise", () => {
+    // Both of the counting branches read 0 === 0 as true on an empty list, so
+    // this used to print a claim about scope in the margin beside a section
+    // saying no identifiers were found. Reachable, because the whole-view
+    // empty state also needs the inferences to be empty.
+    expect(scopeNote([])).toBe("");
+  });
+
+  it("does not claim individual when the response never said", () => {
+    // An adapter that records scope as null rather than inventing one is
+    // making the honest choice; the margin must not undo it.
+    expect(scopeNote([id(null)])).toBe("scope not stated");
+  });
+
+  it("names a household scope, which covers people who never enrolled", () => {
+    expect(scopeNote([id("household"), id("individual")])).toBe(
+      "1 household-scoped",
+    );
+  });
+
+  it("reports a mixture rather than rounding it to one answer", () => {
+    expect(scopeNote([id("individual"), id(null)])).toBe(
+      "1 with no scope stated",
+    );
+  });
+
+  it("says all individual only when every one of them says so", () => {
+    expect(scopeNote([id("individual"), id("individual")])).toBe(
+      "all individual",
+    );
   });
 });
