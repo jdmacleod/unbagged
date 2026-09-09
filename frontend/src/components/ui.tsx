@@ -80,15 +80,31 @@ export function Aside({ children }: { children: ReactNode }) {
   return <div className="num pt-2 text-[11.5px] text-faint">{children}</div>;
 }
 
-/** A page reference, set as a citation rather than a badge. */
+/** A page reference, set as a citation rather than a badge.
+ *
+ *  Falls back to the locator when the format has no pages. A spreadsheet has
+ *  none, and returning null there would retire the footnote apparatus for a
+ *  whole class of response — the apparatus this design is built on, per the
+ *  2026-09-03 row in DESIGN.md's decisions log. A cell reference is what a
+ *  person sees when they open the file, so it is a citation in exactly the
+ *  sense a page number is. */
 export function Cite({ provenance }: { provenance?: Provenance | null }) {
-  if (!provenance?.page) return null;
-  return (
-    <span
-      className="num shrink-0 text-[11.5px] text-faint"
-      title={provenance.locator ?? undefined}
-    >
-      p.{provenance.page}
-    </span>
-  );
+  if (provenance?.page) {
+    return (
+      <span
+        className="num shrink-0 text-[11.5px] text-faint"
+        title={provenance.locator ?? undefined}
+      >
+        p.{provenance.page}
+      </span>
+    );
+  }
+  if (provenance?.locator) {
+    return (
+      <span className="num shrink-0 text-[11.5px] text-faint">
+        {provenance.locator}
+      </span>
+    );
+  }
+  return null;
 }

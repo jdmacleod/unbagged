@@ -90,10 +90,21 @@ export function Profile({ requestId }: { requestId: number }) {
 }
 
 /** How many identifiers cover the household rather than the person. */
+/** What the margin says about who these identifiers describe.
+ *
+ *  "All individual" is a claim, and it used to be made by default whenever no
+ *  identity was household-scoped — including when the response never said. An
+ *  adapter that deliberately records `scope: null` rather than inventing one is
+ *  making the honest choice, and the margin must not undo it. Silence and a
+ *  stated fact are different, which is the distinction this whole app exists to
+ *  keep. */
 function scopeNote(identities: Identity[]): string {
   const household = identities.filter((i) => i.scope === "household").length;
-  if (household === 0) return "all individual";
-  return `${household} household-scoped`;
+  if (household > 0) return `${household} household-scoped`;
+  const unstated = identities.filter((i) => !i.scope).length;
+  if (unstated === identities.length) return "scope not stated";
+  if (unstated > 0) return `${unstated} with no scope stated`;
+  return "all individual";
 }
 
 /**

@@ -3,7 +3,7 @@ import { api } from "../api";
 import { useAsync } from "../components/useAsync";
 import { Aside, Cite, Empty, ErrorBox, Spine, Spinner } from "../components/ui";
 import { useShowMore } from "../components/ShowMore";
-import { categoryVar, day, dayAndTime, money, number } from "../format";
+import { categoryVar, day, dayAndTime, money, number, saving } from "../format";
 import type { Basket, BasketDetail, Stats } from "../types";
 
 /**
@@ -981,10 +981,12 @@ function LineItems({ detail }: { detail: BasketDetail }) {
                 <td className="num py-1.5 text-right font-semibold">
                   {money(item.paid_amt)}
                 </td>
-                {/* A dash, not $0.00, when the line was full price. Most lines
-                    are, and a column of zeros reads as broken. */}
+                {/* Blank when the line was full price, a dash only when the
+                    retailer did not say. Most lines are full price, and a column
+                    of zeros reads as broken — but the dash now means absence and
+                    nothing else, so a disclosed zero may not borrow it. */}
                 <td className="num py-1.5 text-right text-muted">
-                  {item.saved_amt ? `−${money(item.saved_amt)}` : "—"}
+                  {saving(item.saved_amt)}
                 </td>
               </tr>
             );
@@ -997,9 +999,7 @@ function LineItems({ detail }: { detail: BasketDetail }) {
             </td>
             <td className="num py-1.5 text-right">{money(detail.shelf_total)}</td>
             <td className="num py-1.5 text-right">{money(detail.paid_total)}</td>
-            <td className="num py-1.5 text-right">
-              {detail.saved_total ? `−${money(detail.saved_total)}` : "—"}
-            </td>
+            <td className="num py-1.5 text-right">{saving(detail.saved_total)}</td>
           </tr>
         </tfoot>
       </table>

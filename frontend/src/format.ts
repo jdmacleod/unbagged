@@ -18,6 +18,20 @@ export const clock = (iso: string | null | undefined) => iso?.slice(11, 16) ?? "
 export const dayAndTime = (iso: string | null | undefined) =>
   iso ? `${day(iso)} ${clock(iso)}`.trim() : "—";
 
+/** A loyalty saving, in the column where savings live.
+ *
+ *  Three outcomes, not two, and telling the middle one apart is the whole point.
+ *  The em dash means "the retailer did not say" and nothing else — see the
+ *  em-dash row in DESIGN.md's decisions log. A saving of exactly zero is not
+ *  silence: it is a disclosed fact about a line that was sold at full price, and
+ *  most lines are. So it renders blank rather than borrowing the mark for
+ *  absence. `$0.00` down a whole column reads as broken, which is why the dash
+ *  was reached for in the first place; blank says the same thing without
+ *  spending a mark that now means something else.
+ */
+export const saving = (value: number | null | undefined) =>
+  value === null || value === undefined ? "—" : value ? `−${money(value)}` : "";
+
 export const percent = (value: number | null | undefined) =>
   value === null || value === undefined
     ? "—"

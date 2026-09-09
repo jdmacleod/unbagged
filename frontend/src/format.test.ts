@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { CATEGORY_COUNT, categoryIndex, day, humanise, money, number, percent } from "./format";
+import {
+  CATEGORY_COUNT,
+  categoryIndex,
+  day,
+  humanise,
+  money,
+  number,
+  percent,
+  saving,
+} from "./format";
 
 describe("categoryIndex", () => {
   it("is stable for a key across calls", () => {
@@ -39,6 +48,23 @@ describe("money and number", () => {
     expect(money(undefined)).toBe("—");
     expect(number(null)).toBe("—");
     expect(money(0)).not.toBe("—");
+  });
+});
+
+describe("saving", () => {
+  it("tells silence apart from a disclosed zero", () => {
+    // The distinction the whole em-dash decision turns on. Absence gets the
+    // dash; a full-price line gets nothing, because it was disclosed and the
+    // dash no longer means what it once did here.
+    expect(saving(null)).toBe("—");
+    expect(saving(undefined)).toBe("—");
+    expect(saving(0)).toBe("");
+  });
+
+  it("renders a real saving as a leading minus, in ink", () => {
+    // DESIGN.md retired green: the minus sign has carried this for centuries.
+    expect(saving(1.5)).toContain("−");
+    expect(saving(1.5)).toContain("1.50");
   });
 });
 
