@@ -334,9 +334,13 @@ function Headline({ data }: { data: Index }) {
           of {number(data.total_products)} products you bought exactly once
         </h2>
         <p className="mt-0.5 max-w-[62ch] text-muted">
-          Two years of shopping, in the words the retailer files it under. Size
-          is how often you bought it, in five steps. Most of this page is a
-          single trip.
+          {/* "Two years of shopping" was written against a response that
+              covered two years and stated it as a fact about every other one.
+              The window is on the Timeline, measured; it is not restated here
+              where nothing checks it. */}
+          Your shopping, in the words the retailer files it under. Size is how
+          often you bought it, in five steps. Most of this page is a single
+          trip.
         </p>
       </div>
     </div>
