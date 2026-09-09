@@ -10,6 +10,7 @@ from unbagged.adapters.base import (
     Provenance,
     RequestMeta,
     Severity,
+    SniffResult,
     SourceBundle,
     WarningCollector,
     absent_disclosures,
@@ -18,6 +19,8 @@ from unbagged.adapters.registry import MIN_CONFIDENCE, AdapterRegistry
 
 
 class FakeAdapter:
+    """An adapter that returns a bare float, which most of them do."""
+
     def __init__(self, retailer_id: str, confidence: float = 0.0, raises: bool = False):
         self.retailer_id = retailer_id
         self.display_name = retailer_id.title()
@@ -32,6 +35,28 @@ class FakeAdapter:
 
     def parse(self, bundle: SourceBundle) -> ParseResult:
         return ParseResult(request=RequestMeta(self.retailer_id, self.display_name))
+
+
+class ExplainingAdapter(FakeAdapter):
+    """An adapter that says why, which is what SniffResult exists for."""
+
+    def __init__(self, retailer_id: str, confidence: float, reason: str | None):
+        super().__init__(retailer_id, confidence)
+        self._reason = reason
+
+    def sniff(self, bundle: SourceBundle) -> SniffResult:
+        return SniffResult(self._confidence, self._reason)
+
+
+class GarbageAdapter(FakeAdapter):
+    """An adapter that returns something that is not a score at all."""
+
+    def __init__(self, retailer_id: str, outcome):
+        super().__init__(retailer_id)
+        self._outcome = outcome
+
+    def sniff(self, bundle: SourceBundle):
+        return self._outcome
 
 
 BUNDLE = SourceBundle()
@@ -79,6 +104,49 @@ class TestRegistry:
         reg.register(FakeAdapter("zebra", 0.5))
         reg.register(FakeAdapter("aardvark", 0.5))
         assert reg.select(BUNDLE).adapter.retailer_id == "aardvark"
+
+    def test_a_bare_float_still_works(self):
+        # Most adapters have nothing to explain and keep returning a number.
+        reg = AdapterRegistry()
+        reg.register(FakeAdapter("plain", 0.7))
+        match = reg.select(BUNDLE)
+        assert match.confidence == 0.7
+        assert match.reason is None
+
+    def test_a_reason_survives_to_the_match(self):
+        # The whole point: a score that needs explaining can carry the
+        # explanation, instead of arriving as a number nobody can interpret.
+        reg = AdapterRegistry()
+        reg.register(ExplainingAdapter("bounded", 0.0, "gave up after 256 KB"))
+        scored = reg.score(BUNDLE)
+        assert scored[0].confidence == 0.0
+        assert scored[0].reason == "gave up after 256 KB"
+
+    def test_a_reason_is_optional_on_a_result(self):
+        reg = AdapterRegistry()
+        reg.register(ExplainingAdapter("quiet", 0.4, None))
+        assert reg.select(BUNDLE).reason is None
+
+    def test_an_explained_score_is_clamped_like_any_other(self):
+        reg = AdapterRegistry()
+        reg.register(ExplainingAdapter("liar", 9.0, "very sure"))
+        assert reg.select(BUNDLE).confidence == 1.0
+
+    @pytest.mark.parametrize("outcome", ["very sure", None, object(), float("nan")])
+    def test_a_score_that_is_not_a_score_is_treated_as_a_broken_adapter(
+        self, outcome, caplog
+    ):
+        # Reading the answer happens inside the same guard as the call. A word,
+        # a None, or a NaN would otherwise reach the sort: NaN compares false
+        # against everything, so it survives the clamp and then orders the
+        # contest at random, which is a coin toss nothing on screen explains.
+        reg = AdapterRegistry()
+        reg.register(GarbageAdapter("broken", outcome))
+        reg.register(FakeAdapter("kroger", 0.8))
+        with caplog.at_level(logging.ERROR):
+            match = reg.select(BUNDLE)
+        assert match.adapter.retailer_id == "kroger"
+        assert "broken" in caplog.text
 
     def test_double_registration_is_rejected(self):
         reg = AdapterRegistry()
