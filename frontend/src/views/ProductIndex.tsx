@@ -140,6 +140,13 @@ function IndexBody({
   // A retailer that answered with a letter disclosed no purchases at all.
   // Rendering that as an empty index states "you bought nothing", which is a
   // claim about you rather than the silence it actually was.
+  //
+  // **This has to stay above `nothingWasItemised`.** A refusal letter satisfies
+  // both — it disclosed nothing, so it disclosed no line items either — and the
+  // two say different things. "They priced every visit and itemised none" is
+  // true of a points statement and false of a refusal, which disclosed no
+  // visits at all. Ordered the wrong way round, the narrower message wins and
+  // tells the reader their retailer sent something it never sent.
   if (!data.disclosed) {
     return (
       <Spine margin={<Aside>no purchase data</Aside>}>
@@ -155,6 +162,21 @@ function IndexBody({
           The absence is recorded as a finding in the{" "}
           <strong>Compliance</strong> view, which is where a response like this
           is worth reading.
+        </p>
+      </Spine>
+    );
+  }
+
+  if (nothingWasItemised(data)) {
+    return (
+      <Spine margin={<Aside>no line items</Aside>}>
+        <h2 className="font-serif text-[17px] font-semibold">
+          No products to list
+        </h2>
+        <p className="mt-1 mb-4 max-w-[62ch] text-muted">
+          This retailer disclosed what each visit cost and never what was in it,
+          so there are no products to list. What they did disclose is on the
+          Timeline; what they did not is in <strong>Compliance</strong>.
         </p>
       </Spine>
     );
@@ -183,9 +205,10 @@ function IndexBody({
                 ? `No product name contains “${q}”.`
                 : minPurchases > 1
                   ? `No product was bought at least ${number(minPurchases)} times.`
-                  : data.lines_disclosed
-                    ? "This response disclosed no products."
-                    : "This retailer disclosed what each visit cost and never what was in it, so there are no products to list. What they did disclose is on the Timeline; what they did not is in Compliance."}
+                  : // A response that itemised nothing returns above, before
+                    // the headline gets to count it, so reaching here with no
+                    // filter set means the index is genuinely empty.
+                    "This response disclosed no products."}
           </Empty>
         </Spine>
       ) : (
@@ -301,6 +324,36 @@ function SaveIndex({ data }: { data: Index }) {
   );
 }
 
+/** Did this response price its visits and itemise none of them?
+ *
+ *  `disclosed` and `lines_disclosed` answer different questions and the
+ *  difference is the whole distinction this app exists to keep. `disclosed`
+ *  asks whether the retailer disclosed the specific pieces it holds; a
+ *  response carrying a date, a store and a total for every visit answers yes.
+ *  `lines_disclosed` asks whether it said what was in any of them.
+ *
+ *  Gating the index on `disclosed` alone let such a response through to a
+ *  headline reading "0 of 0 products you bought exactly once" — two zeros
+ *  stated as facts about the shopper — directly above an empty state
+ *  explaining that nothing was itemised. The counts are not facts here; there
+ *  was nothing to count.
+ *
+ *  Not `product_count`, which the filters move. `total_products` is the whole
+ *  index, so this cannot fire because a search box has something typed in it.
+ *
+ *  **Does not distinguish a refusal.** A response that disclosed nothing at all
+ *  satisfies this too, and needs the other message — it disclosed no visits
+ *  either, so "they priced every visit and itemised none" would be false. The
+ *  `!disclosed` branch therefore runs first; this predicate answers a narrower
+ *  question and cannot be asked before that one.
+ */
+export function nothingWasItemised(data: {
+  total_products: number;
+  lines_disclosed: boolean;
+}): boolean {
+  return data.total_products === 0 && !data.lines_disclosed;
+}
+
 function Headline({ data }: { data: Index }) {
   return (
     <div className="flex items-baseline gap-5">
@@ -312,9 +365,13 @@ function Headline({ data }: { data: Index }) {
           of {number(data.total_products)} products you bought exactly once
         </h2>
         <p className="mt-0.5 max-w-[62ch] text-muted">
-          Two years of shopping, in the words the retailer files it under. Size
-          is how often you bought it, in five steps. Most of this page is a
-          single trip.
+          {/* "Two years of shopping" was written against a response that
+              covered two years and stated it as a fact about every other one.
+              The window is on the Timeline, measured; it is not restated here
+              where nothing checks it. */}
+          Your shopping, in the words the retailer files it under. Size is how
+          often you bought it, in five steps. Most of this page is a single
+          trip.
         </p>
       </div>
     </div>
