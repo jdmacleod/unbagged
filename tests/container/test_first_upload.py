@@ -59,6 +59,25 @@ HMART = (
     / "fixtures" / "synthetic_history.xls"
 )
 
+# Boilerplate belonging to no retailer, written here rather than committed
+# because that is exactly what it is for: nothing recognises it, so the fallback
+# adapter takes it at 0.1 and the panel has to say the match is a guess. It also
+# produces the one warning in the codebase that carries no locator, which is the
+# other half of the `w.locator` conditional the bundle case covers.
+# `tests/test_generic_adapter.py` builds its letter the same way at the unit tier.
+LETTER = """\
+Dear Customer,
+
+Thank you for your request under the California Consumer Privacy Act. We have
+reviewed our records and are responding within the statutory period.
+
+The categories of personal information we collect include identifiers and
+commercial information. We do not sell personal information to third parties.
+
+Sincerely,
+The Privacy Team
+"""
+
 
 def _wait_for_health(timeout: float = 60.0) -> None:
     deadline = time.monotonic() + timeout
@@ -127,6 +146,27 @@ def _upload(page, *paths) -> None:
     page.wait_for_load_state("networkidle")
 
 
+def _upload_again(page, *paths) -> None:
+    """A second upload, waited on by the retailer selector.
+
+    "Add another response" is already on screen by then, so it no longer marks
+    anything. The selector renders only once a second response exists, which
+    puts the wait on the far side of the second reload the same way.
+    """
+    page.set_input_files("input[type=file]", [str(x) for x in paths])
+    page.wait_for_selector("select[aria-label]", timeout=120_000)
+    page.wait_for_load_state("networkidle")
+
+
+def _panel(page) -> str:
+    """Just the "Read as …" line, not the whole page.
+
+    Every retailer already loaded is named in the selector above, so asserting
+    against `body` cannot tell "the panel says H Mart" from "H Mart exists".
+    """
+    return page.locator("p", has_text="Read as").first.inner_text()
+
+
 class TestTheFirstUploadReportsOnItself:
     def test_a_bundle_holding_two_retailers_names_the_file_it_dropped(self, page):
         """The failure this was written for.
@@ -179,3 +219,25 @@ class TestTheFirstUploadReportsOnItself:
         body = page.inner_text("body")
         assert "Read as" in body
         assert "nothing from it is in this report" not in body
+
+    def test_removing_the_last_response_clears_the_panel(self, page):
+        """The other end of the result's new lifetime.
+
+        Caught reviewing the fix rather than by it: moving the result to `App`
+        made it outlive the uploader, which is the point, but it also made it
+        outlive the RESPONSE. Removing the last one drops the reader back to
+        the first-run screen, and a panel there reading "Read as H Mart ·
+        108 visits" describes something that was just deleted — a claim about
+        a response that no longer exists, in an app built not to make them.
+        """
+        _upload(page, HMART)
+        assert "Read as" in page.inner_text("body")
+
+        page.get_by_role("button", name="Remove this response").click()
+        page.get_by_role("button", name="Remove H Mart").click()
+        page.wait_for_selector("text=Drop it here", timeout=30_000)
+
+        body = page.inner_text("body")
+        # The empty state is correct; the panel above it must not survive.
+        assert "Drop it here" in body
+        assert "Read as" not in body
