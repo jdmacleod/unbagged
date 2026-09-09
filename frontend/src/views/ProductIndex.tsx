@@ -137,6 +137,27 @@ function IndexBody({
     />
   );
 
+  // A response that priced every visit and itemised none of them. `disclosed`
+  // is true — it disclosed purchases — so the guard below does not catch it,
+  // and it fell through to a headline reading "0 of 0 products you bought
+  // exactly once" above an empty state explaining that nothing was itemised.
+  // Two zeros presented as facts about the shopper, contradicted three lines
+  // further down. Same shape, and same reasoning, as the Prices view's branch.
+  if (data.total_products === 0 && !data.lines_disclosed) {
+    return (
+      <Spine margin={<Aside>no line items</Aside>}>
+        <h2 className="font-serif text-[17px] font-semibold">
+          No products to list
+        </h2>
+        <p className="mt-1 mb-4 max-w-[62ch] text-muted">
+          This retailer disclosed what each visit cost and never what was in it,
+          so there are no products to list. What they did disclose is on the
+          Timeline; what they did not is in <strong>Compliance</strong>.
+        </p>
+      </Spine>
+    );
+  }
+
   // A retailer that answered with a letter disclosed no purchases at all.
   // Rendering that as an empty index states "you bought nothing", which is a
   // claim about you rather than the silence it actually was.
@@ -183,9 +204,10 @@ function IndexBody({
                 ? `No product name contains “${q}”.`
                 : minPurchases > 1
                   ? `No product was bought at least ${number(minPurchases)} times.`
-                  : data.lines_disclosed
-                    ? "This response disclosed no products."
-                    : "This retailer disclosed what each visit cost and never what was in it, so there are no products to list. What they did disclose is on the Timeline; what they did not is in Compliance."}
+                  : // A response that itemised nothing returns above, before
+                    // the headline gets to count it, so reaching here with no
+                    // filter set means the index is genuinely empty.
+                    "This response disclosed no products."}
           </Empty>
         </Spine>
       ) : (
