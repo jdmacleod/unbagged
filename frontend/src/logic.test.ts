@@ -6,9 +6,9 @@ import {
   monthIndex,
 } from "./views/Timeline";
 import { scale } from "./views/PriceHistory";
-import { gaugeWidth } from "./views/Profile";
+import { gaugeWidth, scopeNote } from "./views/Profile";
 import { draftRows } from "./views/Compliance";
-import type { Basket, Inference, PricePoint } from "./types";
+import type { Basket, Identity, Inference, PricePoint } from "./types";
 
 const basket = (delta: number | null): Basket =>
   ({ stated_pre_discount_delta: delta }) as Basket;
@@ -292,5 +292,41 @@ describe("draftRows", () => {
     expect(draftRows(long, 40)).toBe(40);
     // And still does not invent height the draft does not have.
     expect(draftRows("a\nb", 40)).toBe(3);
+  });
+});
+
+describe("scopeNote", () => {
+  const id = (scope: string | null) => ({ scope }) as unknown as Identity;
+
+  it("says nothing when there are no identifiers to characterise", () => {
+    // Both of the counting branches read 0 === 0 as true on an empty list, so
+    // this used to print a claim about scope in the margin beside a section
+    // saying no identifiers were found. Reachable, because the whole-view
+    // empty state also needs the inferences to be empty.
+    expect(scopeNote([])).toBe("");
+  });
+
+  it("does not claim individual when the response never said", () => {
+    // An adapter that records scope as null rather than inventing one is
+    // making the honest choice; the margin must not undo it.
+    expect(scopeNote([id(null)])).toBe("scope not stated");
+  });
+
+  it("names a household scope, which covers people who never enrolled", () => {
+    expect(scopeNote([id("household"), id("individual")])).toBe(
+      "1 household-scoped",
+    );
+  });
+
+  it("reports a mixture rather than rounding it to one answer", () => {
+    expect(scopeNote([id("individual"), id(null)])).toBe(
+      "1 with no scope stated",
+    );
+  });
+
+  it("says all individual only when every one of them says so", () => {
+    expect(scopeNote([id("individual"), id("individual")])).toBe(
+      "all individual",
+    );
   });
 });

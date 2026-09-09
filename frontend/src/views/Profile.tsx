@@ -45,7 +45,11 @@ export function Profile({ requestId }: { requestId: number }) {
         blurb="The separate keys this retailer holds for you. Each one is another way
                to find you in their systems."
         count={identities.length}
-        marginalia={<Aside>{scopeNote(identities)}</Aside>}
+        marginalia={
+          scopeNote(identities) ? (
+            <Aside>{scopeNote(identities)}</Aside>
+          ) : undefined
+        }
       >
         {identities.length === 0 ? (
           <Empty>No identifiers were found in this response.</Empty>
@@ -128,7 +132,12 @@ export function Profile({ requestId }: { requestId: number }) {
  *  making the honest choice, and the margin must not undo it. Silence and a
  *  stated fact are different, which is the distinction this whole app exists to
  *  keep. */
-function scopeNote(identities: Identity[]): string {
+export function scopeNote(identities: Identity[]): string {
+  // Nothing to characterise. Both branches below read `0 === 0` as true on an
+  // empty list, so this said "scope not stated" in the margin beside a section
+  // reading "No identifiers were found in this response" — which is reachable,
+  // because the whole-view empty state needs the inferences to be empty too.
+  if (identities.length === 0) return "";
   const household = identities.filter((i) => i.scope === "household").length;
   if (household > 0) return `${household} household-scoped`;
   const unstated = identities.filter((i) => !i.scope).length;
