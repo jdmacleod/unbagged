@@ -23,7 +23,15 @@ from a specific response. See `CONTRIBUTING.md`.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/
 
-## Unreleased
+## [0.13.0] - 2026-09-09
+
+**This release changes what already-ingested data displays.** No migration runs
+and nothing needs re-reading, so the change is invisible to the version number
+on its own — which is why it is stated here. A basket whose disclosed saving was
+**zero** used to render an em dash and now renders blank: the dash meant absence
+and a zero saving is a disclosed fact, not a missing one. Measured against the
+Kroger fixture: four baskets of 127. Nothing else about a stored report reads
+differently.
 
 ### Added
 
@@ -46,6 +54,42 @@ from a specific response. See `CONTRIBUTING.md`.
 
 ### Fixed
 
+- **A merged cell moved every value after it one column left, and said nothing
+  about it.** SpreadsheetML writes a cell spanning several columns once, with
+  `ss:MergeAcross`, and does not write the columns it swallows — so the next
+  cell element belongs *after* the span, not next to it. The reader placed it
+  next to it. Against a dense header row that raises nothing and reads nothing
+  as wrong; the values simply land in the neighbouring fields.
+
+  The observed H Mart export merges its banner across four columns, so this
+  attribute arrives in every response that retailer sends. It costs nothing
+  there, because nothing follows the banner cell. Measured on a row where
+  `Branch` is merged across one, which is the shape that does cost something:
+  the points value landed in the amount column, and since a point is the amount
+  rounded, a basket recorded as its own total rounded to the nearest dollar. The
+  same failure `ss:Index` causes, from the attribute beside it.
+
+  No released version could have mis-read one: reading spreadsheets at all
+  arrives in this release. `ss:MergeDown` is the same fault across rows rather
+  than along one and is **not** fixed — it needs state the reader does not carry
+  between rows, and no observed export uses it.
+- **The fixture generator could not produce the shape that hid it.** It wrote
+  the banner as a plain single cell; the real one is merged, wraps its text in
+  `html:B`/`html:U`/`html:Font`, and carries a second child after its `ss:Data`.
+  Now reproduced, along with the style ids on every cell, the column widths and
+  the worksheet's siblings. It still cannot catch that particular shift on its
+  own, because nothing follows a banner — recorded in the generator rather than
+  left to be assumed.
+- **The product index counted products a response never itemised.** A response
+  that priced every visit and itemised none satisfies "did they disclose the
+  specific pieces", so it reached a headline reading `0 of 0 products you bought
+  exactly once` directly above an empty state explaining that nothing was
+  itemised. Two zeros presented as facts about the shopper, contradicted three
+  lines down. It now takes the branch Price History already had, for the same
+  reason.
+- **"Two years of shopping" was a hardcoded claim about the reader's own data.**
+  Written against a response that covered two years. The window is on the
+  Timeline, measured; it is no longer restated where nothing checks it.
 - **The em dash meant two things.** It renders for a null, which is absence, and
   it also rendered for a *zero saving*, which is a disclosed fact. Settled in
   `DESIGN.md`: absence only, and a disclosed zero renders blank.
