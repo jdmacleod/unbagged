@@ -18,7 +18,13 @@ describe("categoryIndex", () => {
   });
 
   it("stays inside the palette", () => {
-    for (const key of ["", "00318", "SIMPLE TRUTH ORG LEMON 6CT", "ééé", "0".repeat(500)]) {
+    for (const key of [
+      "",
+      "00318",
+      "SIMPLE TRUTH ORG LEMON 6CT",
+      "ééé",
+      "0".repeat(500),
+    ]) {
       const i = categoryIndex(key);
       expect(i).toBeGreaterThanOrEqual(0);
       expect(i).toBeLessThan(CATEGORY_COUNT);

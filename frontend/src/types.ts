@@ -32,13 +32,21 @@ export type Basket = {
   /** The retailer's own stated pre-discount total for the basket. */
   total_pre_discount: number | null;
   item_count: number;
+  /** Did the retailer say what was in this basket?
+   *
+   *  False means the response gave a total and no contents — which is a fact
+   *  about the response, not a parse that came up short. Every line-derived
+   *  figure on this basket is null when it is false. */
+  lines_disclosed: boolean;
   /** Summed `retail_amt`: the shelf amount, before loyalty pricing. */
   shelf_total: number;
   /** Summed `loyalty_amt`, which is the price the line cost — NOT a discount to
    *  subtract. Most lines carry a loyalty price equal to the shelf price. */
-  paid_total: number;
-  /** shelf_total − paid_total. The derived one. */
-  saved_total: number;
+  /** Null when no lines were disclosed: zero would say the basket cost
+   *  nothing, which the response never stated. */
+  paid_total: number | null;
+  /** shelf_total − paid_total. The derived one. Null with no lines. */
+  saved_total: number | null;
   /** shelf_total − total_pre_discount. Non-zero means the summed lines disagree
    *  with the total the retailer states for the basket.
    *
@@ -77,6 +85,11 @@ export type Stats = {
    *  information. Every count below is then null rather than 0, because "0
    *  visits" is a claim about the retailer that such a response never made. */
   disclosed: boolean;
+  /** False when the response gave basket totals and no contents. Distinct
+   *  from `disclosed`, which asks whether it gave anything at all. */
+  lines_disclosed: boolean;
+  /** The retailer's own stated basket totals, summed. */
+  total_stated: number | null;
   basket_count: number | null;
   first_visit: string | null;
   last_visit: string | null;
@@ -85,6 +98,9 @@ export type Stats = {
   /** The summed loyalty prices: what the retailer disclosed the baskets cost.
    *  Not necessarily what left the account — the tender rows are a separate
    *  disclosure and this figure is not reconciled against them. */
+  /** With no lines disclosed this carries the summed STATED basket totals
+   *  rather than an em dash: they are the only real money in such a response,
+   *  and the month bars are drawn from the same figure. */
   total_paid: number | null;
   /** total_shelf − total_paid. */
   total_saved: number | null;
@@ -143,7 +159,12 @@ export type DisclosureCell = {
 export type ComplianceRow = RequestMeta & {
   cells: Record<string, DisclosureCell>;
   absent_count: number;
-  follow_ups: { id: number; kind: string; description: string; resolved: number }[];
+  follow_ups: {
+    id: number;
+    kind: string;
+    description: string;
+    resolved: number;
+  }[];
 };
 
 export type Compliance = { categories: string[]; rows: ComplianceRow[] };
@@ -169,7 +190,12 @@ export type CompareRow = {
   inference_count: number | null;
   appended_inference_count: number | null;
   /** Never null: what a retailer failed to address is a real finding about it. */
-  absent_disclosures: number;
+  /** Null when a fallback parsed the response: eight absent categories then
+   *  measure what this tool could not read, not what the retailer withheld. */
+  absent_disclosures: number | null;
+  /** Request scope: false when no basket in the response carried lines. */
+  lines_disclosed: boolean;
+  total_stated: number | null;
 };
 
 export type Compare = { requests: CompareRow[]; comparable: boolean };
@@ -226,6 +252,9 @@ export type PriceHistory = {
    *  case: a product bought twice on one trip is two lines and nothing
    *  distinguishes that from two trips. */
   quantity_disclosed: boolean;
+  /** False when the response disclosed no line items at all, which is a
+   *  different thing from nothing being bought often enough. */
+  lines_disclosed: boolean;
   products: PriceSeries[];
 };
 
@@ -292,6 +321,9 @@ export type ProductIndex = {
   tiers: IndexTier[];
   /** True when `products` was cut to `limit`. Said on screen, never silent. */
   truncated: boolean;
+  /** False when the response disclosed basket totals and no contents, so
+   *  "no products" is a fact about the response rather than about you. */
+  lines_disclosed: boolean;
   limit: number;
   products: IndexEntry[];
 };

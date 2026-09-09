@@ -32,7 +32,8 @@ export function StaleReading({ request }: { request: RequestMeta }) {
 
   // Silent unless we can actually make the comparison. An unknown adapter, or a
   // report stored before the column existed, is not evidence of a stale read.
-  if (current === undefined || stored === null || stored >= current) return null;
+  if (current === undefined || stored === null || stored >= current)
+    return null;
 
   return (
     <p className="mt-4 max-w-[62ch] border-l-2 border-dotted border-line pl-3 text-muted">

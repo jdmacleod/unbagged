@@ -15,6 +15,9 @@ from tools import make_fixtures, scan_pii
 KROGER_FIXTURES = (
     Path(__file__).parent.parent / "src" / "unbagged" / "adapters" / "kroger" / "fixtures"
 )
+HMART_FIXTURES = (
+    Path(__file__).parent.parent / "src" / "unbagged" / "adapters" / "hmart" / "fixtures"
+)
 REPORT = KROGER_FIXTURES / "synthetic_report.txt"
 
 # The strip documented in the adapter notes and in docs/handoff.md section 4.
@@ -231,8 +234,21 @@ class TestStrayFixtureFiles:
     """
 
     def test_a_file_no_generator_produces_is_reported(self):
-        stray = make_fixtures.unexplained_files({KROGER_FIXTURES: {"synthetic_report.txt"}})
+        # Every generated directory has to be credited, not just the first one:
+        # passing a subset is what a second adapter looks like on the day it
+        # lands, and the check correctly calls its fixture unexplained.
+        stray = make_fixtures.unexplained_files(
+            {
+                KROGER_FIXTURES: {"synthetic_report.txt"},
+                HMART_FIXTURES: {"synthetic_history.xls"},
+            }
+        )
         assert stray == []
+
+        # Credit one directory and not the other: the uncredited fixture is now
+        # unexplained, which is exactly what a dropped-in report would be.
+        stray = make_fixtures.unexplained_files({KROGER_FIXTURES: {"synthetic_report.txt"}})
+        assert "synthetic_history.xls" in " ".join(stray)
 
         # Same directory, but the generator is not credited with the fixture: the
         # committed file is now unexplained, which is what a dropped-in report is.

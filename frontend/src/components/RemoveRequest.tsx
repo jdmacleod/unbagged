@@ -89,8 +89,9 @@ export function RemoveRequest({
         disclosure findings are deleted from the database, and there is no undo.
       </p>
       <p className="mt-1 max-w-[62ch] text-[11.5px] text-faint">
-        The file you uploaded stays on disk in <code className="num">data/</code>.
-        You can read it again by dropping it back in.
+        The file you uploaded stays on disk in{" "}
+        <code className="num">data/</code>. You can read it again by dropping it
+        back in.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <button

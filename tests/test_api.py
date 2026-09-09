@@ -709,6 +709,41 @@ class TestDisclosedVersusZero:
         assert response.status_code == 201
         return response.json()["request_id"]
 
+    @pytest.fixture
+    def letter_using_the_statutory_phrase(self, client):
+        """A letter the generic fallback marks PARTIAL rather than ABSENT.
+
+        The existing `letter_only` fixture says "thank you for writing", which
+        matches none of the fallback's hint phrases, so it lands all-ABSENT and
+        is blind to the disclosure gate's behaviour on a PARTIAL response. That
+        is the shape a widening of the gate would have broken, and no test in
+        this suite could have caught it.
+        """
+        body = (
+            b"Dear customer,\n\nThe specific pieces of personal information we "
+            b"hold about you are described in our privacy policy.\n"
+        )
+        response = client.post(
+            "/api/requests",
+            files={"files": ("letter.txt", body, "text/plain")},
+        )
+        assert response.status_code == 201
+        return response.json()["request_id"]
+
+    def test_a_partial_letter_with_no_purchases_still_reads_not_disclosed(
+        self, client, letter_using_the_statutory_phrase
+    ):
+        # The regression guard for the compound gate. A letter that merely uses
+        # the statutory phrase parses to PARTIAL with zero transactions; the
+        # plain widening made it render Visits 0 / Total paid $0.00, which is a
+        # claim about the retailer that the letter never made.
+        stats = client.get(
+            f"/api/requests/{letter_using_the_statutory_phrase}/timeline"
+        ).json()["stats"]
+        assert stats["disclosed"] is False
+        assert stats["basket_count"] is None
+        assert stats["total_paid"] is None
+
     def test_a_letter_reports_not_disclosed_rather_than_zero(self, client, letter_only):
         stats = client.get(f"/api/requests/{letter_only}/timeline").json()["stats"]
         assert stats["disclosed"] is False

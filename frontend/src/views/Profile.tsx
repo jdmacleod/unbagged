@@ -24,13 +24,18 @@ export function Profile({ requestId }: { requestId: number }) {
   if (profile.error) return <ErrorBox error={profile.error} />;
   if (!profile.data) return <Spinner label="Reading the profile" />;
 
-  const { identities, inferences_by_origin, household_scoped_count } = profile.data;
+  const { identities, inferences_by_origin, household_scoped_count } =
+    profile.data;
   const mine = inferences_by_origin.first_party_model ?? [];
   const bought = inferences_by_origin.appended_third_party ?? [];
   const unclear = inferences_by_origin.unknown ?? [];
 
   if (identities.length === 0 && mine.length === 0 && bought.length === 0) {
-    return <Empty>This response contained no identifiers or inferred attributes.</Empty>;
+    return (
+      <Empty>
+        This response contained no identifiers or inferred attributes.
+      </Empty>
+    );
   }
 
   return (
@@ -53,6 +58,29 @@ export function Profile({ requestId }: { requestId: number }) {
         )}
       </Movement>
 
+      {/* Said out loud rather than left as an absence.
+          Every inference section below is gated on having something to show, so
+          a response with none of them rendered one identity row and then simply
+          stopped — a page that ends early reads as a bug, and the reader has no
+          way to tell "they disclosed nothing" from "we could not read it". That
+          distinction is the one this whole app refuses to blur. */}
+      {mine.length === 0 && bought.length === 0 && unclear.length === 0 && (
+        <Movement
+          heading="What they worked out about you"
+          blurb="Nothing. This response carried no inferred attributes at all —
+                 no scores computed from your baskets, and nothing bought in
+                 from anywhere else."
+          count={0}
+          marginalia={<Aside>none disclosed</Aside>}
+        >
+          <Empty>
+            That is what the response contained, not what this tool could read.
+            A retailer that holds inferences and does not disclose them looks
+            exactly like this from here, which is itself worth knowing.
+          </Empty>
+        </Movement>
+      )}
+
       {mine.length > 0 && (
         <Movement
           heading="What they worked out by watching you"
@@ -69,7 +97,9 @@ export function Profile({ requestId }: { requestId: number }) {
         </Movement>
       )}
 
-      {bought.length > 0 && <Bought inferences={bought} householdCount={household_scoped_count} />}
+      {bought.length > 0 && (
+        <Bought inferences={bought} householdCount={household_scoped_count} />
+      )}
 
       {unclear.length > 0 && (
         <Movement
@@ -167,8 +197,13 @@ function Cite({ provenance }: { provenance: Provenance }) {
 function IdentityRow({ identity }: { identity: Identity }) {
   return (
     <li className="flex items-baseline gap-4 border-b border-rule py-2.5">
-      <span className="w-40 shrink-0 text-muted">{humanise(identity.id_type)}</span>
-      <span className="num min-w-0 flex-1 truncate text-[12.5px]" title={identity.value}>
+      <span className="w-40 shrink-0 text-muted">
+        {humanise(identity.id_type)}
+      </span>
+      <span
+        className="num min-w-0 flex-1 truncate text-[12.5px]"
+        title={identity.value}
+      >
         {identity.value}
       </span>
       {/* A word, not a coloured pill. Colour is reserved for provenance. */}
@@ -199,13 +234,18 @@ function Derived({ inference }: { inference: Inference }) {
         <div className="flex items-baseline gap-2">
           <span>{humanise(inference.label)}</span>
           {inference.subject === "household" && (
-            <span className="text-faint italic" title="Describes your household, not you.">
+            <span
+              className="text-faint italic"
+              title="Describes your household, not you."
+            >
               household
             </span>
           )}
         </div>
         {inference.scale && (
-          <div className="mt-0.5 text-[11.5px] text-faint">{humanise(inference.scale)}</div>
+          <div className="mt-0.5 text-[11.5px] text-faint">
+            {humanise(inference.scale)}
+          </div>
         )}
         {pct !== null && (
           <div className="mt-1.5 h-0.5 max-w-md bg-rule">
@@ -280,9 +320,9 @@ function Bought({
 
           {householdCount > 0 && (
             <p className="mt-5 max-w-[62ch] text-foreign/85">
-              {householdCount} of these describe your <strong>household</strong> rather
-              than you, which means they describe people who never signed up for
-              anything.
+              {householdCount} of these describe your <strong>household</strong>{" "}
+              rather than you, which means they describe people who never signed
+              up for anything.
             </p>
           )}
         </div>
@@ -300,10 +340,14 @@ function BoughtEntry({ inference }: { inference: Inference }) {
   return (
     <li className="border-b border-foreign-rule py-2">
       <div className="flex items-baseline gap-2">
-        <span className="min-w-0 flex-1 text-[12px]">{humanise(inference.label)}</span>
+        <span className="min-w-0 flex-1 text-[12px]">
+          {humanise(inference.label)}
+        </span>
         <Cite provenance={inference.provenance} />
       </div>
-      <div className="num text-[12.5px] text-foreign">{inference.value_raw}</div>
+      <div className="num text-[12.5px] text-foreign">
+        {inference.value_raw}
+      </div>
       {/* The honest field value, and the whole point of the view. Repeated on
           purpose: an inventory that keeps saying the same thing lands harder
           than one badge would. */}

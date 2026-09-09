@@ -14,7 +14,8 @@ export const number = (value: number | null | undefined) =>
  *  exactly as given. Parsing it as UTC would move an evening shop to the next
  *  day; see the Kroger adapter's NOTES.md. */
 export const day = (iso: string | null | undefined) => iso?.slice(0, 10) ?? "—";
-export const clock = (iso: string | null | undefined) => iso?.slice(11, 16) ?? "";
+export const clock = (iso: string | null | undefined) =>
+  iso?.slice(11, 16) ?? "";
 export const dayAndTime = (iso: string | null | undefined) =>
   iso ? `${day(iso)} ${clock(iso)}`.trim() : "—";
 

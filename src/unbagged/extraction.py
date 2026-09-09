@@ -469,7 +469,13 @@ def extract(document: SourceDocument, max_pages: int | None = None) -> Extracted
         # Routed by content, never by suffix: `.xls` covers two unrelated
         # formats and only one of them is this one.
         tables, spent = extract_spreadsheet(path, max_pages)
-        if not any(table.rows for table in tables):
+        if not spent and not any(table.rows for table in tables):
+            # Guarded on `spent`, because a bounded read that gave up before
+            # reaching a row also has no rows — and reporting that as an empty
+            # spreadsheet would destroy the distinction the budget exists to
+            # preserve. A caller that asked for a bounded read gets the fact
+            # that it was bounded; only an unbounded read finding nothing means
+            # the file is empty.
             raise ExtractionError(
                 f"{document.original_filename} is a spreadsheet with no rows in it."
             )

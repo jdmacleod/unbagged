@@ -20,7 +20,11 @@ const ROWS: Metric[] = [
   { key: "total_paid", label: "Total paid", format: money },
   { key: "total_saved", label: "…after loyalty savings of", format: money },
   { key: "distinct_products", label: "Distinct products", format: number },
-  { key: "identifier_count", label: "Identifiers held for you", format: number },
+  {
+    key: "identifier_count",
+    label: "Identifiers held for you",
+    format: number,
+  },
   { key: "inference_count", label: "Inferred attributes", format: number },
   {
     key: "appended_inference_count",
@@ -31,7 +35,11 @@ const ROWS: Metric[] = [
     // not name. See DESIGN.md on what colour means.
     foreign: true,
   },
-  { key: "absent_disclosures", label: "Categories not addressed", format: number },
+  {
+    key: "absent_disclosures",
+    label: "Categories not addressed",
+    format: number,
+  },
 ];
 
 /**
@@ -83,22 +91,29 @@ export function Compare() {
         <p className="mt-4 max-w-[62ch] text-[11.5px] text-muted">
           {undisclosed && (
             <>
-              An em dash means the retailer disclosed nothing of that kind, which is
-              not the same as a zero.{" "}
+              An em dash means the retailer disclosed nothing of that kind,
+              which is not the same as a zero.{" "}
             </>
           )}
           {!comparable && (
             <>A blank rule means no response has arrived to fill it in yet. </>
           )}
-          Categories not addressed is counted for every retailer either way, because
-          what a retailer failed to answer is a finding about that retailer.
+          Categories not addressed is counted for every retailer either way,
+          because what a retailer failed to answer is a finding about that
+          retailer.
         </p>
       </Spine>
     </div>
   );
 }
 
-function Sheet({ requests, pending }: { requests: CompareRow[]; pending: boolean }) {
+function Sheet({
+  requests,
+  pending,
+}: {
+  requests: CompareRow[];
+  pending: boolean;
+}) {
   // One column per retailer, plus a blank one while there is only the first.
   const cols = `minmax(0,1fr) repeat(${requests.length + (pending ? 1 : 0)}, minmax(7rem, 11rem))`;
 
@@ -126,6 +141,18 @@ function Sheet({ requests, pending }: { requests: CompareRow[]; pending: boolean
                   "disclosed no data"
                 )}
               </div>
+              {/* The qualification goes in the head, not on the cells.
+                  "Total paid" is a summed line amount for one retailer and a
+                  stated basket total for another — two quantities under one
+                  label — and this file already carries a decision about that
+                  row meaning one thing. A per-cell mark would have to be
+                  invented; the head can just say it, which is the same move
+                  the line above makes for the empty case. */}
+              {r.disclosed && !r.lines_disclosed && (
+                <div className="num mt-0.5 whitespace-nowrap text-[11px] text-faint">
+                  totals only, no items
+                </div>
+              )}
             </div>
           ))}
           {pending && (
@@ -133,7 +160,9 @@ function Sheet({ requests, pending }: { requests: CompareRow[]; pending: boolean
               <div className="font-serif text-[15px] font-semibold text-faint">
                 Awaiting
               </div>
-              <div className="num mt-0.5 text-[11px] text-faint">no response yet</div>
+              <div className="num mt-0.5 text-[11px] text-faint">
+                no response yet
+              </div>
             </div>
           )}
         </div>
@@ -164,7 +193,10 @@ function Sheet({ requests, pending }: { requests: CompareRow[]; pending: boolean
               <span className="flex justify-end">
                 {/* The blank waiting to be filled in. Same mark as an unanswered
                     disclosure category, same meaning: nothing here yet. */}
-                <span aria-hidden className="mt-2 inline-block h-px w-14 bg-line" />
+                <span
+                  aria-hidden
+                  className="mt-2 inline-block h-px w-14 bg-line"
+                />
                 <span className="sr-only">no response yet</span>
               </span>
             )}

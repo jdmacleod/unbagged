@@ -31,10 +31,17 @@ export function PriceHistory({ requestId }: { requestId: number }) {
   if (history.error) return <ErrorBox error={history.error} />;
   if (!history.data) return <Spinner label="Building price histories" />;
 
-  const { products, product_count, priceable_count, quantity_disclosed } = history.data;
+  const {
+    products,
+    product_count,
+    priceable_count,
+    quantity_disclosed,
+    lines_disclosed,
+  } = history.data;
   const priceable = products.filter((p) => p.priceable);
   const rest = products.filter((p) => !p.priceable);
-  const current = products.find((p) => p.upc === selected) ?? priceable[0] ?? products[0];
+  const current =
+    products.find((p) => p.upc === selected) ?? priceable[0] ?? products[0];
 
   return (
     <PriceBody
@@ -43,6 +50,7 @@ export function PriceHistory({ requestId }: { requestId: number }) {
       productCount={product_count}
       priceableCount={priceable_count}
       quantityDisclosed={quantity_disclosed}
+      linesDisclosed={lines_disclosed}
       current={current}
       onSelect={setSelected}
       minObservations={minObservations}
@@ -57,6 +65,7 @@ function PriceBody({
   productCount,
   priceableCount,
   quantityDisclosed,
+  linesDisclosed,
   current,
   onSelect,
   minObservations,
@@ -67,6 +76,7 @@ function PriceBody({
   productCount: number;
   priceableCount: number;
   quantityDisclosed: boolean;
+  linesDisclosed: boolean;
   current: PriceSeries | undefined;
   onSelect: (upc: string) => void;
   minObservations: number;
@@ -98,6 +108,25 @@ function PriceBody({
       times
     </label>
   );
+
+  if (productCount === 0 && !linesDisclosed) {
+    // Not "nothing bought often enough": that is a claim about the shopper, and
+    // it offers a threshold control that cannot help. The retailer disclosed no
+    // line items at all, so there is nothing to raise or lower.
+    return (
+      <Spine margin={<Aside>no line items</Aside>}>
+        <h2 className="font-serif text-[17px] font-semibold">
+          No product prices to follow
+        </h2>
+        <p className="mt-1 mb-4 max-w-[62ch] text-muted">
+          This retailer disclosed what each visit cost and never what was in it.
+          Without line items there are no product prices to follow. What they
+          did disclose is on the Timeline; what they did not is in{" "}
+          <strong>Compliance</strong>.
+        </p>
+      </Spine>
+    );
+  }
 
   if (productCount === 0) {
     return (
@@ -192,11 +221,11 @@ function PriceBody({
 function QuantityNote() {
   return (
     <p className="max-w-[62ch] text-muted">
-      A line in this response carries an amount and nothing else: no quantity, no
-      weight. Two of something bought together arrive as one line at twice the
-      price, and an item sold by the pound arrives at whatever it weighed that
-      day. Neither is a price change, and the response gives no way to tell them
-      apart from one. Where the amounts give it away, this view says so and
+      A line in this response carries an amount and nothing else: no quantity,
+      no weight. Two of something bought together arrive as one line at twice
+      the price, and an item sold by the pound arrives at whatever it weighed
+      that day. Neither is a price change, and the response gives no way to tell
+      them apart from one. Where the amounts give it away, this view says so and
       leaves the price change unclaimed.
     </p>
   );
@@ -234,13 +263,17 @@ function path(
   s: ReturnType<typeof scale>,
 ) {
   return points
-    .map((p, i) => `${i ? "L" : "M"}${s.x(p).toFixed(1)},${s.y(pick(p)).toFixed(1)}`)
+    .map(
+      (p, i) =>
+        `${i ? "L" : "M"}${s.x(p).toFixed(1)},${s.y(pick(p)).toFixed(1)}`,
+    )
     .join(" ");
 }
 
 function tip(p: PricePoint): string {
   const parts = [`${p.date} · ${money(p.paid_amt)} paid`];
-  if (p.saved_amt > 0) parts.push(`${money(p.saved_amt)} off ${money(p.retail_amt)}`);
+  if (p.saved_amt > 0)
+    parts.push(`${money(p.saved_amt)} off ${money(p.retail_amt)}`);
   if (p.multiple_of) {
     parts.push(
       `about ${p.multiple_of}x the usual amount — consistent with buying ${p.multiple_of}, not a price rise`,
@@ -258,13 +291,17 @@ function Series({ series }: { series: PriceSeries }) {
   return (
     <div>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h3 className="font-serif text-[17px] font-semibold" style={{ color: hue }}>
+        <h3
+          className="font-serif text-[17px] font-semibold"
+          style={{ color: hue }}
+        >
           {series.description}
         </h3>
         <span className="num text-[11.5px] text-faint">{series.upc}</span>
       </div>
       <p className="num mt-1 text-[11.5px] text-faint">
-        bought {series.purchases} times · {series.first_seen} → {series.last_seen}
+        bought {series.purchases} times · {series.first_seen} →{" "}
+        {series.last_seen}
         {series.base_price ? ` · usually ${money(series.base_price)}` : ""}
       </p>
 
@@ -334,7 +371,12 @@ function Series({ series }: { series: PriceSeries }) {
                     about 580 CSS pixels, so an r=2 dot renders 2.9px wide and is
                     effectively unhoverable. This is what makes the tooltip
                     reachable; the visible dot stays small on purpose. */}
-                <circle cx={s.x(p)} cy={s.y(p.paid_amt)} r={14} fill="transparent">
+                <circle
+                  cx={s.x(p)}
+                  cy={s.y(p.paid_amt)}
+                  r={14}
+                  fill="transparent"
+                >
                   <title>{tip(p)}</title>
                 </circle>
               </g>
@@ -349,14 +391,17 @@ function Series({ series }: { series: PriceSeries }) {
 
       <p className="mt-2 max-w-[62ch] text-[11.5px] text-faint">
         {savedEver && (
-          <>The heavier line is what you paid; the lighter one is the shelf price. </>
+          <>
+            The heavier line is what you paid; the lighter one is the shelf
+            price.{" "}
+          </>
         )}
         {series.multiple_count > 0 && (
           <>
             {series.multiple_count} hollow{" "}
-            {series.multiple_count === 1 ? "point sits" : "points sit"} at a near-exact
-            multiple of the usual amount, which is consistent with buying more than
-            one rather than with the price changing.{" "}
+            {series.multiple_count === 1 ? "point sits" : "points sit"} at a
+            near-exact multiple of the usual amount, which is consistent with
+            buying more than one rather than with the price changing.{" "}
           </>
         )}
         Hover a point for the date and what it cost.
@@ -378,29 +423,33 @@ function Unpriced({ series }: { series: PriceSeries }) {
   return (
     <div>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h3 className="font-serif text-[17px] font-semibold" style={{ color: hue }}>
+        <h3
+          className="font-serif text-[17px] font-semibold"
+          style={{ color: hue }}
+        >
           {series.description}
         </h3>
         <span className="num text-[11.5px] text-faint">{series.upc}</span>
       </div>
       <p className="num mt-1 text-[11.5px] text-faint">
-        bought {series.purchases} times · {series.first_seen} → {series.last_seen}
+        bought {series.purchases} times · {series.first_seen} →{" "}
+        {series.last_seen}
       </p>
       <p className="mt-3 max-w-[62ch] text-muted">
         {series.shape === "weight" ? (
           <>
             The amounts for this product never settle and range too widely to be
             one item at a price: that is what a per-pound product weighed at the
-            till looks like. No price series is drawn, because a line between two
-            of these points would assert a price change that the response does
-            not support.
+            till looks like. No price series is drawn, because a line between
+            two of these points would assert a price change that the response
+            does not support.
           </>
         ) : (
           <>
-            {series.multiple_count} of these amounts sit at a near-exact multiple
-            of the usual one, which is consistent with buying more than one
-            rather than with the price changing. A line through them would report
-            a fuller trolley as inflation, so none is drawn.
+            {series.multiple_count} of these amounts sit at a near-exact
+            multiple of the usual one, which is consistent with buying more than
+            one rather than with the price changing. A line through them would
+            report a fuller trolley as inflation, so none is drawn.
           </>
         )}
       </p>
@@ -444,44 +493,44 @@ function Table({
     // sideways. Same treatment Compare and the receipt table already use.
     <div className="scroll-x border-t border-rule">
       <div className="min-w-[26rem]">
-      <div
-        className={`grid ${cols} gap-3 py-1.5 text-[11.5px] tracking-[0.05em] text-muted uppercase`}
-      >
-        <span>Product</span>
-        <span className="text-right">Purchases</span>
-        <span className="text-right">First</span>
-        <span className="text-right">Latest</span>
-        <span className="text-right">Change</span>
-      </div>
-      {products.map((p) => (
-        <button
-          key={p.upc}
-          onClick={() => onSelect(p.upc)}
-          aria-pressed={current?.upc === p.upc}
-          className={`grid w-full ${cols} gap-3 border-t border-rule py-2 text-left hover:bg-sunken ${
-            current?.upc === p.upc ? "bg-sunken" : ""
-          }`}
+        <div
+          className={`grid ${cols} gap-3 py-1.5 text-[11.5px] tracking-[0.05em] text-muted uppercase`}
         >
-          <span className="flex min-w-0 items-baseline gap-2">
-            <span
-              aria-hidden
-              className="mt-px h-2 w-2 shrink-0 rounded-full"
-              style={{ background: categoryVar(p.upc) }}
-            />
-            <span className="truncate" title={p.description}>
-              {p.description}
+          <span>Product</span>
+          <span className="text-right">Purchases</span>
+          <span className="text-right">First</span>
+          <span className="text-right">Latest</span>
+          <span className="text-right">Change</span>
+        </div>
+        {products.map((p) => (
+          <button
+            key={p.upc}
+            onClick={() => onSelect(p.upc)}
+            aria-pressed={current?.upc === p.upc}
+            className={`grid w-full ${cols} gap-3 border-t border-rule py-2 text-left hover:bg-sunken ${
+              current?.upc === p.upc ? "bg-sunken" : ""
+            }`}
+          >
+            <span className="flex min-w-0 items-baseline gap-2">
+              <span
+                aria-hidden
+                className="mt-px h-2 w-2 shrink-0 rounded-full"
+                style={{ background: categoryVar(p.upc) }}
+              />
+              <span className="truncate" title={p.description}>
+                {p.description}
+              </span>
             </span>
-          </span>
-          <span className="num text-right">{p.purchases}</span>
-          <span className="num text-right">{money(p.first_price)}</span>
-          <span className="num text-right">{money(p.last_price)}</span>
-          {/* No pill, no colour. Groceries getting more expensive is the subject
+            <span className="num text-right">{p.purchases}</span>
+            <span className="num text-right">{money(p.first_price)}</span>
+            <span className="num text-right">{money(p.last_price)}</span>
+            {/* No pill, no colour. Groceries getting more expensive is the subject
               matter, not an alarm condition. The sign carries the direction. */}
-          <span className="num text-right">
-            {p.change_pct === null ? "—" : percent(p.change_pct)}
-          </span>
-        </button>
-      ))}
+            <span className="num text-right">
+              {p.change_pct === null ? "—" : percent(p.change_pct)}
+            </span>
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -513,48 +562,50 @@ function Unpriceable({
         No unit price in the response
       </h3>
       <p className="mt-0.5 mb-4 max-w-[62ch] text-muted">
-        {total} of these were bought often enough, but their amounts do not behave
-        like the price of one item. Shown so the gap is visible rather than
-        silently dropped, with no price change claimed for any of them.
+        {total} of these were bought often enough, but their amounts do not
+        behave like the price of one item. Shown so the gap is visible rather
+        than silently dropped, with no price change claimed for any of them.
       </p>
       <div className="scroll-x border-t border-rule">
         <div className="min-w-[24rem]">
-        <div
-          className={`grid ${cols} gap-3 py-1.5 text-[11.5px] tracking-[0.05em] text-muted uppercase`}
-        >
-          <span>Product</span>
-          <span className="text-right">Purchases</span>
-          <span className="text-right">Usually</span>
-          <span className="text-right">Why not</span>
-        </div>
-        {products.map((p) => (
-          <button
-            key={p.upc}
-            onClick={() => onSelect(p.upc)}
-            aria-pressed={current?.upc === p.upc}
-            className={`grid w-full ${cols} gap-3 border-t border-rule py-2 text-left hover:bg-sunken ${
-              current?.upc === p.upc ? "bg-sunken" : ""
-            }`}
+          <div
+            className={`grid ${cols} gap-3 py-1.5 text-[11.5px] tracking-[0.05em] text-muted uppercase`}
           >
-            <span className="flex min-w-0 items-baseline gap-2">
-              <span
-                aria-hidden
-                className="mt-px h-2 w-2 shrink-0 rounded-full"
-                style={{ background: categoryVar(p.upc) }}
-              />
-              <span className="truncate" title={p.description}>
-                {p.description}
+            <span>Product</span>
+            <span className="text-right">Purchases</span>
+            <span className="text-right">Usually</span>
+            <span className="text-right">Why not</span>
+          </div>
+          {products.map((p) => (
+            <button
+              key={p.upc}
+              onClick={() => onSelect(p.upc)}
+              aria-pressed={current?.upc === p.upc}
+              className={`grid w-full ${cols} gap-3 border-t border-rule py-2 text-left hover:bg-sunken ${
+                current?.upc === p.upc ? "bg-sunken" : ""
+              }`}
+            >
+              <span className="flex min-w-0 items-baseline gap-2">
+                <span
+                  aria-hidden
+                  className="mt-px h-2 w-2 shrink-0 rounded-full"
+                  style={{ background: categoryVar(p.upc) }}
+                />
+                <span className="truncate" title={p.description}>
+                  {p.description}
+                </span>
               </span>
-            </span>
-            <span className="num text-right">{p.purchases}</span>
-            <span className="num text-right">
-              {p.base_price === null ? "—" : money(p.base_price)}
-            </span>
-            <span className="text-right text-muted">
-              {p.shape === "weight" ? "sold by weight" : `${p.multiple_count} multi-buys`}
-            </span>
-          </button>
-        ))}
+              <span className="num text-right">{p.purchases}</span>
+              <span className="num text-right">
+                {p.base_price === null ? "—" : money(p.base_price)}
+              </span>
+              <span className="text-right text-muted">
+                {p.shape === "weight"
+                  ? "sold by weight"
+                  : `${p.multiple_count} multi-buys`}
+              </span>
+            </button>
+          ))}
         </div>
       </div>
     </div>

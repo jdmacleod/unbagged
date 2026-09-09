@@ -689,6 +689,11 @@ def price_history(
         # Kroger's export carries no quantity field on a line. Stated once here
         # so the view can say so rather than implying a quantity it never got.
         "quantity_disclosed": _quantity_disclosed(conn, request_id),
+        # This view had no way to tell "nothing was bought often enough" from
+        # "no line items were disclosed at all", so it said the first when the
+        # second was true — a claim about the shopper, offering a threshold
+        # control that could never help.
+        "lines_disclosed": request_lines_disclosed(conn, request_id),
         "products": products[:limit],
     }
 
@@ -1035,6 +1040,7 @@ def product_index(
         ],
         "truncated": len(products) > limit,
         "limit": limit,
+        "lines_disclosed": request_lines_disclosed(conn, request_id),
         "products": products[:limit],
     }
 

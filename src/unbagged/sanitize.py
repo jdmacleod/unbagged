@@ -133,6 +133,65 @@ def skeleton_csv(text: str) -> dict[str, Any]:
     return {"format": "csv", "rows": len(body), "columns": columns}
 
 
+def skeleton_spreadsheet(text: str) -> dict[str, Any]:
+    """A spreadsheet reduced to its shape: sheets, sizes, headers, cell types.
+
+    The reader is imported from `unbagged.extraction` rather than reimplemented.
+    Both are application modules, so the import is allowed — the deliberate
+    mirroring elsewhere in this file concerns `tools/`, which application code
+    must not import. Two copies of a parser is the drift the regex tests here
+    already exist to prevent.
+
+    Header values survive because a column name is the retailer's schema, not
+    the user's data — the same reason `skeleton_json` keeps object keys. Every
+    other cell is reduced to its type.
+    """
+    from unbagged.extraction import read_tables
+
+    read = read_tables(text)
+    sheets = []
+    for table in read.tables:
+        # Not row 0: the observed export puts a single-cell banner above the
+        # header, so taking the first row reports the sheet's title as its
+        # column names. The header is the first row that is actually a row of
+        # columns.
+        head_at = next(
+            (i for i, row in enumerate(table.rows[:4]) if len(row) > 1), 0
+        )
+        header = table.rows[head_at].cells if table.rows else ()
+        body = table.rows[head_at + 1 :]
+        sheets.append(
+            {
+                "name": skeleton_string(table.name),
+                "rows": len(table.rows),
+                "declared_rows": table.declared_rows,
+                "declared_columns": table.declared_columns,
+                # The widest row, which is what a reader has to allocate for.
+                "columns": max((len(row) for row in table.rows), default=0),
+                "header": [skeleton_key(cell or "") for cell in header],
+                "sparse_rows": sum(
+                    1 for row in body if any(cell is None for cell in row.cells)
+                ),
+                "cell_types": sorted(
+                    {_leaf_kind(cell) for row in body for cell in row.cells}
+                ),
+            }
+        )
+    return {"format": "spreadsheetml", "sheets": sheets}
+
+
+def _leaf_kind(cell: str | None) -> str:
+    if cell is None:
+        return "empty"
+    if ISO_DATE.search(cell) or US_DATE.search(cell):
+        return "date"
+    try:
+        float(cell)
+    except ValueError:
+        return "text"
+    return "number"
+
+
 def sanitize_text(text: str, *, filename: str = "") -> dict[str, Any]:
     """Dispatch on content, not on the extension alone — retailers mislabel files."""
     stripped = text.lstrip()
@@ -143,6 +202,23 @@ def sanitize_text(text: str, *, filename: str = "") -> dict[str, Any]:
             pass
     if filename.lower().endswith(".csv") or _looks_like_csv(text):
         return skeleton_csv(text)
+    try:
+        from unbagged.extraction import looks_like_spreadsheetml
+
+        if looks_like_spreadsheetml(text):
+            return skeleton_spreadsheet(text)
+    except Exception:  # noqa: S110 - the fall-through IS the behaviour, see below
+        # This is the first tool a maintainer runs on a REAL response, so it
+        # meets malformed files by definition — a refused DOCTYPE, a truncated
+        # download, a format that only half matches. Falling through to the
+        # text skeleton keeps them holding something they can send; raising
+        # would leave them with a traceback and nothing, at exactly the moment
+        # they are trying to report the problem.
+        #
+        # Deliberately not logged: this runs from a CLI whose whole job is to
+        # produce a skeleton on stdout, and a stack trace on stderr would be
+        # noise in the one output the user is about to paste into an issue.
+        pass
     return {"format": "text", "lines": skeleton_text(text)}
 
 

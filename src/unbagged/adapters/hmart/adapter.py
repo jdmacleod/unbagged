@@ -108,8 +108,9 @@ class HMartAdapter:
                 # would make that invisible.
                 log.debug("hmart sniff could not read %s", document.original_filename)
                 continue
-            if not extracted.tables:
-                continue
+            # Checked before the empty-tables guard, not after: a read that
+            # spent its budget has no tables by definition, so the guard would
+            # swallow exactly the case the reason exists for.
             if extracted.spent_budget:
                 return SniffResult(
                     0.0,
@@ -117,6 +118,8 @@ class HMartAdapter:
                     "quarter-megabyte this looks at, so no header row was "
                     "reached. It has not been ruled out; it has not been read.",
                 )
+            if not extracted.tables:
+                continue
             for table in extracted.tables:
                 if _columns(table):
                     return 0.9

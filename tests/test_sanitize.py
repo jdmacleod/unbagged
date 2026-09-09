@@ -167,3 +167,58 @@ class TestIdentifierKeys:
         assert "purchasedescription" in json.dumps(
             sanitize_text(json.dumps({"m": {"purchasedescription": 1}}))
         )
+
+
+class TestSpreadsheetSkeleton:
+    """The first tool a maintainer runs on a REAL response.
+
+    So it meets malformed files by definition, and it must never be the thing
+    that stops someone reporting a problem.
+    """
+
+    SS = "urn:schemas-microsoft-com:office:spreadsheet"
+
+    def _sheet(self, rows: str) -> str:
+        return (
+            f'<?xml version="1.0"?><ss:Workbook xmlns:ss="{self.SS}">'
+            f'<ss:Worksheet ss:Name="Workbook"><ss:Table>{rows}'
+            f"</ss:Table></ss:Worksheet></ss:Workbook>"
+        )
+
+    def _row(self, *values: str) -> str:
+        cells = "".join(
+            f'<ss:Cell><ss:Data ss:Type="String">{v}</ss:Data></ss:Cell>'
+            for v in values
+        )
+        return f"<ss:Row>{cells}</ss:Row>"
+
+    def test_the_shape_survives_and_the_values_do_not(self):
+        body = self._sheet(
+            self._row("Workbook")
+            + self._row("Smartcard", "Date of Purchase", "Amount")
+            + self._row("40100200300", "2024-01-18 09:59:00.0", "13.84")
+        )
+        skeleton = sanitize_text(body, filename="history.xls")
+        rendered = json.dumps(skeleton)
+        # Column names are the retailer's schema, so they survive — the same
+        # reason skeleton_json keeps object keys.
+        assert "Smartcard" in rendered
+        # Nothing a person could be identified by does.
+        assert "40100200300" not in rendered
+        assert "13.84" not in rendered
+        assert "2024-01-18" not in rendered
+
+    def test_the_banner_row_is_not_mistaken_for_the_header(self):
+        body = self._sheet(
+            self._row("Workbook") + self._row("Smartcard", "Amount")
+        )
+        sheet = sanitize_text(body, filename="h.xls")["sheets"][0]
+        assert sheet["header"] == ["Smartcard", "Amount"]
+
+    def test_a_malformed_file_still_produces_something_sendable(self):
+        # Raising here would leave the maintainer with a traceback and no
+        # skeleton, at exactly the moment they are trying to report the problem.
+        broken = self._sheet(self._row("a"))[:60]
+        skeleton = sanitize_text(broken, filename="h.xls")
+        assert skeleton["format"] != "spreadsheetml"
+        assert skeleton
