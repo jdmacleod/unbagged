@@ -350,6 +350,14 @@ describe("nothingWasItemised", () => {
     expect(nothingWasItemised(index(399, true))).toBe(false);
   });
 
+  it("does not distinguish a refusal, which is why order matters", () => {
+    // A response that disclosed nothing satisfies this as well, and needs the
+    // other message: it disclosed no visits either, so "they priced every visit
+    // and itemised none" would be false. ProductIndex checks `!disclosed`
+    // first. This pins the overlap so the ordering is not tidied away.
+    expect(nothingWasItemised(index(0, false))).toBe(true);
+  });
+
   it("is false for an itemised response whose index is empty", () => {
     // Reachable and different: lines were disclosed and none named a product.
     // "This response disclosed no products" is true there; "they never said
