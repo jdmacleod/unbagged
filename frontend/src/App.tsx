@@ -4,6 +4,7 @@ import { useAsync } from "./components/useAsync";
 import { RemoveRequest } from "./components/RemoveRequest";
 import { StaleReading } from "./components/StaleReading";
 import { Upload } from "./components/Upload";
+import type { UploadResult } from "./types";
 import { ErrorBox, Spine, Spinner } from "./components/ui";
 import { Compare } from "./views/Compare";
 import { Compliance } from "./views/Compliance";
@@ -83,6 +84,13 @@ export default function App() {
   // previous view, a reload always dumped you back on Timeline, and there was
   // no way to bookmark or send someone a link to the compliance matrix.
   const [{ tab, request: selected, query, label }, setView] = useState(readUrl);
+  // Owned here rather than inside Upload because the first upload swaps the
+  // prominent uploader for the footer one, and a component that unmounts takes
+  // its state with it. That state is the only report on the parse: which
+  // retailer matched, how confident, and every warning — including "this file
+  // was read but holds no spreadsheet, so nothing from it is in this report",
+  // which is how a bundle holding two retailers tells you it kept one.
+  const [lastUpload, setLastUpload] = useState<UploadResult | null>(null);
 
   function href(
     next: Partial<{
@@ -224,7 +232,14 @@ export default function App() {
             already the empty state, and on a first run it is the whole screen,
             so it is the one place in the app that gets to be large. */}
         {!requests.loading && rows.length === 0 && (
-          <Upload prominent onDone={() => requests.reload()} />
+          <Upload
+            prominent
+            result={lastUpload}
+            onDone={(r) => {
+              setLastUpload(r);
+              requests.reload();
+            }}
+          />
         )}
 
         {current !== null && (
@@ -264,7 +279,13 @@ export default function App() {
           competing with the document above it on every single view. */}
       {rows.length > 0 && (
         <div className="mt-14">
-          <Upload onDone={() => requests.reload()} />
+          <Upload
+            result={lastUpload}
+            onDone={(r) => {
+              setLastUpload(r);
+              requests.reload();
+            }}
+          />
           {/* Removing one is a smaller footnote still, and it lives here rather
               than beside the retailer selector: the selector is used constantly
               and a destructive control does not belong under a hand that is

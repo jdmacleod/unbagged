@@ -56,14 +56,24 @@ function Working() {
 export function Upload({
   onDone,
   prominent,
+  result = null,
 }: {
   onDone: (result: UploadResult) => void;
   prominent?: boolean;
+  /** What the last upload returned, owned by the caller.
+   *
+   *  **Not local state, and that is the whole point.** The first-run uploader
+   *  and the footer one are different positions in the tree — one inside
+   *  `<main>`, one after it — so React cannot carry state between them. A first
+   *  upload is exactly what swaps one for the other, which destroyed the panel
+   *  reporting on it in the same instant it was created: the retailer match,
+   *  the low-confidence caveat and every parse warning, gone before anyone
+   *  could read them. Held by `App`, which does not unmount. */
+  result?: UploadResult | null;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [result, setResult] = useState<UploadResult | null>(null);
   const input = useRef<HTMLInputElement>(null);
 
   async function send(files: File[]) {
@@ -72,7 +82,6 @@ export function Upload({
     setError(null);
     try {
       const uploaded = await api.upload(files);
-      setResult(uploaded);
       onDone(uploaded);
     } catch (e) {
       setError((e as Error).message);
