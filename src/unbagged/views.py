@@ -15,6 +15,7 @@ from collections import defaultdict
 from statistics import median
 from typing import Any
 
+from unbagged.adapters.registry import is_fallback, registry
 from unbagged.models import DisclosureCategory, DisclosureStatus, InferenceOrigin
 
 
@@ -41,15 +42,73 @@ def disclosed_specific_pieces(conn: sqlite3.Connection, request_id: int) -> bool
     for you: 0" reads as a fact about the retailer; what the response actually
     contained was silence.
 
-    A response with SPECIFIC_PIECES anything other than `provided` disclosed no
-    data, so every data-derived number for it is unknown rather than zero, and
-    the API returns null so the UI can render it as "not disclosed".
+    Answered as: the disclosure is `provided`, OR it is `partial` and the
+    response actually carried purchases. The name is now narrower than what this
+    computes, and the docstring is the correction.
+
+    The plain widening — treating any `partial` as disclosed — was written and
+    withdrawn after probing. `generic/adapter.py` marks SPECIFIC_PIECES
+    `partial` on a bare keyword hit, and its hint phrases include "specific
+    pieces" and "personal information we hold". A refusal letter using the
+    statutory phrase therefore parses to `partial` with zero transactions, and
+    the plain widening made it render `Visits 0 / Total paid $0.00` where it
+    correctly renders "not disclosed" today. The compound predicate lands every
+    case, and changes no already-stored request: no adapter emits `partial`
+    alongside transactions except the one this was written for.
+
+    Knowingly left alone: this is also the sole gate on `identifier_count` and
+    `inference_count` in `compare()`, so a response disclosing identifiers but
+    no purchases has its identifier count nulled by a purchase-count predicate.
+    Pre-existing, and a separate question from the one being fixed here.
     """
     row = conn.execute(
         "SELECT status FROM disclosure WHERE request_id = ? AND category = ?",
         (request_id, DisclosureCategory.SPECIFIC_PIECES.value),
     ).fetchone()
-    return bool(row) and row["status"] == DisclosureStatus.PROVIDED.value
+    if not row:
+        return False
+    if row["status"] == DisclosureStatus.PROVIDED.value:
+        return True
+    if row["status"] != DisclosureStatus.PARTIAL.value:
+        return False
+    return bool(
+        conn.execute(
+            "SELECT 1 FROM txn WHERE request_id = ? LIMIT 1", (request_id,)
+        ).fetchone()
+    )
+
+
+def basket_lines_disclosed(item_count: int | None) -> bool:
+    """Did the retailer say what was in this basket?
+
+    One definition, called from every consumer, because three separate
+    behaviours key off it — the footing check goes null, the line-derived
+    figures go null, and the month bars switch to stated totals — and this file
+    already spelled the underlying count three different ways.
+
+    It is about the RESPONSE, not the retailer: a basket with no disclosed lines
+    is a fact about what arrived, and nothing here branches on who sent it.
+    """
+    return bool(item_count)
+
+
+def request_lines_disclosed(conn: sqlite3.Connection, request_id: int) -> bool:
+    """Did this response itemise anything at all?
+
+    True unless EVERY basket lacks lines. The asymmetry is deliberate: a
+    response that itemised some of its baskets has disclosed line-level data,
+    and treating it as unitemised because one basket was empty would throw away
+    everything the others said.
+
+    `compare()` reads `stats()` and never sees a basket dict, so the
+    request-scope answer cannot be derived per-row at the point it is needed.
+    """
+    row = conn.execute(
+        "SELECT COUNT(i.id) AS lines FROM txn t"
+        " LEFT JOIN txn_item i ON i.txn_id = t.id WHERE t.request_id = ?",
+        (request_id,),
+    ).fetchone()
+    return bool(row["lines"])
 
 
 def _provenance(row: dict[str, Any]) -> dict[str, Any]:
@@ -160,8 +219,31 @@ def _settle(basket: dict[str, Any]) -> dict[str, Any]:
 
     So `paid_total` here is summed, not derived: it is what the retailer
     disclosed the basket cost. `saved_total` is the derived one.
+
+    **A basket with no disclosed lines is not a basket that failed to add up.**
+    The discriminator is the item count, never "the delta equals minus the
+    stated total" — the second would swallow the legitimate case where lines
+    fall short of a stated total, which `tests/test_views_footing.py` pins. With
+    no lines there is nothing to foot, so the delta is null rather than a
+    reconciliation failure the size of the whole basket.
     """
+    lines = basket_lines_disclosed(basket.get("item_count"))
+    basket["lines_disclosed"] = lines
+
     shelf, paid = basket["shelf_total"], basket["paid_total"]
+    if not lines:
+        # No lines were disclosed, so there are no line-derived figures. Zero
+        # would be a claim: it says this basket cost nothing, which is a fact
+        # about the retailer that the response never stated. Null renders as an
+        # em dash, which now means exactly one thing.
+        basket["shelf_total"] = None
+        basket["paid_total"] = None
+        basket["saved_total"] = None
+        # The stated total is a real disclosed number and stays one. It is what
+        # the month bars and the header figure are summed from.
+        basket["stated_pre_discount_delta"] = None
+        return basket
+
     basket["shelf_total"] = round(shelf, 2)
     basket["paid_total"] = round(paid, 2)
     basket["saved_total"] = round(shelf - paid, 2)
@@ -215,9 +297,33 @@ def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
         (request_id,),
     ).fetchone()
     result = dict(row)
-    result["total_shelf"] = round(result["total_shelf"], 2)
-    result["total_paid"] = round(result["total_paid"], 2)
-    result["total_saved"] = round(result["total_shelf"] - result["total_paid"], 2)
+    result["lines_disclosed"] = request_lines_disclosed(conn, request_id)
+    # Its own query, not a column above: the LEFT JOIN onto line items
+    # multiplies each basket's stated total by its line count, so summing it in
+    # that statement would silently overcount every itemised response.
+    result["total_stated"] = conn.execute(
+        "SELECT COALESCE(SUM(total_pre_discount), 0) AS total FROM txn"
+        " WHERE request_id = ? AND total_pre_discount IS NOT NULL",
+        (request_id,),
+    ).fetchone()["total"]
+    result["total_stated"] = round(result["total_stated"], 2)
+
+    if not result["lines_disclosed"]:
+        # Every figure above is built by summing line items, and there are
+        # none. Zero would state that this retailer disclosed baskets costing
+        # nothing; null says it disclosed no lines, which is what happened.
+        # `format.ts` renders null as an em dash, which means exactly that.
+        for key in ("total_shelf", "total_saved", "distinct_products",
+                    "line_count", "zero_value_lines", "negative_lines"):
+            result[key] = None
+        # The one exception, and the reason this branch exists: the stated
+        # totals ARE disclosed money, so the headline figure carries them
+        # rather than an em dash above a chart drawn from real numbers.
+        result["total_paid"] = result["total_stated"]
+    else:
+        result["total_shelf"] = round(result["total_shelf"], 2)
+        result["total_paid"] = round(result["total_paid"], 2)
+        result["total_saved"] = round(result["total_shelf"] - result["total_paid"], 2)
     stores = _rows(
         conn,
         "SELECT store_code, COUNT(*) AS visits FROM txn WHERE request_id = ?"
@@ -225,8 +331,9 @@ def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
         (request_id,),
     )
     result["stores"] = stores
-    result["zero_value_lines"] = result["zero_value_lines"] or 0
-    result["negative_lines"] = result["negative_lines"] or 0
+    if result["lines_disclosed"]:
+        result["zero_value_lines"] = result["zero_value_lines"] or 0
+        result["negative_lines"] = result["negative_lines"] or 0
 
     # Null, not zero, when the retailer disclosed no specific pieces. See
     # disclosed_specific_pieces().
@@ -235,7 +342,7 @@ def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
         for key in (
             "basket_count", "total_shelf", "total_paid", "total_saved",
             "line_count", "distinct_products", "zero_value_lines", "negative_lines",
-            "first_visit", "last_visit",
+            "first_visit", "last_visit", "total_stated",
         ):
             result[key] = None
     return result
@@ -275,6 +382,7 @@ def transaction_detail(conn: sqlite3.Connection, txn_id: int) -> dict[str, Any] 
         )
     basket["items"] = items
     basket["item_count"] = len(items)
+    basket["lines_disclosed"] = basket_lines_disclosed(len(items))
     basket["shelf_total"] = sum(i["retail_amt"] or 0 for i in items)
     basket["paid_total"] = sum(i["paid_amt"] or 0 for i in items)
     _settle(basket)
@@ -399,6 +507,10 @@ def compare(conn: sqlite3.Connection) -> dict[str, Any]:
         summary = stats(conn, request_id)
         disclosed = summary["disclosed"]
         request["disclosed"] = disclosed
+        # Request scope, so the column head can say which figure this column
+        # holds rather than leaving two quantities under one label.
+        request["lines_disclosed"] = summary["lines_disclosed"]
+        request["total_stated"] = summary["total_stated"]
         request["visits"] = summary["basket_count"]
         # Paid, not shelf. Comparing two retailers on pre-discount totals ranks
         # them by who lists higher prices, not by who cost you more.
@@ -426,12 +538,28 @@ def compare(conn: sqlite3.Connection) -> dict[str, Any]:
             "SELECT COUNT(*) c FROM inference WHERE request_id = ? AND origin = ?",
             (request_id, InferenceOrigin.APPENDED_THIRD_PARTY.value),
         )
-        # Not gated: what a retailer failed to address is a real finding about
-        # that retailer, and it is exactly what this row is worth reading for.
-        request["absent_disclosures"] = conn.execute(
-            "SELECT COUNT(*) c FROM disclosure WHERE request_id = ? AND status = ?",
-            (request_id, DisclosureStatus.ABSENT.value),
-        ).fetchone()["c"]
+        # Gated on who parsed it, which is a departure from the comment this
+        # replaces. What a retailer failed to address IS a real finding about
+        # that retailer — but only when an adapter that understands the format
+        # looked and found nothing. The generic fallback marks every category
+        # absent whenever it cannot read a file, and its own warning says so in
+        # those words: not because the retailer withheld them, but because
+        # nothing here knows this format. Counting those eight as a retailer's
+        # failures attributes a limitation of this tool to the company, in the
+        # one view built to compare companies.
+        # Asked as a property, not an identity: `is_fallback` is the flag the
+        # registry already declares so this invariant does not live in two
+        # files, and nothing here needs to know which retailer it is looking at.
+        # An unregistered id answers False, which keeps the old behaviour.
+        parsed_by = registry.get(request["retailer_id"])
+        request["absent_disclosures"] = (
+            None
+            if parsed_by is not None and is_fallback(parsed_by)
+            else conn.execute(
+                "SELECT COUNT(*) c FROM disclosure WHERE request_id = ? AND status = ?",
+                (request_id, DisclosureStatus.ABSENT.value),
+            ).fetchone()["c"]
+        )
     return {"requests": requests, "comparable": len(requests) > 1}
 
 
