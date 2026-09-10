@@ -36,6 +36,7 @@ import urllib.error
 import urllib.request
 import uuid
 from collections.abc import Iterator
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
@@ -176,6 +177,17 @@ def _upload_again(page, *paths) -> None:
     page.wait_for_load_state("networkidle")
 
 
+def _selected(page) -> str:
+    """Which response the page is on, read from `?r=` rather than from the DOM.
+
+    The URL is what `go()` writes and what a reload or a shared link replays, so
+    it is the honest place to ask. It also answers at ONE response, where the
+    retailer selector does not exist yet — the selector can only be asked once
+    there are two, which is one upload too late for half of these.
+    """
+    return parse_qs(urlparse(page.url).query).get("r", [""])[0]
+
+
 def _panel(page) -> str:
     """Just the "Read as …" line, not the whole page.
 
@@ -312,6 +324,180 @@ class TestTheUploadsAfterTheFirst:
         panel = _panel(page)
         assert "H Mart" in panel
         assert "Kroger" not in panel
+
+    def test_the_second_upload_becomes_the_response_on_screen(self, page):
+        """Adding a response selects it. The report and the view must agree.
+
+        Regression: reported as "I cannot reliably add and remove responses".
+        `onDone` reloaded the request list and never selected what it had just
+        created, so `current` fell back to `rows[0]` — the OLDEST response. The
+        first upload of a session hid it completely, because the row it created
+        IS `rows[0]`; from the second upload on the panel said "Read as Kroger"
+        over a timeline still showing H Mart.
+
+        The sharp end is removal, asserted below: "Remove this response" acts on
+        what is being VIEWED, so the obvious next click deleted the response the
+        reader had not just added.
+
+        Predates the upload-panel work — `dbaa09c` had
+        `onDone={() => requests.reload()}` — but that work made the panel
+        reliably visible, which is what made the disagreement visible too.
+        """
+        _upload(page, HMART)
+        assert "H Mart" in _panel(page)
+
+        _upload_again(page, KROGER)
+
+        # The panel names the new response...
+        assert "Kroger" in _panel(page)
+        # ...and so does the selector, which is what the views render from.
+        selector = page.locator("select[aria-label]")
+        chosen = selector.locator("option", has_text="Kroger").get_attribute("value")
+        assert selector.input_value() == chosen
+
+        # And the destructive control targets it, rather than the one the
+        # reader was looking at before they added anything.
+        page.get_by_role("button", name="Remove this response").click()
+        assert page.get_by_role("button", name="Remove Kroger").is_visible()
+
+    def test_an_upload_keeps_the_view_you_were_reading(self, page):
+        """Selecting the new response must not also move the reader's view.
+
+        `uploadFinished` names only `request`, `query` and `label`; `go` merges
+        the rest, so the tab rides through untouched. Written down because the
+        obvious wrong fix is `go({ tab: "timeline", request: ... })`, which
+        silently throws away the view someone was reading in order to show them
+        a view they did not ask for — and no other test here ever leaves the
+        default tab, so nothing else would notice.
+        """
+        _upload(page, HMART)
+
+        # `^Profile` because the accessible name carries the hint line under the
+        # label ("Profile What they infer"), which is deliberate — see App.tsx.
+        page.get_by_role("button", name=re.compile(r"^Profile")).click()
+        assert "tab=profile" in page.url
+
+        _upload_again(page, KROGER)
+
+        assert "tab=profile" in page.url
+        assert (
+            page.get_by_role("button", name=re.compile(r"^Profile")).get_attribute(
+                "aria-current"
+            )
+            == "page"
+        )
+        # And it really did switch response, so the assertion above is not just
+        # describing a page where nothing happened at all.
+        selector = page.locator("select[aria-label]")
+        chosen = selector.locator("option", has_text="Kroger").get_attribute("value")
+        assert selector.input_value() == chosen
+
+    def test_an_upload_drops_a_product_filter_aimed_at_the_old_response(
+        self, page, empty_app
+    ):
+        """`?q=` names a product in the response being left behind.
+
+        The Products index links into the Timeline by UPC, so the filter is a
+        pointer into ONE response's catalogue. Carried onto a different response
+        it keeps filtering — the reader lands on a timeline that silently shows
+        a fraction of what is there, filtered by something they never pointed at
+        it. `onRemoved` drops it for the same reason; this is the other door
+        into the same state.
+
+        The query is deliberately one that matches nothing: what is asserted is
+        that the filter is gone from the URL, not what it would have found.
+        """
+        _upload(page, HMART)
+        hmart = _selected(page)
+
+        page.goto(
+            f"{empty_app}/?tab=timeline&r={hmart}&q=ZZZZZZ&label=Nothing+here",
+            wait_until="networkidle",
+        )
+        assert "q=ZZZZZZ" in page.url
+
+        _upload_again(page, KROGER)
+
+        assert _selected(page) != hmart
+        assert "tab=timeline" in page.url
+        assert "q=" not in page.url
+        assert "label=" not in page.url
+
+    def test_a_refused_upload_leaves_the_selection_where_it_was(self, page):
+        """`r` is null when an upload fails, and null must change nothing.
+
+        `send()` calls `onDone(null)` before the request goes out and never
+        calls it again on the error path, so null is the entire story of a
+        failure. The guard in `uploadFinished` is what keeps that from moving
+        the reader: a refusal is not a new response, and being thrown onto a
+        different retailer by a drop that did not work is worse than the
+        refusal itself.
+
+        Asserted from the OLDER response, because sitting on the newest one
+        makes "the selection did not move" true by accident.
+        """
+        _upload(page, HMART)
+        hmart = _selected(page)
+        _upload_again(page, KROGER)
+        assert _selected(page) != hmart
+
+        # Back to the older response by hand, the way a reader would.
+        selector = page.locator("select[aria-label]")
+        selector.select_option(
+            selector.locator("option", has_text="H Mart").get_attribute("value")
+        )
+        assert _selected(page) == hmart
+
+        # A re-drop of something already stored: refused by the server, by name.
+        # H Mart rather than Kroger, and not only because it is the response on
+        # screen: the footer input still holds the Kroger file from the upload
+        # above, and setting an input to the files it already has fires no
+        # `change`, so the drop would never reach `send()` at all.
+        page.set_input_files("input[type=file]", [str(HMART)])
+        page.wait_for_selector("text=already loaded this response", timeout=120_000)
+        page.wait_for_load_state("networkidle")
+
+        assert _selected(page) == hmart
+        # And the destructive control still points at what is on screen.
+        page.get_by_role("button", name="Remove this response").click()
+        assert page.get_by_role("button", name="Remove H Mart").is_visible()
+
+    def test_removing_the_response_you_just_added_falls_back_to_the_other(self, page):
+        """The whole reported loop — "I cannot reliably add and remove" — end to end.
+
+        Add, then remove what was added. Three things have to happen together
+        and each has its own way of going wrong: `?r=` must stop naming a row
+        that is gone (`known` is false, so `current` falls back to `rows[0]`);
+        the report must die with the response it describes, without taking the
+        page back to the first-run screen; and the remaining response must be
+        the one still standing.
+
+        The sibling test above stops at the confirmation because it is asserting
+        what the button TARGETS. This one presses it, which is the only way to
+        reach the state after.
+        """
+        _upload(page, HMART)
+        _upload_again(page, KROGER)
+
+        page.get_by_role("button", name="Remove this response").click()
+        page.get_by_role("button", name="Remove Kroger").click()
+        # The selector exists only at two responses, so its removal marks the
+        # far side of the reload the same way its arrival marked the far side
+        # of the second upload.
+        page.wait_for_selector("select[aria-label]", state="detached", timeout=30_000)
+        page.wait_for_load_state("networkidle")
+
+        body = page.inner_text("body")
+        # The report described the response that was just deleted.
+        assert "Read as" not in body
+        # One response is still loaded, so this is not the first run.
+        assert "Drop it here" not in body
+        assert "Add another response" in body
+        # `?r=` no longer names the deleted row.
+        assert _selected(page) == ""
+
+        page.get_by_role("button", name="Remove this response").click()
+        assert page.get_by_role("button", name="Remove H Mart").is_visible()
 
     def test_a_refused_upload_says_why(self, page, empty_app):
         """The error path, which shares the panel with the report.
