@@ -81,12 +81,46 @@ def applied_versions(conn: sqlite3.Connection) -> set[int]:
 
 
 def migrate(conn: sqlite3.Connection) -> list[int]:
-    """Apply every pending migration. Returns the versions applied, newest last."""
+    """Apply every pending migration. Returns the versions applied, newest last.
+
+    **Foreign keys are enforced everywhere except here.** SQLite cannot alter a
+    column in place, so changing one means the standard rebuild: create the new
+    table, copy, drop the old, rename. With ``foreign_keys=ON`` the drop is not
+    inert — it performs an implicit ``DELETE FROM``, which fires every
+    ``ON DELETE CASCADE`` pointing at that table. Seven tables cascade off
+    ``request``, so rebuilding it with enforcement on empties the database and
+    reports success. Measured on a scratch copy: three transactions in, zero out.
+
+    ``PRAGMA foreign_keys`` is a no-op inside a transaction, so it cannot be set
+    from a migration script — the runner wraps each one in BEGIN/COMMIT. It has
+    to be set here, around them.
+
+    The safety it removes is given back immediately: ``foreign_key_check`` runs
+    once the migrations have committed and refuses to leave a database carrying
+    references the rebuild broke.
+    """
     done = applied_versions(conn)
+    pending = [(v, p) for v, p in available_migrations() if v not in done]
+    if not pending:
+        return []
+
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        applied = _apply(conn, pending)
+        violations = conn.execute("PRAGMA foreign_key_check").fetchall()
+        if violations:
+            raise RuntimeError(
+                f"migration left {len(violations)} dangling foreign key reference(s); "
+                f"first: {tuple(violations[0])}"
+            )
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
+    return applied
+
+
+def _apply(conn: sqlite3.Connection, pending: list[tuple[int, Path]]) -> list[int]:
     applied: list[int] = []
-    for version, path in available_migrations():
-        if version in done:
-            continue
+    for version, path in pending:
         # Each migration is one transaction: a half-applied schema is worse than
         # an unapplied one, because the next run would skip the missing half.
         # BEGIN/COMMIT have to live inside the script itself — executescript()
