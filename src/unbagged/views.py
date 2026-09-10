@@ -56,10 +56,13 @@ def disclosed_specific_pieces(conn: sqlite3.Connection, request_id: int) -> bool
     case, and changes no already-stored request: no adapter emits `partial`
     alongside transactions except the one this was written for.
 
-    Knowingly left alone: this is also the sole gate on `identifier_count` and
-    `inference_count` in `compare()`, so a response disclosing identifiers but
-    no purchases has its identifier count nulled by a purchase-count predicate.
-    Pre-existing, and a separate question from the one being fixed here.
+    This used to be the sole gate on `identifier_count` and `inference_count`
+    in `compare()` too, which is a purchase predicate answering an inventory
+    question. That is closed: see `zero_is_claimable()` below, which those three
+    counts now use. This one keeps the job its name describes — whether the
+    response disclosed purchases — and is what nulls the headline figures in
+    `stats()` and renders the "disclosed no data" column head in Compare.
+    Changing it moves both of those, so it is deliberately left alone.
     """
     row = conn.execute(
         "SELECT status FROM disclosure WHERE request_id = ? AND category = ?",
@@ -76,6 +79,41 @@ def disclosed_specific_pieces(conn: sqlite3.Connection, request_id: int) -> bool
             "SELECT 1 FROM txn WHERE request_id = ? LIMIT 1", (request_id,)
         ).fetchone()
     )
+
+
+def zero_is_claimable(conn: sqlite3.Connection, request_id: int) -> bool:
+    """May this response be quoted as saying a count is zero?
+
+    Sibling to `disclosed_specific_pieces()`, and deliberately not the same
+    question. That one asks whether purchases were disclosed. This one asks
+    whether a category was answered fully enough that "none" is a claim the
+    retailer made, rather than a silence this tool is filling in.
+
+    Only `provided` licenses a zero. `docs/legal-basis.md` grades `partial` as
+    "addressed, but incompletely", and an inventory of things a response did not
+    enumerate is exactly the incomplete part. H Mart is the case that made this
+    matter: `adapters/hmart/adapter.py` marks SPECIFIC_PIECES `partial` on
+    purpose — every visit's date, store and total, and nothing about what was in
+    any basket — so `compare()` printed "Inferred attributes 0" over a response
+    that never addressed inferences at all.
+
+    A non-zero count is NOT gated on this. Three rows is a disclosed fact
+    whatever grade the category carries, and hiding it would be the same
+    overclaim pointing the other way: H Mart discloses a card number, and
+    `identifier_count` must stay 1 while `inference_count` becomes an em dash on
+    the same column. So the caller applies this only when the count is zero.
+
+    Scope limit, tracked as #69: `SPECIFIC_PIECES` is one coarse grade covering
+    identifiers, transactions and inferences together, because the CCPA does not
+    enumerate inferences separately and `models.py` follows the statute. A
+    retailer graded `provided` whose response has no inference section still
+    renders a zero. This narrows the defect; it does not close the class.
+    """
+    row = conn.execute(
+        "SELECT status FROM disclosure WHERE request_id = ? AND category = ?",
+        (request_id, DisclosureCategory.SPECIFIC_PIECES.value),
+    ).fetchone()
+    return bool(row) and row["status"] == DisclosureStatus.PROVIDED.value
 
 
 def basket_lines_disclosed(item_count: int | None) -> bool:
@@ -507,6 +545,10 @@ def compare(conn: sqlite3.Connection) -> dict[str, Any]:
         summary = stats(conn, request_id)
         disclosed = summary["disclosed"]
         request["disclosed"] = disclosed
+        # Two predicates, two questions. `disclosed` decides whether the
+        # purchase-derived figures mean anything; `zero_claimable` decides
+        # whether a count of zero is something this response actually said.
+        zero_claimable = zero_is_claimable(conn, request_id)
         # Request scope, so the column head can say which figure this column
         # holds rather than leaving two quantities under one label.
         request["lines_disclosed"] = summary["lines_disclosed"]
@@ -521,12 +563,21 @@ def compare(conn: sqlite3.Connection) -> dict[str, Any]:
         request["first_visit"] = summary["first_visit"]
         request["last_visit"] = summary["last_visit"]
 
-        def count(sql: str, params: tuple, *, known: bool = disclosed) -> int | None:
-            # None, not 0, when nothing was disclosed: "0 identifiers" is a claim
-            # about the retailer, and this response made no such claim.
-            # `known` is bound as a default so the closure does not capture the
-            # loop variable.
-            return conn.execute(sql, params).fetchone()["c"] if known else None
+        def count(
+            sql: str, params: tuple, *, claimable: bool = zero_claimable
+        ) -> int | None:
+            # A non-zero count is a disclosed fact and always renders. A zero is
+            # a claim about the retailer, and only a category answered in full
+            # supports one — see zero_is_claimable(). Null renders as an em
+            # dash, which format.ts defines as absence.
+            #
+            # Asking about the count first is what keeps this from overcorrecting:
+            # gating the whole figure would turn H Mart's genuinely disclosed
+            # card number into a dash alongside the inference count it should
+            # become. `claimable` is bound as a default so the closure does not
+            # capture the loop variable.
+            n = conn.execute(sql, params).fetchone()["c"]
+            return n if n or claimable else None
 
         request["identifier_count"] = count(
             "SELECT COUNT(*) c FROM identity WHERE request_id = ?", (request_id,)

@@ -12,6 +12,10 @@ FIXTURE = (
     Path(__file__).parent.parent
     / "src" / "unbagged" / "adapters" / "kroger" / "fixtures" / "synthetic_report.txt"
 )
+HMART_FIXTURE = (
+    Path(__file__).parent.parent
+    / "src" / "unbagged" / "adapters" / "hmart" / "fixtures" / "synthetic_history.xls"
+)
 
 
 @pytest.fixture
@@ -787,6 +791,64 @@ class TestDisclosedVersusZero:
         ).json()
         assert data["stats"]["disclosed"] is True
         assert data["filtered_count"] == 0
+
+    @pytest.fixture
+    def hmart(self, client):
+        with HMART_FIXTURE.open("rb") as fh:
+            response = client.post(
+                "/api/requests",
+                files={
+                    "files": (
+                        "synthetic_history.xls",
+                        fh,
+                        "application/vnd.ms-excel",
+                    )
+                },
+            )
+        assert response.status_code == 201, response.text
+        return response.json()["request_id"]
+
+    def test_a_partial_response_does_not_claim_zero_inferences(self, client, hmart):
+        """Regression: issue #43, through the whole stack.
+
+        H Mart's adapter grades SPECIFIC_PIECES partial on purpose: it disclosed
+        what each visit cost and nothing about what was in any of them. The
+        response never addressed inferences, so a 0 in that cell was a claim
+        about the company that nothing in the file supports.
+        """
+        rows = {
+            r["id"]: r for r in client.get("/api/compare").json()["requests"]
+        }
+        assert rows[hmart]["inference_count"] is None
+        assert rows[hmart]["appended_inference_count"] is None
+
+    def test_the_same_response_still_reports_the_card_it_did_disclose(
+        self, client, hmart
+    ):
+        """The other half of the same column, and the overcorrection guard.
+
+        H Mart discloses a loyalty card number. Gating the whole figure rather
+        than the zero would render that as an em dash, which is the same
+        overclaim in the opposite direction. These two cells must disagree.
+        """
+        rows = {
+            r["id"]: r for r in client.get("/api/compare").json()["requests"]
+        }
+        assert rows[hmart]["identifier_count"] > 0
+
+    def test_a_partial_response_keeps_the_purchases_it_did_disclose(
+        self, client, hmart
+    ):
+        """The Timeline must be untouched by the count gate.
+
+        Tightening `disclosed_specific_pieces` instead of adding a sibling
+        predicate would blank every headline figure here and put "disclosed no
+        data" over a column holding real visits.
+        """
+        stats = client.get(f"/api/requests/{hmart}/timeline").json()["stats"]
+        assert stats["disclosed"] is True
+        assert stats["basket_count"] > 0
+        assert stats["total_paid"] is not None
 
 
 class TestDuplicateAcrossRequests:
