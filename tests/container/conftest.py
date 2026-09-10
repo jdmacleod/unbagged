@@ -19,6 +19,7 @@ reports a guarantee it never checked.
 from __future__ import annotations
 
 import json
+import os
 import platform
 import shutil
 import subprocess
@@ -61,6 +62,61 @@ def uid_semantics_are_real() -> bool:
     and therefore proves nothing.
     """
     return platform.system() == "Linux"
+
+
+def browser_is_installed() -> bool:
+    """Is a Chromium actually downloaded — not merely `playwright` importable?
+
+    `pytest.importorskip("playwright.sync_api")` proves the wheel is present and
+    nothing more. A runner with the package and no downloaded browser sails past
+    that skip and then dies at `chromium.launch()` with an exception, at which
+    point the skip's own advice ("playwright install chromium") is no longer on
+    screen. See issue #51.
+
+    The context is opened and closed inside this function on purpose.
+    `test_layout.py` opens its own module-scoped `sync_playwright()`, and two
+    live sync contexts in one thread make Playwright refuse the second with
+    "Sync API inside the asyncio loop" — a failure that only shows up in a
+    full-tier run, because each module passes when run alone.
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return False
+    try:
+        with sync_playwright() as p:
+            return Path(p.chromium.executable_path).exists()
+    except Exception:
+        # No browsers directory, a partial download, a driver that will not
+        # start: all of them mean the same thing to a test that needs one.
+        return False
+
+
+requires_browser = pytest.mark.skipif(
+    not browser_is_installed(),
+    reason='needs a browser: pip install -e ".[dev,browser]" && playwright install chromium',
+)
+
+
+#: This tier's own cap, raised from the 60s default in pyproject.toml.
+#:
+#: Measured over a full run: the slowest test is 17.6s of call plus 8.1s of
+#: setup, so 180s is about seven times the real worst case. It also has to clear
+#: the longest wait a test performs on itself — `wait_for_selector` is given
+#: 120s in a few places — or pytest would kill a test that was still legitimately
+#: waiting. A backstop above every internal deadline, not a competitor with them.
+CONTAINER_TIMEOUT_SECONDS = 180
+
+
+def pytest_collection_modifyitems(items):
+    """Give every test in this directory the tier's timeout.
+
+    Applied here rather than as a decorator on each test: a cap that has to be
+    remembered per test is a cap that is missing from the next one written, which
+    is the shape #51 is about.
+    """
+    for item in items:
+        item.add_marker(pytest.mark.timeout(CONTAINER_TIMEOUT_SECONDS))
 
 
 requires_docker = pytest.mark.skipif(not have_docker(), reason="Docker is not available")
@@ -117,6 +173,46 @@ def run_container(image, tmp_path):
 
     for name in started:
         docker("rm", "-f", name, check=False)
+    return_ownership(image, tmp_path)
+
+
+def return_ownership(image: str, path: Path) -> None:
+    """Give the scratch tree back to whoever pytest is running as.
+
+    `docker/entrypoint.sh` chowns `/data` to uid 10001 whenever it does not
+    already own it — which is always, for a fresh `tmp_path`. Through a bind
+    mount that rewrites ownership on the HOST, so the tree pytest created is no
+    longer pytest's. Nothing then cleans it up: `tmp_path` retention keeps the
+    last few sessions and deletes older ones, and those deletes fail with
+    PermissionError unless CI runs as root. Every run leaves more behind, each
+    holding a SQLite database parsed from a 413 KB fixture. See issue #50.
+
+    One throwaway root container per fixture teardown, not per container started.
+    It uses the image already built for the tier rather than pulling another, and
+    overrides the entrypoint so none of the app's own startup runs.
+
+    Invisible on macOS and Windows, where Docker Desktop remaps bind-mount
+    ownership and there is nothing to give back — which is exactly the
+    "passes here, fails on Linux" trap this module's docstring warns about, so
+    the guard is the same one `requires_real_uids` uses.
+    """
+    if not uid_semantics_are_real() or not path.exists():
+        return
+    docker(
+        "run",
+        "--rm",
+        "--user",
+        "0:0",
+        "--entrypoint",
+        "chown",
+        "-v",
+        f"{path}:/target",
+        image,
+        "-R",
+        f"{os.getuid()}:{os.getgid()}",
+        "/target",
+        check=False,
+    )
 
 
 def wait_for_exit(name: str, seconds: int = 30) -> dict:

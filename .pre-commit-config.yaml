@@ -33,12 +33,12 @@ repos:
     hooks:
       - id: no-data-dir
         name: refuse files under data/
-        entry: python3 tools/no_data_dir.py
+        entry: python3 -m tools.no_data_dir
         language: system
         pass_filenames: true
 
       - id: scan-pii
         name: scan for personal data
-        entry: python3 tools/scan_pii.py
+        entry: python3 -m tools.scan_pii
         language: system
         pass_filenames: true

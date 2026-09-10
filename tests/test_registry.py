@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 
 import pytest
 
@@ -12,9 +13,12 @@ from unbagged.adapters.base import (
     Severity,
     SniffResult,
     SourceBundle,
+    SourceDocument,
     WarningCollector,
     absent_disclosures,
 )
+from unbagged.adapters.hmart.adapter import HMartAdapter
+from unbagged.adapters.kroger.adapter import KrogerAdapter
 from unbagged.adapters.registry import MIN_CONFIDENCE, AdapterRegistry
 
 
@@ -210,3 +214,59 @@ class TestWarningCollector:
 
     def test_an_empty_collector_is_falsy(self):
         assert not WarningCollector()
+
+
+class TestTheRealAdaptersScoreAgainstEachOther:
+    """The relationship a browser test was silently depending on.
+
+    `test_a_bundle_holding_two_retailers_names_the_file_it_dropped` uploads both
+    fixtures at once and asserts that the panel names the Kroger file as the one
+    dropped. That only holds because H Mart outscores Kroger on a bundle holding
+    both — an emergent property of two independent `sniff()` implementations,
+    asserted nowhere, and load-bearing for a test that takes minutes to fail and
+    reports a DOM assertion when it does.
+
+    Asserted here instead, in the tier that can name the cause. See issue #52.
+    """
+
+    @staticmethod
+    def _bundle() -> SourceBundle:
+        repo_root = Path(__file__).resolve().parent.parent
+        adapters = repo_root / "src" / "unbagged" / "adapters"
+        paths = (
+            adapters / "kroger" / "fixtures" / "synthetic_report.txt",
+            adapters / "hmart" / "fixtures" / "synthetic_history.xls",
+        )
+        for path in paths:
+            assert path.exists(), f"fixture missing: {path}"
+        return SourceBundle(
+            documents=tuple(
+                SourceDocument(
+                    original_filename=p.name,
+                    sha256="0" * 64,
+                    path=str(p),
+                )
+                for p in paths
+            )
+        )
+
+    def test_hmart_outscores_kroger_on_a_bundle_holding_both(self):
+        bundle = self._bundle()
+        hmart = HMartAdapter().sniff(bundle)
+        kroger = KrogerAdapter().sniff(bundle)
+        hmart = hmart.confidence if isinstance(hmart, SniffResult) else hmart
+        kroger = kroger.confidence if isinstance(kroger, SniffResult) else kroger
+        assert hmart > kroger, (
+            "the browser tier asserts the Kroger file is the one dropped from a "
+            "two-retailer bundle; that requires H Mart to win the sniff"
+        )
+
+    def test_both_clear_the_threshold_on_that_bundle(self):
+        """The winner being higher is not enough — a loser below MIN_CONFIDENCE
+        would be dropped for the wrong reason, and the browser test could not
+        tell the two apart."""
+        bundle = self._bundle()
+        for adapter in (HMartAdapter(), KrogerAdapter()):
+            score = adapter.sniff(bundle)
+            score = score.confidence if isinstance(score, SniffResult) else score
+            assert score >= MIN_CONFIDENCE, f"{adapter.retailer_id} scored {score}"

@@ -52,9 +52,9 @@ from tests.container.browser import (
 from tests.container.browser import (
     playwright_expect as expect,
 )
-from tests.container.conftest import requires_docker
+from tests.container.conftest import requires_browser, requires_docker
 
-pytestmark = [pytest.mark.container, requires_docker]
+pytestmark = [pytest.mark.container, requires_docker, requires_browser]
 
 # One Pattern object, reused for every route/unroute.
 #

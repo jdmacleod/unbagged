@@ -28,7 +28,7 @@ jobs:
       # is the one worth having — the app reports __version__ from that file,
       # so the running software would name a version that was never released.
       - name: Extract the release notes from CHANGELOG.md
-        run: python tools/release_notes.py "${{ github.ref_name }}" > "${RUNNER_TEMP}/notes.md"
+        run: python -m tools.release_notes "${{ github.ref_name }}" > "${RUNNER_TEMP}/notes.md"
 
       # The tag is protected against deletion and non-fast-forward, so a release
       # cut from a bad tag cannot be quietly replaced. Better to fail above.

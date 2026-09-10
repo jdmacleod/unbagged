@@ -42,6 +42,18 @@ SCHEMA_VERSION = 1
 
 # Below every real adapter, and the registry prefers a non-fallback regardless.
 FALLBACK_CONFIDENCE = 0.1
+
+#: The warning every fallback parse carries. Named rather than inline because it
+#: is the only warning in the codebase with no locator, which makes it the case
+#: the upload panel's "render a warning that names nothing" branch is tested
+#: against — and a browser test restating the wording is a two-minute failure
+#: reporting a DOM assertion when someone edits a sentence. See issue #52.
+NO_ADAPTER_WARNING = (
+    "No adapter recognised this response, so it was read as unstructured "
+    "text. Purchases, identifiers and inferred attributes were not "
+    "extracted — not because the retailer withheld them, but because "
+    "nothing here knows this format. See docs/writing-an-adapter.md."
+)
 SNIFF_PAGES = 3
 
 SENTENCE = re.compile(r"[^.!?\n]+[.!?]?")
@@ -151,13 +163,7 @@ class GenericAdapter:
         text = document.text
         provenance = Provenance(source_document_id=document.document_id, page=1, locator="$")
 
-        warnings.add(
-            "No adapter recognised this response, so it was read as unstructured "
-            "text. Purchases, identifiers and inferred attributes were not "
-            "extracted — not because the retailer withheld them, but because "
-            "nothing here knows this format. See docs/writing-an-adapter.md.",
-            severity=Severity.WARNING,
-        )
+        warnings.add(NO_ADAPTER_WARNING, severity=Severity.WARNING)
 
         found: dict[DisclosureCategory, Disclosure] = {}
         for category, phrases in CATEGORY_HINTS.items():

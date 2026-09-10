@@ -47,14 +47,19 @@ from pathlib import Path
 
 import pytest
 
-from tests.container.conftest import REPO_ROOT, docker, requires_docker
+from tests.container.conftest import (
+    REPO_ROOT,
+    docker,
+    requires_browser,
+    requires_docker,
+)
 
 playwright_api = pytest.importorskip(
     "playwright.sync_api",
     reason='needs a browser: pip install -e ".[dev,browser]" && playwright install chromium',
 )
 
-pytestmark = [pytest.mark.container, requires_docker]
+pytestmark = [pytest.mark.container, requires_docker, requires_browser]
 
 FIXTURE = (
     REPO_ROOT / "src" / "unbagged" / "adapters" / "kroger" / "fixtures" / "synthetic_report.txt"

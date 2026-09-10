@@ -19,7 +19,6 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
@@ -138,5 +137,9 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.path.insert(0, str(REPO_ROOT))
+    # No sys.path surgery here any more. This used to insert REPO_ROOT so the
+    # `from tools.check_lock import ...` above could resolve: run as a path,
+    # sys.path[0] is tools/ and the `tools` package is invisible. Every caller
+    # invokes `python -m tools.make_lock` now, which puts the working directory
+    # on the path instead. See issue #29.
     raise SystemExit(main())

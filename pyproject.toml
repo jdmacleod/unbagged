@@ -49,6 +49,10 @@ dev = [
     # comparison that no longer exists.
     "pillow>=11",
     "pytest>=8.0",
+    # A hang has to fail as a hang. Without a cap the browser tier can burn five
+    # minutes per test (60s health wait, two 120s selector waits, a 30s
+    # networkidle) and then report a timeout rather than a diagnosis. See #51.
+    "pytest-timeout>=2.3",
     "pre-commit>=3.7",
     # Capped, and coupled to the `rev` in .pre-commit-config.yaml. `ruff format`
     # output is version-dependent: stable style changes land in minor releases.
@@ -87,6 +91,12 @@ addopts = "-m 'not container'"
 markers = [
     "container: runs a real container (slow, needs Docker)",
 ]
+# A backstop, not a budget. Measured on this suite the slowest test outside the
+# container tier is 0.86s, so 60s is roughly seventy times the real worst case —
+# large enough that it can only fire on something genuinely stuck, small enough
+# that a stuck test fails in a minute rather than never. The container tier is
+# raised to 180s in tests/container/conftest.py, where the numbers are different.
+timeout = 60
 
 [tool.ruff]
 line-length = 100
