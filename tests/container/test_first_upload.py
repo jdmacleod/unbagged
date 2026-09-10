@@ -95,9 +95,7 @@ class TestTheFirstUploadReportsOnItself:
         # The joined form, not the bare words: "visits" and "line items" also
         # label the Timeline's own stats, so asserting them alone passes
         # against the broken build. This line exists only in the upload panel.
-        assert re.search(
-            r"[\d,]+ visits · [\d,]+ line items · \d+ identifiers", body
-        ), body[:400]
+        assert re.search(r"[\d,]+ visits · [\d,]+ line items · \d+ identifiers", body), body[:400]
 
     def test_a_single_clean_upload_reports_no_warnings(self, page):
         """The other side of it: nothing invented when nothing went wrong."""
@@ -237,9 +235,7 @@ class TestTheUploadsAfterTheFirst:
 
         assert "tab=profile" in page.url
         assert (
-            page.get_by_role("button", name=re.compile(r"^Profile")).get_attribute(
-                "aria-current"
-            )
+            page.get_by_role("button", name=re.compile(r"^Profile")).get_attribute("aria-current")
             == "page"
         )
         # And it really did switch response, so the assertion above is not just
@@ -248,9 +244,7 @@ class TestTheUploadsAfterTheFirst:
         chosen = selector.locator("option", has_text="Kroger").get_attribute("value")
         assert selector.input_value() == chosen
 
-    def test_an_upload_drops_a_product_filter_aimed_at_the_old_response(
-        self, page, empty_app
-    ):
+    def test_an_upload_drops_a_product_filter_aimed_at_the_old_response(self, page, empty_app):
         """`?q=` names a product in the response being left behind.
 
         The Products index links into the Timeline by UPC, so the filter is a
@@ -299,9 +293,7 @@ class TestTheUploadsAfterTheFirst:
 
         # Back to the older response by hand, the way a reader would.
         selector = page.locator("select[aria-label]")
-        selector.select_option(
-            selector.locator("option", has_text="H Mart").get_attribute("value")
-        )
+        selector.select_option(selector.locator("option", has_text="H Mart").get_attribute("value"))
         assert selected(page) == hmart
 
         # A re-drop of something already stored: refused by the server, by name.

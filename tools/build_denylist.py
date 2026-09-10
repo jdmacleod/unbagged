@@ -75,14 +75,38 @@ LABEL_KEYS = {"name", "key", "label", "field", "attribute", "property"}
 
 # Never worth denylisting: they appear in ordinary code and prose.
 STOPLIST = {
-    "unknown", "customer", "california", "united states", "privacy", "kroger",
-    "safeway", "albertsons", "hmart", "h mart", "true", "false", "null", "none",
+    "unknown",
+    "customer",
+    "california",
+    "united states",
+    "privacy",
+    "kroger",
+    "safeway",
+    "albertsons",
+    "hmart",
+    "h mart",
+    "true",
+    "false",
+    "null",
+    "none",
 }
 
 
 TEXT_SUFFIXES = {
-    ".py", ".ts", ".tsx", ".md", ".txt", ".sql", ".css", ".json", ".yml", ".yaml",
-    ".html", ".toml", ".cfg", ".sh",
+    ".py",
+    ".ts",
+    ".tsx",
+    ".md",
+    ".txt",
+    ".sql",
+    ".css",
+    ".json",
+    ".yml",
+    ".yaml",
+    ".html",
+    ".toml",
+    ".cfg",
+    ".sh",
 }
 
 
@@ -285,12 +309,19 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  skipped {report.name}: {exc}", file=sys.stderr)
             continue
         found: dict[str, set[str]] = {}
-        parsed = from_adapter(report, found := {
-            "email addresses": set(), "phone numbers": set(),
-            "street addresses": set(), "ZIP+4 codes": set(),
-            "long digit runs": set(), "identifying JSON fields": set(),
-            "identifiers the adapter found": set(), "report references": set(),
-        })
+        parsed = from_adapter(
+            report,
+            found := {
+                "email addresses": set(),
+                "phone numbers": set(),
+                "street addresses": set(),
+                "ZIP+4 codes": set(),
+                "long digit runs": set(),
+                "identifying JSON fields": set(),
+                "identifiers the adapter found": set(),
+                "report references": set(),
+            },
+        )
         swept = harvest(text, report.name, sweep=not parsed)
         for bucket, items in swept.items():
             found.setdefault(bucket, set()).update(items)

@@ -88,9 +88,7 @@ def _remove_elsewhere(base: str, request_id: int) -> None:
     set of timing to a test that is about the first. The app has no server-side
     session, so an API call is the same event.
     """
-    request = urllib.request.Request(
-        f"{base}/api/requests/{request_id}", method="DELETE"
-    )
+    request = urllib.request.Request(f"{base}/api/requests/{request_id}", method="DELETE")
     with urllib.request.urlopen(request, timeout=10) as response:
         assert response.status in (200, 204)
 
@@ -101,6 +99,7 @@ def _fail_list_reads(page) -> None:
     The POST that creates a response shares the path, so routing the path alone
     would break uploads too and the test would be asserting the wrong failure.
     """
+
     def handler(route, request):
         if request.method == "GET":
             route.abort("failed")
@@ -167,9 +166,9 @@ class TestTheViewTheUploadLandsOn:
             "the upload replayed the tab from the render where the drop happened"
         )
         assert (
-            page.get_by_role(
-                "button", name=re.compile(r"^Compliance")
-            ).get_attribute("aria-current")
+            page.get_by_role("button", name=re.compile(r"^Compliance")).get_attribute(
+                "aria-current"
+            )
             == "page"
         )
 
@@ -288,9 +287,7 @@ class TestUploadsAndRemovalsAreNotNavigations:
         page.go_back()
         page.wait_for_load_state("networkidle")
 
-        assert selected(page) != removed, (
-            "Back walked onto the response that was just deleted"
-        )
+        assert selected(page) != removed, "Back walked onto the response that was just deleted"
         # And it landed somewhere real, rather than out of the app entirely.
         showing(page, "H Mart")
 
@@ -344,8 +341,7 @@ class TestUploadsAndRemovalsAreNotNavigations:
             )
         except Exception:  # noqa: BLE001 - re-raised as the real assertion
             raise AssertionError(
-                "the address bar went on naming a response that had been "
-                f"deleted: {page.url}"
+                f"the address bar went on naming a response that had been deleted: {page.url}"
             ) from None
         showing(page, "H Mart")
 
@@ -411,13 +407,9 @@ class TestTheReaderIsToldTheUploadFinished:
         """
         upload(page, KROGER)
         focused = page.evaluate("document.activeElement?.innerText ?? ''")
-        assert "Read as" in focused, (
-            f"focus stayed where the reader was not: {focused[:120]!r}"
-        )
+        assert "Read as" in focused, f"focus stayed where the reader was not: {focused[:120]!r}"
 
-    def test_a_refusal_is_announced_and_does_not_leave_a_success_behind(
-        self, page
-    ):
+    def test_a_refusal_is_announced_and_does_not_leave_a_success_behind(self, page):
         """The failure path, which was silent twice over.
 
         `send()` never calls `onDone` on the error path, so the caller cannot
@@ -434,17 +426,13 @@ class TestTheReaderIsToldTheUploadFinished:
         page.set_input_files("input[type=file]", [str(KROGER)])
         page.wait_for_selector("text=already loaded this response", timeout=120_000)
 
-        assert (
-            "already loaded this response"
-            in page.locator("[role=alert]").inner_text()
-        )
+        assert "already loaded this response" in page.locator("[role=alert]").inner_text()
         # And the success is not still standing underneath it. Asked of the
         # RECORD rather than of the region's current text: the clear timer
         # empties that on its own, so reading it races the timer and passes for
         # the wrong reason whenever the round trip runs long.
         assert len(announced(page)) == said_before, (
-            "the refusal produced a new announcement, or re-announced the "
-            "success it replaced"
+            "the refusal produced a new announcement, or re-announced the success it replaced"
         )
 
     def test_a_removal_is_announced_too(self, page):
@@ -560,9 +548,7 @@ class TestAFailedReadNeverSpeaksForDataItCannotSee:
             "the app re-announced a response it had already watched disappear"
         )
 
-    def test_a_failed_read_does_not_wipe_the_response_the_url_asked_for(
-        self, page, empty_app
-    ):
+    def test_a_failed_read_does_not_wipe_the_response_the_url_asked_for(self, page, empty_app):
         """A bookmark must survive a backend restart.
 
         The URL-correction effect guarded on `requests.loading` and `settling`
@@ -583,8 +569,7 @@ class TestAFailedReadNeverSpeaksForDataItCannotSee:
         page.wait_for_selector("text=Try again", timeout=30_000)
 
         assert selected(page) == wanted, (
-            "the failed read rewrote the address bar and lost the response the "
-            "reader asked for"
+            "the failed read rewrote the address bar and lost the response the reader asked for"
         )
 
         # And recovering puts them back on it, rather than on the oldest.
@@ -593,9 +578,7 @@ class TestAFailedReadNeverSpeaksForDataItCannotSee:
         page.wait_for_selector("select[aria-label]", timeout=30_000)
         assert selected(page) == wanted
 
-    def test_a_failed_read_does_not_replace_a_running_upload_with_a_red_box(
-        self, page
-    ):
+    def test_a_failed_read_does_not_replace_a_running_upload_with_a_red_box(self, page):
         """Red means "this is not recoverable". A live parse is not that.
 
         First run, drop a long file, alt-tab away and back while it parses: the
@@ -626,9 +609,7 @@ class TestAFailedReadNeverSpeaksForDataItCannotSee:
         held[0].continue_()
         page.wait_for_selector("text=Read as", timeout=120_000)
 
-    def test_a_removal_is_not_offered_against_a_list_that_could_not_be_re_read(
-        self, page
-    ):
+    def test_a_removal_is_not_offered_against_a_list_that_could_not_be_re_read(self, page):
         """Retained data is rendered in one place and ACTED on in the same one.
 
         `RemoveRequest` issues an irreversible DELETE against whatever row the
@@ -647,16 +628,12 @@ class TestAFailedReadNeverSpeaksForDataItCannotSee:
         return_to_tab(page)
         page.wait_for_selector("text=could not be re-read", timeout=30_000)
 
-        expect(
-            page.get_by_role("button", name="Remove this response")
-        ).not_to_be_visible()
+        expect(page.get_by_role("button", name="Remove this response")).not_to_be_visible()
 
         # And it comes back the moment the list can be read again.
         page.unroute(REQUESTS_ROUTE)
         page.get_by_role("button", name="Try again").click()
-        expect(
-            page.get_by_role("button", name="Remove this response")
-        ).to_be_visible()
+        expect(page.get_by_role("button", name="Remove this response")).to_be_visible()
 
     def test_the_report_survives_the_reload_that_follows_its_own_upload(self, page):
         """The sequence `useAsync`'s own comment names as the motivating case.

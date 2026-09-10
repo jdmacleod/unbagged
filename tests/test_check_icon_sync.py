@@ -48,10 +48,15 @@ class TestTheGateFails:
         waves it through, leaving icon-512 and the served apple-touch-icon
         stale. Raised by a Greptile review of PR #31.
         """
-        assert sync.run([
-            "resources/unbagged-logo.svg",
-            "resources/favicon-16.png",
-        ]) == 1
+        assert (
+            sync.run(
+                [
+                    "resources/unbagged-logo.svg",
+                    "resources/favicon-16.png",
+                ]
+            )
+            == 1
+        )
         err = capsys.readouterr().err
         assert "STALE  resources/unbagged-logo.svg" in err
         assert "resources/icon-512.png" in err
@@ -60,10 +65,13 @@ class TestTheGateFails:
         """Reasons are keyed by source. A range-wide flag flattened every commit
         message into one yes, so a render-neutral edit in an early commit waved
         through a later one that moved pixels."""
-        assert sync.run(
-            ["resources/unbagged-logo.svg", "resources/unbagged-logo-small.svg"],
-            reasons={"resources/unbagged-logo.svg": "whitespace only"},
-        ) == 1
+        assert (
+            sync.run(
+                ["resources/unbagged-logo.svg", "resources/unbagged-logo-small.svg"],
+                reasons={"resources/unbagged-logo.svg": "whitespace only"},
+            )
+            == 1
+        )
 
     def test_a_source_not_in_the_mapping_is_refused(self, capsys):
         """An unmapped source is an unwatched source, which is the whole bug."""
@@ -73,25 +81,40 @@ class TestTheGateFails:
 
 class TestTheGatePasses:
     def test_a_source_and_its_own_rasters_moving_together(self, capsys):
-        assert sync.run([
-            "resources/unbagged-logo.svg",
-            "resources/icon-512.png",
-        ]) == 0
+        assert (
+            sync.run(
+                [
+                    "resources/unbagged-logo.svg",
+                    "resources/icon-512.png",
+                ]
+            )
+            == 0
+        )
         assert "each with what it produces" in capsys.readouterr().out
 
     def test_both_sources_each_with_their_own(self):
-        assert sync.run([
-            "resources/unbagged-logo.svg",
-            "resources/apple-touch-icon-180.png",
-            "resources/unbagged-logo-small.svg",
-            "resources/favicon.ico",
-        ]) == 0
+        assert (
+            sync.run(
+                [
+                    "resources/unbagged-logo.svg",
+                    "resources/apple-touch-icon-180.png",
+                    "resources/unbagged-logo-small.svg",
+                    "resources/favicon.ico",
+                ]
+            )
+            == 0
+        )
 
     def test_the_ico_counts_as_generated(self):
-        assert sync.run([
-            "resources/unbagged-logo-small.svg",
-            "resources/favicon.ico",
-        ]) == 0
+        assert (
+            sync.run(
+                [
+                    "resources/unbagged-logo-small.svg",
+                    "resources/favicon.ico",
+                ]
+            )
+            == 0
+        )
 
     def test_a_change_touching_no_source(self):
         assert sync.run(["src/unbagged/api.py", "README.md"]) == 0
@@ -111,18 +134,20 @@ class TestTheGatePasses:
     def test_an_escape_naming_its_source(self, capsys):
         """An edit that renders identically leaves nothing to commit, so the
         gate has to have an out or it cannot be satisfied at all."""
-        assert sync.run(
-            ["resources/unbagged-logo.svg"],
-            reasons={"resources/unbagged-logo.svg": "reformatted, renders identically"},
-        ) == 0
+        assert (
+            sync.run(
+                ["resources/unbagged-logo.svg"],
+                reasons={"resources/unbagged-logo.svg": "reformatted, renders identically"},
+            )
+            == 0
+        )
         assert "allowed by" in capsys.readouterr().out
 
 
 class TestTheEscapeIsReadFromCommits:
     def _repo(self, tmp_path, monkeypatch):
         subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
-        subprocess.run(["git", "config", "user.email", "t@example.com"],
-                       cwd=tmp_path, check=True)
+        subprocess.run(["git", "config", "user.email", "t@example.com"], cwd=tmp_path, check=True)
         subprocess.run(["git", "config", "user.name", "T"], cwd=tmp_path, check=True)
         (tmp_path / "seed").write_text("1")
         subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
@@ -142,9 +167,7 @@ class TestTheEscapeIsReadFromCommits:
             repo,
             "tidy the artwork\n\nicons-unchanged: unbagged-logo.svg whitespace only",
         )
-        assert sync.escape_reasons("base") == {
-            "resources/unbagged-logo.svg": "whitespace only"
-        }
+        assert sync.escape_reasons("base") == {"resources/unbagged-logo.svg": "whitespace only"}
 
     def test_a_bare_marker_is_not_a_reason(self, tmp_path, monkeypatch):
         repo = self._repo(tmp_path, monkeypatch)

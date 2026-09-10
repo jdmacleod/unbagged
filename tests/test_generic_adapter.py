@@ -20,7 +20,12 @@ from unbagged.models import (
 
 KROGER_FIXTURE = (
     Path(__file__).parent.parent
-    / "src" / "unbagged" / "adapters" / "kroger" / "fixtures" / "synthetic_report.txt"
+    / "src"
+    / "unbagged"
+    / "adapters"
+    / "kroger"
+    / "fixtures"
+    / "synthetic_report.txt"
 )
 
 LETTER = """\
@@ -56,9 +61,7 @@ class TestSelection:
         assert match.is_fallback
 
     def test_the_fallback_never_beats_a_real_adapter(self, tmp_path):
-        match = registry.select(
-            bundle(tmp_path, KROGER_FIXTURE.read_text(encoding="utf-8"))
-        )
+        match = registry.select(bundle(tmp_path, KROGER_FIXTURE.read_text(encoding="utf-8")))
         assert match.adapter.retailer_id == "kroger"
         assert not match.is_fallback
 
@@ -121,9 +124,7 @@ class TestGenericParse:
         assert result.inferences == ()
 
     def test_a_declared_retailer_names_the_row(self, tmp_path):
-        result = GenericAdapter().parse(
-            bundle(tmp_path, LETTER, declared_retailer="Trader Joe's")
-        )
+        result = GenericAdapter().parse(bundle(tmp_path, LETTER, declared_retailer="Trader Joe's"))
         assert result.request.display_name == "Trader Joe's"
 
     def test_an_undeclared_retailer_is_named_honestly(self, tmp_path):
@@ -212,14 +213,23 @@ class TestAuthoringGuide:
         """
         core = Path(__file__).parent.parent / "src" / "unbagged"
         retailers = {"kroger", "safeway", "hmart"}
-        for module in ("views.py", "api.py", "repository.py", "models.py",
-                       "letters.py", "ingest.py", "extraction.py", "db.py"):
+        for module in (
+            "views.py",
+            "api.py",
+            "repository.py",
+            "models.py",
+            "letters.py",
+            "ingest.py",
+            "extraction.py",
+            "db.py",
+        ):
             tree = ast.parse((core / module).read_text(encoding="utf-8"))
             docstrings = {
                 node.body[0].value
                 for node in ast.walk(tree)
-                if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef,
-                                     ast.AsyncFunctionDef))
+                if isinstance(
+                    node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+                )
                 and node.body
                 and isinstance(node.body[0], ast.Expr)
                 and isinstance(node.body[0].value, ast.Constant)

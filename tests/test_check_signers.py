@@ -34,13 +34,8 @@ class TestParsingTheSignersFile:
         assert len(signers.entries(text)) == 1
 
     def test_several_signers(self):
-        text = (
-            "one@example.com ssh-ed25519 AAAA\n"
-            'two@example.com namespaces="git" ssh-rsa BBBB\n'
-        )
-        assert [p for p, _ in signers.entries(text)] == [
-            "one@example.com", "two@example.com"
-        ]
+        text = 'one@example.com ssh-ed25519 AAAA\ntwo@example.com namespaces="git" ssh-rsa BBBB\n'
+        assert [p for p, _ in signers.entries(text)] == ["one@example.com", "two@example.com"]
 
     def test_a_line_with_no_key_type_is_refused(self):
         with pytest.raises(ValueError, match="no key type"):
@@ -131,7 +126,9 @@ class TestTheCommittedFile:
             pytest.skip("no tags in this checkout")
         result = subprocess.run(
             ["git", "-c", "gpg.ssh.allowedSignersFile=", "verify-tag", found[0]],
-            cwd=signers.REPO_ROOT, capture_output=True, text=True,
+            cwd=signers.REPO_ROOT,
+            capture_output=True,
+            text=True,
         )
         assert result.returncode != 0, (
             "verification passed with no signers file configured, so the -c in "

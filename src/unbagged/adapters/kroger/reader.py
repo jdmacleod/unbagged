@@ -51,7 +51,7 @@ class PageMap:
     checking a provenance link is looking at a page number on a piece of paper.
     """
 
-    breaks: tuple[tuple[int, int], ...] = ()   # (offset in cleaned text, page number)
+    breaks: tuple[tuple[int, int], ...] = ()  # (offset in cleaned text, page number)
     first_page: int = 1
 
     def page_of(self, offset: int) -> int:
@@ -68,7 +68,7 @@ class PageMap:
 class Section:
     header: str
     body: str
-    start: int          # offset of the body within the cleaned text
+    start: int  # offset of the body within the cleaned text
 
 
 @dataclass(frozen=True)
@@ -170,9 +170,7 @@ def find_sections(text: str) -> list[Section]:
     for index, (start, header) in enumerate(hits):
         body_start = start + len(header)
         body_end = hits[index + 1][0] if index + 1 < len(hits) else len(text)
-        sections.append(
-            Section(header=header, body=text[body_start:body_end], start=body_start)
-        )
+        sections.append(Section(header=header, body=text[body_start:body_end], start=body_start))
     return sections
 
 

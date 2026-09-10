@@ -75,9 +75,7 @@ def disclosed_specific_pieces(conn: sqlite3.Connection, request_id: int) -> bool
     if row["status"] != DisclosureStatus.PARTIAL.value:
         return False
     return bool(
-        conn.execute(
-            "SELECT 1 FROM txn WHERE request_id = ? LIMIT 1", (request_id,)
-        ).fetchone()
+        conn.execute("SELECT 1 FROM txn WHERE request_id = ? LIMIT 1", (request_id,)).fetchone()
     )
 
 
@@ -242,8 +240,7 @@ def timeline(
         basket["provenance"] = _provenance(basket)
         _settle(basket)
 
-    return {"stats": stats(conn, request_id), "filtered_count": len(baskets),
-            "baskets": baskets}
+    return {"stats": stats(conn, request_id), "filtered_count": len(baskets), "baskets": baskets}
 
 
 def _settle(basket: dict[str, Any]) -> dict[str, Any]:
@@ -351,8 +348,14 @@ def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
         # none. Zero would state that this retailer disclosed baskets costing
         # nothing; null says it disclosed no lines, which is what happened.
         # `format.ts` renders null as an em dash, which means exactly that.
-        for key in ("total_shelf", "total_saved", "distinct_products",
-                    "line_count", "zero_value_lines", "negative_lines"):
+        for key in (
+            "total_shelf",
+            "total_saved",
+            "distinct_products",
+            "line_count",
+            "zero_value_lines",
+            "negative_lines",
+        ):
             result[key] = None
         # The one exception, and the reason this branch exists: the stated
         # totals ARE disclosed money, so the headline figure carries them
@@ -378,9 +381,17 @@ def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
     result["disclosed"] = disclosed_specific_pieces(conn, request_id)
     if not result["disclosed"]:
         for key in (
-            "basket_count", "total_shelf", "total_paid", "total_saved",
-            "line_count", "distinct_products", "zero_value_lines", "negative_lines",
-            "first_visit", "last_visit", "total_stated",
+            "basket_count",
+            "total_shelf",
+            "total_paid",
+            "total_saved",
+            "line_count",
+            "distinct_products",
+            "zero_value_lines",
+            "negative_lines",
+            "first_visit",
+            "last_visit",
+            "total_stated",
         ):
             result[key] = None
     return result
@@ -460,7 +471,8 @@ def profile(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
     for inference in inferences:
         inference["provenance"] = _provenance(inference)
         inference["derivable_from_txns"] = (
-            None if inference["derivable_from_txns"] is None
+            None
+            if inference["derivable_from_txns"] is None
             else bool(inference["derivable_from_txns"])
         )
         grouped[inference["origin"]].append(inference)
@@ -510,8 +522,11 @@ def compliance(conn: sqlite3.Connection) -> dict[str, Any]:
                 category.value,
                 # A category with no row at all means the adapter never looked,
                 # which is a different fact from the retailer not answering.
-                {"category": category.value, "status": None,
-                 "notes": "This adapter did not assess this category."},
+                {
+                    "category": category.value,
+                    "status": None,
+                    "notes": "This adapter did not assess this category.",
+                },
             )
             for category in DisclosureCategory
         }
@@ -537,8 +552,7 @@ def compare(conn: sqlite3.Connection) -> dict[str, Any]:
     """Side-by-side summary per retailer. Empty-stated until there are two."""
     requests = _rows(
         conn,
-        "SELECT id, retailer_id, display_name, period_start, period_end FROM request"
-        " ORDER BY id",
+        "SELECT id, retailer_id, display_name, period_start, period_end FROM request ORDER BY id",
     )
     for request in requests:
         request_id = request["id"]
@@ -563,9 +577,7 @@ def compare(conn: sqlite3.Connection) -> dict[str, Any]:
         request["first_visit"] = summary["first_visit"]
         request["last_visit"] = summary["last_visit"]
 
-        def count(
-            sql: str, params: tuple, *, claimable: bool = zero_claimable
-        ) -> int | None:
+        def count(sql: str, params: tuple, *, claimable: bool = zero_claimable) -> int | None:
             # A non-zero count is a disclosed fact and always renders. A zero is
             # a claim about the retailer, and only a category answered in full
             # supports one — see zero_is_claimable(). Null renders as an em
@@ -848,8 +860,7 @@ def _price_shape(amounts: list[float]) -> dict[str, Any]:
         if nearest is None:
             return None
         between = [
-            a for a in priced
-            if base * (1 + DRIFT_MARGIN) < a < base * (nearest - DRIFT_MARGIN)
+            a for a in priced if base * (1 + DRIFT_MARGIN) < a < base * (nearest - DRIFT_MARGIN)
         ]
         # One amount on the way is enough. This asked for two, which cannot
         # exist at the smallest series the API allows: `min_observations` floors
@@ -1036,9 +1047,7 @@ def product_index(
                 # label slapped on every product anyone ever tried once — and
                 # two thirds of them were tried once.
                 "stopped": bool(
-                    stale_before
-                    and entry["purchases"] >= 2
-                    and entry["last_seen"] < stale_before
+                    stale_before and entry["purchases"] >= 2 and entry["last_seen"] < stale_before
                 ),
             }
         )
@@ -1056,9 +1065,7 @@ def product_index(
         # what someone typing it into a search box meant.
         needle = query.strip().lower()
         products = [
-            p
-            for p in products
-            if needle in p["description"].lower() or needle in p["upc"].lower()
+            p for p in products if needle in p["description"].lower() or needle in p["upc"].lower()
         ]
     if min_purchases > 1:
         products = [p for p in products if p["purchases"] >= min_purchases]

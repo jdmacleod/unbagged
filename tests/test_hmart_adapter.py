@@ -23,16 +23,19 @@ from unbagged.models import (
 
 FIXTURE = (
     Path(__file__).parent.parent
-    / "src" / "unbagged" / "adapters" / "hmart" / "fixtures" / "synthetic_history.xls"
+    / "src"
+    / "unbagged"
+    / "adapters"
+    / "hmart"
+    / "fixtures"
+    / "synthetic_history.xls"
 )
 
 
 def bundle(tmp_path, text: str, name: str = "history.xls") -> SourceBundle:
     path = tmp_path / name
     path.write_text(text, encoding="utf-8")
-    return SourceBundle(
-        documents=(SourceDocument(name, "0" * 64, path=str(path)),)
-    )
+    return SourceBundle(documents=(SourceDocument(name, "0" * 64, path=str(path)),))
 
 
 @pytest.fixture(scope="module")
@@ -56,16 +59,12 @@ class TestSniff:
         # Loudly, not by reading the next column along. `Point` is `Amount`
         # rounded, so a swap of those two moves every basket total by less than
         # a dollar and nothing on screen would show it.
-        assert HMartAdapter().sniff(
-            bundle(tmp_path, source.replace("Branch", "Store"))
-        ) == 0.0
+        assert HMartAdapter().sniff(bundle(tmp_path, source.replace("Branch", "Store"))) == 0.0
 
     def test_a_spent_budget_says_so_instead_of_scoring_a_bare_zero(self, tmp_path, source):
         # "I did not look far enough" and "this is not my format" are different
         # answers that both score 0.0. The reason is what keeps them apart.
-        padded = source.replace(
-            "<ss:Worksheet", "<!-- " + "x" * 300_000 + " --><ss:Worksheet", 1
-        )
+        padded = source.replace("<ss:Worksheet", "<!-- " + "x" * 300_000 + " --><ss:Worksheet", 1)
         outcome = HMartAdapter().sniff(bundle(tmp_path, padded))
         assert outcome.confidence == 0.0
         assert "header row was reached" in outcome.reason

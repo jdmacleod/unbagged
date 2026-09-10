@@ -66,8 +66,8 @@ PORT = 8523
 BASE = f"http://127.0.0.1:{PORT}"
 
 VIEWPORTS = [
-    (320, 800),   # the narrowest phone anyone still carries
-    (375, 812),   # where both regressions were found
+    (320, 800),  # the narrowest phone anyone still carries
+    (375, 812),  # where both regressions were found
     (414, 896),
     (768, 1024),  # where the timeline row switches to one line
     (1280, 900),
@@ -98,8 +98,7 @@ def _upload_fixture() -> int:
     body = b"".join(
         [
             f"--{boundary}\r\n".encode(),
-            b'Content-Disposition: form-data; name="files"; '
-            b'filename="synthetic_report.txt"\r\n',
+            b'Content-Disposition: form-data; name="files"; filename="synthetic_report.txt"\r\n',
             b"Content-Type: text/plain\r\n\r\n",
             FIXTURE.read_bytes(),
             f"\r\n--{boundary}\r\n".encode(),
@@ -160,9 +159,14 @@ def seeded_app(request, image) -> str:
     (data / "db").mkdir(parents=True, exist_ok=True)
     (data / "incoming").mkdir(parents=True, exist_ok=True)
     docker(
-        "run", "-d", "--name", name,
-        "-v", f"{data}:/data",
-        "-p", f"127.0.0.1:{PORT}:8000",
+        "run",
+        "-d",
+        "--name",
+        name,
+        "-v",
+        f"{data}:/data",
+        "-p",
+        f"127.0.0.1:{PORT}:8000",
         image,
     )
     try:
@@ -193,9 +197,17 @@ def _remove_data_dir(data: Path, image: str) -> None:
     directory was created by the host and is still the host's to remove.
     """
     docker(
-        "run", "--rm", "--user", "0", "--entrypoint", "sh",
-        "-v", f"{data}:/data", image,
-        "-c", "find /data -mindepth 1 -delete",
+        "run",
+        "--rm",
+        "--user",
+        "0",
+        "--entrypoint",
+        "sh",
+        "-v",
+        f"{data}:/data",
+        image,
+        "-c",
+        "find /data -mindepth 1 -delete",
         check=False,
     )
     shutil.rmtree(data, ignore_errors=True)
@@ -237,9 +249,7 @@ class TestNoViewScrollsSideways:
         page = browser.new_page(viewport={"width": 375, "height": 812})
         try:
             page.goto(f"{seeded_app}/?tab=timeline&r=1", wait_until="networkidle")
-            marked = page.locator("main button[aria-expanded]").filter(
-                has_text="under by"
-            )
+            marked = page.locator("main button[aria-expanded]").filter(has_text="under by")
             assert marked.count() >= 1, (
                 "no unreconciled row rendered; the setup that creates one has drifted, "
                 "so this test is no longer measuring the case it exists for"
@@ -324,7 +334,7 @@ class TestMonthRailNavigates:
         try:
             page.goto(f"{seeded_app}/?tab=timeline&r=1", wait_until="networkidle")
             rail = self._rail(page)
-            rail.nth(rail.count() - 1).click()   # reveals; changes the limit
+            rail.nth(rail.count() - 1).click()  # reveals; changes the limit
             page.wait_for_timeout(500)
             settled = page.evaluate("window.scrollY")
 
@@ -357,8 +367,7 @@ class TestMonthRailNavigates:
             # "Jan 25" for 2025-01: the head speaks the roll's own label, not the key.
             year = month_key[2:4]
             assert year in head.inner_text(), (
-                f"the running head reads {head.inner_text()!r} after jumping to "
-                f"{month_key}"
+                f"the running head reads {head.inner_text()!r} after jumping to {month_key}"
             )
             assert page.locator('a[aria-current="true"][href^="#month-"]').count() == 1
         finally:
@@ -386,21 +395,22 @@ class TestTheContentSecurityPolicy:
     def test_no_view_logs_a_policy_violation(self, browser, seeded_app):
         violations = []
         page = browser.new_page(viewport={"width": 1280, "height": 900})
-        page.on("console", lambda m: (
-            violations.append(m.text) if self.REFUSAL.search(m.text) else None
-        ))
+        page.on(
+            "console", lambda m: violations.append(m.text) if self.REFUSAL.search(m.text) else None
+        )
         # A blocked subresource surfaces as a page error on some paths rather
         # than a console message, so both are collected.
-        page.on("pageerror", lambda e: (
-            violations.append(str(e)) if self.REFUSAL.search(str(e)) else None
-        ))
+        page.on(
+            "pageerror",
+            lambda e: violations.append(str(e)) if self.REFUSAL.search(str(e)) else None,
+        )
         try:
             for view in VIEWS:
                 page.goto(f"{seeded_app}/?tab={view}&r=1", wait_until="networkidle")
         finally:
             page.close()
-        assert not violations, (
-            "the policy blocked something the app needs:\n" + "\n".join(violations)
+        assert not violations, "the policy blocked something the app needs:\n" + "\n".join(
+            violations
         )
 
     def test_the_header_survives_the_real_container(self, browser, seeded_app):
@@ -458,9 +468,7 @@ class TestIndexExport:
             # window.open("about:blank"), which inherits the opener's policy and
             # would put the failure back without looking like it did.
             page.goto("about:blank")
-            data_url = "data:image/svg+xml;base64," + base64.b64encode(
-                saved.read_bytes()
-            ).decode()
+            data_url = "data:image/svg+xml;base64," + base64.b64encode(saved.read_bytes()).decode()
             size = page.evaluate(
                 """url => new Promise(resolve => {
                     const img = new Image();

@@ -59,17 +59,20 @@ def wait_for_health(timeout: float = 90.0) -> None:
 
 def upload_fixture() -> None:
     boundary = "----unbagged-screenshots"
-    body = b"".join([
-        f"--{boundary}\r\n".encode(),
-        b'Content-Disposition: form-data; name="files"; '
-        b'filename="synthetic_report.txt"\r\n',
-        b"Content-Type: text/plain\r\n\r\n",
-        FIXTURE.read_bytes(),
-        f"\r\n--{boundary}--\r\n".encode(),
-    ])
+    body = b"".join(
+        [
+            f"--{boundary}\r\n".encode(),
+            b'Content-Disposition: form-data; name="files"; filename="synthetic_report.txt"\r\n',
+            b"Content-Type: text/plain\r\n\r\n",
+            FIXTURE.read_bytes(),
+            f"\r\n--{boundary}--\r\n".encode(),
+        ]
+    )
     # noqa: S310 on both lines — BASE is a 127.0.0.1 literal built above, not input.
     request = urllib.request.Request(  # noqa: S310
-        f"{BASE}/api/requests", data=body, method="POST",
+        f"{BASE}/api/requests",
+        data=body,
+        method="POST",
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
     )
     with urllib.request.urlopen(request, timeout=180) as response:  # noqa: S310
@@ -81,9 +84,20 @@ def remove_scratch() -> None:
     """The entrypoint chowns the mount to uid 10001, so root inside a container is
     the only thing that can clear it on Linux. Same reasoning as the layout tier."""
     if SCRATCH.exists():
-        docker("run", "--rm", "--user", "0", "--entrypoint", "sh",
-               "-v", f"{SCRATCH}:/data", IMAGE,
-               "-c", "find /data -mindepth 1 -delete", check=False)
+        docker(
+            "run",
+            "--rm",
+            "--user",
+            "0",
+            "--entrypoint",
+            "sh",
+            "-v",
+            f"{SCRATCH}:/data",
+            IMAGE,
+            "-c",
+            "find /data -mindepth 1 -delete",
+            check=False,
+        )
         shutil.rmtree(SCRATCH, ignore_errors=True)
 
 
@@ -91,9 +105,7 @@ def capture() -> list[Path]:
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
-        raise SystemExit(
-            "make_screenshots: needs Chromium. Run `make setup-browser`."
-        ) from None
+        raise SystemExit("make_screenshots: needs Chromium. Run `make setup-browser`.") from None
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     written = []
@@ -102,14 +114,16 @@ def capture() -> list[Path]:
         page = browser.new_page(viewport=VIEWPORT, device_scale_factor=2)
         for view in VIEWS:
             page.goto(f"{BASE}/?tab={view}&r=1", wait_until="networkidle")
-            page.wait_for_timeout(400)   # let the unfurl animation settle
+            page.wait_for_timeout(400)  # let the unfurl animation settle
             target = OUT_DIR / f"{view}.png"
             page.screenshot(path=str(target), full_page=False)
             before = target.stat().st_size
             after = shrink(target)
             written.append(target)
-            print(f"  wrote  {target.relative_to(REPO_ROOT)}  "
-                  f"({after // 1024} KB, was {before // 1024})")
+            print(
+                f"  wrote  {target.relative_to(REPO_ROOT)}  "
+                f"({after // 1024} KB, was {before // 1024})"
+            )
         browser.close()
     return written
 
@@ -128,9 +142,7 @@ def shrink(path: Path) -> int:
     from PIL import Image
 
     image = Image.open(path).convert("RGB")
-    palette = image.quantize(
-        colors=256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE
-    )
+    palette = image.quantize(colors=256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
     palette.save(path, optimize=True, compress_level=9)
     return path.stat().st_size
 
@@ -152,8 +164,9 @@ def main() -> int:
     (SCRATCH / "incoming").mkdir(parents=True, exist_ok=True)
 
     name = f"unbagged-screenshots-{int(time.time())}"
-    docker("run", "-d", "--name", name,
-           "-v", f"{SCRATCH}:/data", "-p", f"127.0.0.1:{PORT}:8000", IMAGE)
+    docker(
+        "run", "-d", "--name", name, "-v", f"{SCRATCH}:/data", "-p", f"127.0.0.1:{PORT}:8000", IMAGE
+    )
     try:
         wait_for_health()
         print("make_screenshots: ingesting the synthetic fixture")

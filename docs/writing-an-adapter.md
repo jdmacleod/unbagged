@@ -64,10 +64,11 @@ tests/test_<retailer>_adapter.py
 ```python
 from unbagged.adapters.base import ParseResult, SniffResult, SourceBundle
 
+
 class MyAdapter:
-    retailer_id = "example"       # stable; it is a database value
+    retailer_id = "example"  # stable; it is a database value
     display_name = "Example Mart"
-    schema_version = 1            # bump when the retailer changes their format
+    schema_version = 1  # bump when the retailer changes their format
 
     def sniff(self, bundle: SourceBundle) -> float | SniffResult:
         """Confidence 0.0-1.0. Must be cheap and must not raise."""
@@ -200,8 +201,8 @@ you as a locator. A `Row` places every cell at the column it declares:
 ```python
 for table in extracted.tables:
     for row in table.rows:
-        amount = row.value(4)                      # 1-based, None if absent
-        where = table.locator(row.number, 4)       # "Workbook!D4"
+        amount = row.value(4)  # 1-based, None if absent
+        where = table.locator(row.number, 4)  # "Workbook!D4"
 ```
 
 Three things about that will bite you if you write your own reader instead.

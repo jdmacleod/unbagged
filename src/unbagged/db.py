@@ -48,9 +48,7 @@ def connect(path: Path | str | None = None) -> sqlite3.Connection:
     #
     # The timeout is a short wait rather than an immediate "database is locked":
     # one user with two browser tabs is a realistic amount of concurrency.
-    conn = sqlite3.connect(
-        target, isolation_level=None, timeout=10.0, check_same_thread=False
-    )
+    conn = sqlite3.connect(target, isolation_level=None, timeout=10.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
@@ -63,9 +61,7 @@ def available_migrations() -> list[tuple[int, Path]]:
     for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
         m = MIGRATION_NAME.match(path.name)
         if not m:
-            raise ValueError(
-                f"migration {path.name!r} must be named NNN_lower_snake_case.sql"
-            )
+            raise ValueError(f"migration {path.name!r} must be named NNN_lower_snake_case.sql")
         found.append((int(m.group(1)), path))
     versions = [v for v, _ in found]
     if len(set(versions)) != len(versions):
@@ -98,13 +94,15 @@ def migrate(conn: sqlite3.Connection) -> list[int]:
         # The filename is interpolated rather than bound because executescript()
         # takes no parameters; available_migrations() has already checked it
         # against MIGRATION_NAME, so it cannot carry a quote.
-        script = "\n".join([
-            "BEGIN;",
-            path.read_text(encoding="utf-8"),
-            f"INSERT INTO schema_migration (version, name) "  # noqa: S608
-            f"VALUES ({version}, '{path.name}');",
-            "COMMIT;",
-        ])
+        script = "\n".join(
+            [
+                "BEGIN;",
+                path.read_text(encoding="utf-8"),
+                f"INSERT INTO schema_migration (version, name) "  # noqa: S608
+                f"VALUES ({version}, '{path.name}');",
+                "COMMIT;",
+            ]
+        )
         try:
             conn.executescript(script)
         except Exception:

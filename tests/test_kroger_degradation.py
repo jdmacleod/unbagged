@@ -16,7 +16,12 @@ from unbagged.models import AdapterError, Severity, SourceBundle, SourceDocument
 
 FIXTURE = (
     Path(__file__).parent.parent
-    / "src" / "unbagged" / "adapters" / "kroger" / "fixtures" / "synthetic_report.txt"
+    / "src"
+    / "unbagged"
+    / "adapters"
+    / "kroger"
+    / "fixtures"
+    / "synthetic_report.txt"
 )
 
 HEADERS = (
@@ -48,11 +53,21 @@ def report_with_baskets(baskets: list) -> str:
 
 
 GOOD_BASKET = {
-    "date": "2025-03-04", "time": "18:22:10", "division": "016", "store": "00318",
-    "orderno": "000001", "total_amount_prior_to_discounts": 41.2,
+    "date": "2025-03-04",
+    "time": "18:22:10",
+    "division": "016",
+    "store": "00318",
+    "orderno": "000001",
+    "total_amount_prior_to_discounts": 41.2,
     "tenders": [{"tendertype": "CREDIT", "amount": 41.2}],
-    "items": [{"purchasedescription": "BANANAS", "productupc": "00000004011",
-               "retailamt": 2.49, "customerloyamt": 0.3}],
+    "items": [
+        {
+            "purchasedescription": "BANANAS",
+            "productupc": "00000004011",
+            "retailamt": 2.49,
+            "customerloyamt": 0.3,
+        }
+    ],
 }
 
 
@@ -132,8 +147,15 @@ class TestMalformedBaskets:
 class TestAmountCoercion:
     @pytest.mark.parametrize(
         "raw,expected",
-        [(2.49, 2.49), ("2.49", 2.49), ("$1,234.56", 1234.56), ("", None),
-         (None, None), ("not a number", None), (-6.99, -6.99)],
+        [
+            (2.49, 2.49),
+            ("2.49", 2.49),
+            ("$1,234.56", 1234.56),
+            ("", None),
+            (None, None),
+            ("not a number", None),
+            (-6.99, -6.99),
+        ],
     )
     def test_amounts_are_coerced_or_dropped_never_guessed(self, tmp_path, raw, expected):
         item = {"purchasedescription": "THING", "productupc": "1", "retailamt": raw}
@@ -190,7 +212,8 @@ class TestCorruptJson:
             # pii-scan: allow synthetic loyalty number
             HEADERS + '{"customer": [{"loyaltyno": nonsense}]}\n\n'
             "Information about your purchases:\n\n"
-            + json.dumps({"customer": [{"basket": [GOOD_BASKET]}]}, indent=2) + "\n"
+            + json.dumps({"customer": [{"basket": [GOOD_BASKET]}]}, indent=2)
+            + "\n"
         )
         result = parse_text(tmp_path, text)
         assert len(result.transactions) == 1

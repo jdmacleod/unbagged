@@ -30,12 +30,14 @@ class ComposeLoader(yaml.SafeLoader):
 
 
 ComposeLoader.add_constructor(
-    "!override", lambda loader, node: loader.construct_sequence(node)
-    if isinstance(node, yaml.SequenceNode) else loader.construct_mapping(node)
+    "!override",
+    lambda loader, node: (
+        loader.construct_sequence(node)
+        if isinstance(node, yaml.SequenceNode)
+        else loader.construct_mapping(node)
+    ),
 )
-ComposeLoader.add_constructor(
-    "!reset", lambda loader, node: None
-)
+ComposeLoader.add_constructor("!reset", lambda loader, node: None)
 
 
 def services(path: Path) -> dict:
@@ -136,8 +138,7 @@ class TestDataHandling:
         only, and sent the rest to the daemon.
         """
         offenders = sorted(
-            e for e in self._dockerignore_entries()
-            if e.startswith("*") and not e.startswith("**/")
+            e for e in self._dockerignore_entries() if e.startswith("*") and not e.startswith("**/")
         )
         assert not offenders, (
             f"depth-limited .dockerignore patterns: {offenders}. "
@@ -152,16 +153,26 @@ class TestDataHandling:
         context and the daemon's cache. A format denied in one and not the other
         is a hole in whichever half was forgotten.
         """
-        git_suffixes = {
-            e.lstrip("!*") for e in self._gitignore_entries() if e.startswith("*.")
-        }
+        git_suffixes = {e.lstrip("!*") for e in self._gitignore_entries() if e.startswith("*.")}
         docker_suffixes = {
-            e.removeprefix("**/").lstrip("*")
-            for e in self._dockerignore_entries() if "*." in e
+            e.removeprefix("**/").lstrip("*") for e in self._dockerignore_entries() if "*." in e
         }
         report_formats = {
-            ".pdf", ".zip", ".csv", ".tsv", ".xls", ".xlsx", ".ods",
-            ".doc", ".docx", ".eml", ".mbox", ".7z", ".rar", ".tar", ".tgz",
+            ".pdf",
+            ".zip",
+            ".csv",
+            ".tsv",
+            ".xls",
+            ".xlsx",
+            ".ods",
+            ".doc",
+            ".docx",
+            ".eml",
+            ".mbox",
+            ".7z",
+            ".rar",
+            ".tar",
+            ".tgz",
         }
         assert report_formats <= git_suffixes, (
             f".gitignore is missing: {sorted(report_formats - git_suffixes)}"
@@ -190,7 +201,7 @@ class TestImageShape:
     def test_the_runtime_uid_is_asserted_somewhere_that_runs_it(self):
         # Guard against the container tier being deleted and this file being
         # left believing it still covers the non-root guarantee.
-        runtime_tests = (ROOT / "tests" / "container" / "test_runtime.py")
+        runtime_tests = ROOT / "tests" / "container" / "test_runtime.py"
         assert runtime_tests.is_file()
         assert "os.getuid()" in runtime_tests.read_text(encoding="utf-8")
 

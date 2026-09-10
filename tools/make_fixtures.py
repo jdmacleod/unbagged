@@ -65,7 +65,10 @@ def tracked_fixture_files() -> dict[Path, set[str]]:
     """
     listed = subprocess.run(
         ["git", "ls-files", "--", "src/unbagged/adapters/*/fixtures/*"],
-        cwd=REPO_ROOT, capture_output=True, text=True, check=False,
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
     ).stdout.split()
     grouped: dict[Path, set[str]] = {}
     for name in listed:
@@ -153,10 +156,14 @@ def run(check: bool = False, seed: int | None = None) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--check", action="store_true",
-                        help="fail if a committed fixture differs from generator output")
-    parser.add_argument("--seed", type=int, default=None,
-                        help="override the generator's default seed")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="fail if a committed fixture differs from generator output",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=None, help="override the generator's default seed"
+    )
     args = parser.parse_args(argv)
     return run(check=args.check, seed=args.seed)
 

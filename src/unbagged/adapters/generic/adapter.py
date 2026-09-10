@@ -50,39 +50,57 @@ SENTENCE = re.compile(r"[^.!?\n]+[.!?]?")
 # one is evidence the topic came up, never that it was answered.
 CATEGORY_HINTS: dict[DisclosureCategory, tuple[str, ...]] = {
     DisclosureCategory.CATEGORIES_COLLECTED: (
-        "categories of personal information", "categories of information we collect",
+        "categories of personal information",
+        "categories of information we collect",
         "types of personal information",
     ),
     DisclosureCategory.SOURCES: (
-        "categories of sources", "sources from which", "where we collect",
+        "categories of sources",
+        "sources from which",
+        "where we collect",
         "obtained from",
     ),
     DisclosureCategory.BUSINESS_PURPOSE: (
-        "business purpose", "commercial purpose", "purpose for collecting",
+        "business purpose",
+        "commercial purpose",
+        "purpose for collecting",
         "why we collect",
     ),
     DisclosureCategory.THIRD_PARTIES_SHARED_WITH: (
-        "third parties", "service providers", "categories of third parties",
+        "third parties",
+        "service providers",
+        "categories of third parties",
         "we disclose to",
     ),
     DisclosureCategory.SPECIFIC_PIECES: (
-        "specific pieces", "personal information we hold", "information we hold about you",
+        "specific pieces",
+        "personal information we hold",
+        "information we hold about you",
     ),
     DisclosureCategory.SOLD_OR_SHARED: (
-        "sold or shared", "sale of personal information", "we do not sell",
+        "sold or shared",
+        "sale of personal information",
+        "we do not sell",
         "cross-context behavioral advertising",
     ),
     DisclosureCategory.DISCLOSED_FOR_BUSINESS_PURPOSE: (
-        "disclosed for a business purpose", "disclosed for business purposes",
+        "disclosed for a business purpose",
+        "disclosed for business purposes",
     ),
     DisclosureCategory.RETENTION_PERIOD: (
-        "retention period", "how long we retain", "we retain", "retention schedule",
+        "retention period",
+        "how long we retain",
+        "we retain",
+        "retention schedule",
     ),
 }
 
 NO_DATA_HINTS = (
-    "we do not hold", "no personal information", "we have no record",
-    "unable to locate", "no records were found",
+    "we do not hold",
+    "no personal information",
+    "we have no record",
+    "unable to locate",
+    "no records were found",
 )
 
 
@@ -189,10 +207,7 @@ class GenericAdapter:
                 follow_ups.append(
                     FollowUpAction(
                         kind=FollowUpKind.MISSING_CATEGORY,
-                        description=(
-                            f"No wording in this response addresses "
-                            f"{category.label}."
-                        ),
+                        description=(f"No wording in this response addresses {category.label}."),
                     )
                 )
 

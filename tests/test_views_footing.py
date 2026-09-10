@@ -42,8 +42,7 @@ def _basket(stated: float | None, *amounts: float) -> Transaction:
         total_pre_discount=stated,
         provenance=PROV,
         items=tuple(
-            TxnItem(description_raw="ITEM", upc="00000000001",
-                    retail_amt=a, loyalty_amt=a)
+            TxnItem(description_raw="ITEM", upc="00000000001", retail_amt=a, loyalty_amt=a)
             for a in amounts
         ),
     )

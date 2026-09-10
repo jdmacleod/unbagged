@@ -120,19 +120,14 @@ def _luhn_ok(digits: str) -> bool:
 
 
 def _escape(value: str) -> str:
-    return (
-        value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    )
+    return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _cell(value: str, index: int | None = None, style: str | None = None) -> str:
     """One cell. Every value is `ss:Type="String"`, as the real export emits."""
     at = f' ss:StyleID="{style}"' if style else ""
     at += f' ss:Index="{index}"' if index is not None else ""
-    return (
-        f"      <ss:Cell{at}><ss:Data ss:Type=\"String\">"
-        f"{_escape(value)}</ss:Data></ss:Cell>"
-    )
+    return f'      <ss:Cell{at}><ss:Data ss:Type="String">{_escape(value)}</ss:Data></ss:Cell>'
 
 
 def _banner_cell() -> str:
@@ -179,20 +174,18 @@ def build(seed: int = DEFAULT_SEED) -> str:
     rows: list[str] = []
 
     # The banner row: one merged, marked-up cell spanning the full width.
+    rows.append('    <ss:Row ss:Height="38">\n' + _banner_cell() + "\n    </ss:Row>")
     rows.append(
-        "    <ss:Row ss:Height=\"38\">\n" + _banner_cell() + "\n    </ss:Row>"
-    )
-    rows.append(
-        "    <ss:Row ss:AutoFitHeight=\"1\">\n"
+        '    <ss:Row ss:AutoFitHeight="1">\n'
         + "\n".join(_cell(header, style=HEADER_STYLE) for header in HEADERS)
         + "\n    </ss:Row>"
     )
 
     when = start
     data_rows = 0
-    sparse_at = {17, 53}          # rows that omit Branch and declare ss:Index
-    empty_row_at = 40             # a row that declares its own number, skipping one
-    row_number = 3                # 1 banner, 2 header
+    sparse_at = {17, 53}  # rows that omit Branch and declare ss:Index
+    empty_row_at = 40  # a row that declares its own number, skipping one
+    row_number = 3  # 1 banner, 2 header
     while data_rows < 200:
         # Between 4 and 52 days on, so some months carry several visits and
         # some carry none at all.
@@ -259,17 +252,14 @@ def build(seed: int = DEFAULT_SEED) -> str:
         # Between the worksheet's start tag and its table, where a reader that
         # takes the first child of a worksheet to be its table meets it first.
         '    <ss:Names><ss:NamedRange ss:Name="Print_Titles"'
-        ' ss:RefersTo="=\'Workbook\'!R1:R2" /></ss:Names>\n'
+        " ss:RefersTo=\"='Workbook'!R1:R2\" /></ss:Names>\n"
         f'    <ss:Table x:FullRows="1" x:FullColumns="1"'
         f' ss:ExpandedColumnCount="{len(HEADERS)}"'
         f' ss:ExpandedRowCount="{row_number - 1}">\n'
         # Column widths, which the export writes ahead of its rows. They are
         # children of ss:Table and not of any row, so a reader that walks a
         # row's children has to not meet them — which is worth generating.
-        + "".join(
-            '      <ss:Column ss:AutoFitWidth="1" ss:Width="164" />\n'
-            for _ in HEADERS
-        )
+        + "".join('      <ss:Column ss:AutoFitWidth="1" ss:Width="164" />\n' for _ in HEADERS)
         + f"{body}\n"
         "    </ss:Table>\n"
         # Print setup, after the table and still inside the worksheet. Nothing

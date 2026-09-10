@@ -75,8 +75,14 @@ def insert_request(conn: sqlite3.Connection, meta: RequestMeta) -> int:
         " received_at, statute, period_start, period_end, adapter_schema_version)"
         " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
-            meta.retailer_id, meta.display_name, meta.report_reference, meta.submitted_at,
-            meta.received_at, meta.statute, meta.period_start, meta.period_end,
+            meta.retailer_id,
+            meta.display_name,
+            meta.report_reference,
+            meta.submitted_at,
+            meta.received_at,
+            meta.statute,
+            meta.period_start,
+            meta.period_end,
             meta.adapter_schema_version,
         ),
     )
@@ -123,9 +129,13 @@ def save_parse_result(
             " source_document_id, page, locator) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
-                    request_id, str(i.id_type), i.value,
-                    str(i.scope) if i.scope else None, i.first_seen,
-                    i.provenance.source_document_id, i.provenance.page,
+                    request_id,
+                    str(i.id_type),
+                    i.value,
+                    str(i.scope) if i.scope else None,
+                    i.first_seen,
+                    i.provenance.source_document_id,
+                    i.provenance.page,
                     i.provenance.locator,
                 )
                 for i in result.identities
@@ -139,10 +149,16 @@ def save_parse_result(
                 " source_document_id, page, locator)"
                 " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
-                    request_id, txn.external_order_id, txn.occurred_at, txn.store_code,
-                    txn.division_code, str(txn.channel) if txn.channel else None,
-                    txn.tender_type, txn.total_pre_discount,
-                    txn.provenance.source_document_id, txn.provenance.page,
+                    request_id,
+                    txn.external_order_id,
+                    txn.occurred_at,
+                    txn.store_code,
+                    txn.division_code,
+                    str(txn.channel) if txn.channel else None,
+                    txn.tender_type,
+                    txn.total_pre_discount,
+                    txn.provenance.source_document_id,
+                    txn.provenance.page,
                     txn.provenance.locator,
                 ),
             )
@@ -152,8 +168,14 @@ def save_parse_result(
                 " loyalty_amt, category, category_confidence) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 [
                     (
-                        txn_id, it.description_raw, it.upc, it.quantity, it.retail_amt,
-                        it.loyalty_amt, it.category, it.category_confidence,
+                        txn_id,
+                        it.description_raw,
+                        it.upc,
+                        it.quantity,
+                        it.retail_amt,
+                        it.loyalty_amt,
+                        it.category,
+                        it.category_confidence,
                     )
                     for it in txn.items
                 ],
@@ -165,12 +187,16 @@ def save_parse_result(
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
-                    request_id, f.label, f.value_raw, f.value_num,
+                    request_id,
+                    f.label,
+                    f.value_raw,
+                    f.value_num,
                     str(f.scale) if f.scale else None,
                     str(f.subject) if f.subject else None,
                     str(f.origin),
                     None if f.derivable_from_txns is None else int(f.derivable_from_txns),
-                    f.provenance.source_document_id, f.provenance.page,
+                    f.provenance.source_document_id,
+                    f.provenance.page,
                     f.provenance.locator,
                 )
                 for f in result.inferences
@@ -182,8 +208,13 @@ def save_parse_result(
             " source_document_id, page, locator) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
-                    request_id, str(d.category), str(d.status), d.evidence, d.notes,
-                    d.provenance.source_document_id, d.provenance.page,
+                    request_id,
+                    str(d.category),
+                    str(d.status),
+                    d.evidence,
+                    d.notes,
+                    d.provenance.source_document_id,
+                    d.provenance.page,
                     d.provenance.locator,
                 )
                 for d in result.disclosures
@@ -191,21 +222,14 @@ def save_parse_result(
         )
 
         conn.executemany(
-            "INSERT INTO follow_up (request_id, kind, description, resolved)"
-            " VALUES (?, ?, ?, ?)",
-            [
-                (request_id, str(f.kind), f.description, int(f.resolved))
-                for f in result.follow_ups
-            ],
+            "INSERT INTO follow_up (request_id, kind, description, resolved) VALUES (?, ?, ?, ?)",
+            [(request_id, str(f.kind), f.description, int(f.resolved)) for f in result.follow_ups],
         )
 
         conn.executemany(
             "INSERT INTO parse_warning (request_id, severity, message, locator)"
             " VALUES (?, ?, ?, ?)",
-            [
-                (request_id, str(w.severity), w.message, w.locator)
-                for w in result.warnings
-            ],
+            [(request_id, str(w.severity), w.message, w.locator) for w in result.warnings],
         )
 
     return request_id
@@ -263,9 +287,7 @@ def get_documents(conn: sqlite3.Connection, request_id: int) -> list[SourceDocum
 
 
 def get_identities(conn: sqlite3.Connection, request_id: int) -> list[Identity]:
-    rows = conn.execute(
-        "SELECT * FROM identity WHERE request_id = ? ORDER BY id", (request_id,)
-    )
+    rows = conn.execute("SELECT * FROM identity WHERE request_id = ? ORDER BY id", (request_id,))
     return [
         Identity(
             id_type=_enum(IdType, r["id_type"]),
@@ -322,9 +344,7 @@ def get_transactions(
 
 
 def get_inferences(conn: sqlite3.Connection, request_id: int) -> list[Inference]:
-    rows = conn.execute(
-        "SELECT * FROM inference WHERE request_id = ? ORDER BY id", (request_id,)
-    )
+    rows = conn.execute("SELECT * FROM inference WHERE request_id = ? ORDER BY id", (request_id,))
     return [
         Inference(
             label=r["label"],
@@ -343,9 +363,7 @@ def get_inferences(conn: sqlite3.Connection, request_id: int) -> list[Inference]
 
 
 def get_disclosures(conn: sqlite3.Connection, request_id: int) -> list[Disclosure]:
-    rows = conn.execute(
-        "SELECT * FROM disclosure WHERE request_id = ? ORDER BY id", (request_id,)
-    )
+    rows = conn.execute("SELECT * FROM disclosure WHERE request_id = ? ORDER BY id", (request_id,))
     return [
         Disclosure(
             category=_enum(DisclosureCategory, r["category"]),
@@ -359,9 +377,7 @@ def get_disclosures(conn: sqlite3.Connection, request_id: int) -> list[Disclosur
 
 
 def get_follow_ups(conn: sqlite3.Connection, request_id: int) -> list[FollowUpAction]:
-    rows = conn.execute(
-        "SELECT * FROM follow_up WHERE request_id = ? ORDER BY id", (request_id,)
-    )
+    rows = conn.execute("SELECT * FROM follow_up WHERE request_id = ? ORDER BY id", (request_id,))
     return [
         FollowUpAction(
             kind=_enum(FollowUpKind, r["kind"]),

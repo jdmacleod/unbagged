@@ -131,7 +131,10 @@ class TestIdentityBlob:
         # caught out one harvester.
         email = next(b for b in blobs if "emailData" in b)
         assert {r["Name"] for r in email["emailData"]} >= {
-            "EmailAddress", "SubscriberID", "SubscriberKey", "Status"
+            "EmailAddress",
+            "SubscriberID",
+            "SubscriberKey",
+            "Status",
         }
 
 
@@ -140,7 +143,11 @@ class TestInferenceBlob:
         # Under loyalty, not advertising: that is where a real report puts them.
         blob = next(b for b in blobs if "Convenience" in b)
         assert set(blob) == {
-            "loyaltyIdNumber", "Convenience", "Loyalty", "Price", "Quality",
+            "loyaltyIdNumber",
+            "Convenience",
+            "Loyalty",
+            "Price",
+            "Quality",
             "Variety Seeking",
         }
         axes = {k: v for k, v in blob.items() if k != "loyaltyIdNumber"}
@@ -169,8 +176,16 @@ class TestInferenceBlob:
 class TestPurchaseBlob:
     def test_baskets_carry_the_documented_shape(self, blobs):
         basket = PURCHASES(blobs)["basket"][0]
-        for key in ("date", "time", "division", "store", "orderno",
-                    "total_amount_prior_to_discounts", "tenders", "items"):
+        for key in (
+            "date",
+            "time",
+            "division",
+            "store",
+            "orderno",
+            "total_amount_prior_to_discounts",
+            "tenders",
+            "items",
+        ):
             assert key in basket, key
         item = basket["items"][0]
         for key in ("purchasedescription", "productupc", "retailamt", "customerloyamt"):

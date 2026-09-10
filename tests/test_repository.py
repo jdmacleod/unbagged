@@ -31,8 +31,12 @@ class TestRoundTrip:
         request_id = repository.save_parse_result(conn, sample_result(doc_id=None))
         loaded = repository.load_parse_result(conn, request_id)
         # Every cell the UI can show must be traceable back to a document.
-        for record in (*loaded.identities, *loaded.transactions,
-                       *loaded.inferences, *loaded.disclosures):
+        for record in (
+            *loaded.identities,
+            *loaded.transactions,
+            *loaded.inferences,
+            *loaded.disclosures,
+        ):
             assert record.provenance.locator
 
     def test_line_items_stay_with_their_basket(self, conn):
@@ -57,8 +61,7 @@ class TestRoundTrip:
     def test_absence_survives_as_a_finding(self, conn):
         request_id = repository.save_parse_result(conn, sample_result(doc_id=None))
         loaded = repository.load_parse_result(conn, request_id)
-        absent = {d.category for d in loaded.disclosures
-                  if d.status is DisclosureStatus.ABSENT}
+        absent = {d.category for d in loaded.disclosures if d.status is DisclosureStatus.ABSENT}
         assert DisclosureCategory.SOURCES in absent
         assert loaded.missing_categories() == ()
 
@@ -85,8 +88,7 @@ class TestTypes:
 
     def test_an_unrecognised_stored_value_does_not_break_reads(self, conn):
         request_id = repository.save_parse_result(conn, sample_result(doc_id=None))
-        conn.execute("UPDATE txn SET channel = 'curbside' WHERE request_id = ?",
-                     (request_id,))
+        conn.execute("UPDATE txn SET channel = 'curbside' WHERE request_id = ?", (request_id,))
         # A retailer inventing a channel should not make the database unreadable.
         loaded = repository.load_parse_result(conn, request_id)
         assert loaded.transactions[0].channel == "curbside"
@@ -94,8 +96,7 @@ class TestTypes:
 
 class TestDocuments:
     def test_documents_get_ids_for_adapters_to_reference(self, conn):
-        request_id = repository.save_parse_result(conn, sample_result(),
-                                                  documents=[DOCUMENT])
+        request_id = repository.save_parse_result(conn, sample_result(), documents=[DOCUMENT])
         docs = repository.get_documents(conn, request_id)
         assert len(docs) == 1
         assert docs[0].id is not None

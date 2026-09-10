@@ -78,7 +78,10 @@ def entries(text: str) -> list[tuple[str, str]]:
 def tags() -> list[str]:
     result = subprocess.run(
         ["git", "for-each-ref", "--format=%(refname:short)", "refs/tags"],
-        cwd=REPO_ROOT, capture_output=True, text=True, check=True,
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
     )
     return [line for line in result.stdout.splitlines() if line]
 
@@ -92,15 +95,16 @@ def verify(tag: str) -> tuple[bool, str]:
     """
     result = subprocess.run(
         ["git", "-c", f"gpg.ssh.allowedSignersFile={SIGNERS}", "verify-tag", tag],
-        cwd=REPO_ROOT, capture_output=True, text=True,
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
     )
     return result.returncode == 0, (result.stderr or result.stdout).strip()
 
 
 def run() -> int:
     if not SIGNERS.is_file():
-        print(f"check_signers: no signers file at {shown(SIGNERS)}",
-              file=sys.stderr)
+        print(f"check_signers: no signers file at {shown(SIGNERS)}", file=sys.stderr)
         return 1
     try:
         signers = entries(SIGNERS.read_text(encoding="utf-8"))
@@ -108,8 +112,9 @@ def run() -> int:
         print(f"check_signers: {exc}", file=sys.stderr)
         return 1
     if not signers:
-        print("check_signers: the signers file lists nobody, so nothing can verify",
-              file=sys.stderr)
+        print(
+            "check_signers: the signers file lists nobody, so nothing can verify", file=sys.stderr
+        )
         return 1
 
     found = tags()
@@ -132,8 +137,10 @@ def run() -> int:
             problems.append((tag, detail))
 
     if problems:
-        print(f"\ncheck_signers: {len(problems)} tag(s) do not verify against "
-              f"{shown(SIGNERS)}", file=sys.stderr)
+        print(
+            f"\ncheck_signers: {len(problems)} tag(s) do not verify against {shown(SIGNERS)}",
+            file=sys.stderr,
+        )
         for tag, detail in problems:
             print(f"  FAILED  {tag}\n          {detail}", file=sys.stderr)
         print(
@@ -144,8 +151,7 @@ def run() -> int:
         )
         return 1
 
-    print(f"\ncheck_signers: {len(found)} tag(s) verify, "
-          f"{len(signers)} signer(s) trusted")
+    print(f"\ncheck_signers: {len(found)} tag(s) verify, {len(signers)} signer(s) trusted")
     return 0
 
 

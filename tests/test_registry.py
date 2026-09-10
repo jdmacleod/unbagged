@@ -133,9 +133,7 @@ class TestRegistry:
         assert reg.select(BUNDLE).confidence == 1.0
 
     @pytest.mark.parametrize("outcome", ["very sure", None, object(), float("nan")])
-    def test_a_score_that_is_not_a_score_is_treated_as_a_broken_adapter(
-        self, outcome, caplog
-    ):
+    def test_a_score_that_is_not_a_score_is_treated_as_a_broken_adapter(self, outcome, caplog):
         # Reading the answer happens inside the same guard as the call. A word,
         # a None, or a NaN would otherwise reach the sort: NaN compares false
         # against everything, so it survives the clamp and then orders the
@@ -176,8 +174,7 @@ class TestAbsentDisclosures:
 
     def test_what_was_found_is_left_alone(self):
         provided = Disclosure(
-            DisclosureCategory.SPECIFIC_PIECES, DisclosureStatus.PROVIDED,
-            evidence="Section 1"
+            DisclosureCategory.SPECIFIC_PIECES, DisclosureStatus.PROVIDED, evidence="Section 1"
         )
         complete = absent_disclosures({provided.category: provided}, note="n/a")
         assert provided in complete
@@ -205,7 +202,9 @@ class TestWarningCollector:
         warnings.error("could not read the purchase blob at all")
         assert len(warnings) == 3
         assert [w.severity for w in warnings.as_tuple()] == [
-            Severity.INFO, Severity.WARNING, Severity.ERROR
+            Severity.INFO,
+            Severity.WARNING,
+            Severity.ERROR,
         ]
         assert warnings.as_tuple()[1].locator == "$.b"
 

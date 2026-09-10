@@ -108,10 +108,16 @@ ORDINAL_LABEL = re.compile(r"\(\s*[17]\s*=\s*(?:most|least)", re.IGNORECASE)
 # Which demographic attributes describe a household rather than a person. These
 # are the ones that describe people who never enrolled in anything, and the
 # profile view calls them out.
-HOUSEHOLD_ATTRIBUTES = frozenset({
-    "householdComposition", "numberOfAdults", "numberOfChildren",
-    "homeOwnerStatus", "lengthOfResidence", "incomePredictorScore",
-})
+HOUSEHOLD_ATTRIBUTES = frozenset(
+    {
+        "householdComposition",
+        "numberOfAdults",
+        "numberOfChildren",
+        "homeOwnerStatus",
+        "lengthOfResidence",
+        "incomePredictorScore",
+    }
+)
 
 # Whether an attribute could have been derived from the transactions in this same
 # report. Anything absent from this map is False: the default assumption for an
@@ -212,7 +218,7 @@ def _occurred_at(date: Any, time: Any) -> str | None:
     # Prefer the dedicated time field; fall back to any clock inside `date`,
     # which is where a zeroed placeholder usually lives.
     clock = None
-    for candidate in (_text(time), raw_date[len(match.group(0)):]):
+    for candidate in (_text(time), raw_date[len(match.group(0)) :]):
         if candidate and (found := CLOCK.search(candidate)):
             hour, minute, second = found.group(1), found.group(2), found.group(3) or "00"
             if clock is None or (hour, minute, second) != ("00", "00", "00"):
@@ -258,9 +264,7 @@ class KrogerAdapter:
         documents = extract_all(bundle.documents)
         for document in bundle.documents:
             if not any(e.filename == document.original_filename for e in documents):
-                warnings.error(
-                    f"{document.original_filename} could not be read and was skipped."
-                )
+                warnings.error(f"{document.original_filename} could not be read and was skipped.")
         if not documents:
             raise AdapterError(
                 "None of the uploaded files could be read as text. If this is a "
@@ -334,14 +338,11 @@ class KrogerAdapter:
         for document in documents:
             if document is not best:
                 warnings.info(
-                    f"{document.filename} contained no Kroger report sections and "
-                    "was not parsed."
+                    f"{document.filename} contained no Kroger report sections and was not parsed."
                 )
         return best
 
-    def _request_meta(
-        self, clean: str, transactions: tuple[Transaction, ...]
-    ) -> RequestMeta:
+    def _request_meta(self, clean: str, transactions: tuple[Transaction, ...]) -> RequestMeta:
         reference = REPORT_REFERENCE.search(clean)
         period = REPORT_PERIOD.search(clean)
         if period:
@@ -379,8 +380,9 @@ class KrogerAdapter:
                 return
             seen.add((str(id_type), text))
             identities.append(
-                Identity(id_type=id_type, value=text, scope=scope,
-                         provenance=provenance(offset, path))
+                Identity(
+                    id_type=id_type, value=text, scope=scope, provenance=provenance(offset, path)
+                )
             )
 
         accounts_blob = reader.blob_with_keys(blobs, "accounts", "groups")
@@ -398,8 +400,13 @@ class KrogerAdapter:
             customer = self._first_customer(purchases.data, WarningCollector(), "purchases")
             if customer:
                 cursor = Cursor(purchases.raw, purchases.start)
-                add(IdType.LOYALTY_CARD, customer.get("loyaltyno"), Scope.INDIVIDUAL,
-                    cursor.find('"loyaltyno"'), "$.customer[0].loyaltyno")
+                add(
+                    IdType.LOYALTY_CARD,
+                    customer.get("loyaltyno"),
+                    Scope.INDIVIDUAL,
+                    cursor.find('"loyaltyno"'),
+                    "$.customer[0].loyaltyno",
+                )
 
         self._identities_from_email(blobs, add)
         if not identities:
@@ -422,23 +429,43 @@ class KrogerAdapter:
                 # Card numbers are the *keys* of loyaltyCards, not values.
                 for number, card in (account.get("loyaltyCards") or {}).items():
                     offset = cursor.find(f'"{number}"')
-                    add(IdType.LOYALTY_CARD, number, Scope.INDIVIDUAL,
-                        offset, f"{base}.loyaltyCards.{number}")
+                    add(
+                        IdType.LOYALTY_CARD,
+                        number,
+                        Scope.INDIVIDUAL,
+                        offset,
+                        f"{base}.loyaltyCards.{number}",
+                    )
                     if isinstance(card, dict):
-                        add(IdType.LOYALTY_CARD, card.get("cardNumberWithCD"),
-                            Scope.INDIVIDUAL, offset,
-                            f"{base}.loyaltyCards.{number}.cardNumberWithCD")
+                        add(
+                            IdType.LOYALTY_CARD,
+                            card.get("cardNumberWithCD"),
+                            Scope.INDIVIDUAL,
+                            offset,
+                            f"{base}.loyaltyCards.{number}.cardNumberWithCD",
+                        )
                         for alt in card.get("altIds") or []:
-                            add(IdType.ALTERNATE_ID, alt, Scope.INDIVIDUAL, offset,
-                                f"{base}.loyaltyCards.{number}.altIds")
+                            add(
+                                IdType.ALTERNATE_ID,
+                                alt,
+                                Scope.INDIVIDUAL,
+                                offset,
+                                f"{base}.loyaltyCards.{number}.altIds",
+                            )
                 name = (account.get("personalInfo") or {}).get("name") or {}
                 full = " ".join(
-                    part for part in (_text(name.get("firstName")),
-                                      _text(name.get("lastName"))) if part
+                    part
+                    for part in (_text(name.get("firstName")), _text(name.get("lastName")))
+                    if part
                 )
                 if full:
-                    add(IdType.NAME, full, Scope.INDIVIDUAL,
-                        cursor.find('"personalInfo"'), f"{base}.personalInfo.name")
+                    add(
+                        IdType.NAME,
+                        full,
+                        Scope.INDIVIDUAL,
+                        cursor.find('"personalInfo"'),
+                        f"{base}.personalInfo.name",
+                    )
 
         for k, group in enumerate(blob.data.get("groups") or []):
             if not isinstance(group, dict):
@@ -448,22 +475,36 @@ class KrogerAdapter:
             base = f"$.groups[{k}]"
             offset = cursor.find(f'"{group.get("type")}"')
             for key, value in (group.get("aliasIds") or {}).items():
-                add(ALIAS_TYPES.get(key, IdType.INTERNAL_PERSON), value, scope,
-                    offset, f"{base}.aliasIds.{key}")
+                add(
+                    ALIAS_TYPES.get(key, IdType.INTERNAL_PERSON),
+                    value,
+                    scope,
+                    offset,
+                    f"{base}.aliasIds.{key}",
+                )
             for key, entry in (group.get("metadata") or {}).items():
                 value = entry.get("value") if isinstance(entry, dict) else entry
                 if key in ALIAS_TYPES:
-                    add(ALIAS_TYPES[key], value, scope, offset,
-                        f"{base}.metadata.{key}.value")
+                    add(ALIAS_TYPES[key], value, scope, offset, f"{base}.metadata.{key}.value")
                 elif key.lower() == "address" and value is not None:
-                    text = value if isinstance(value, str) else ", ".join(
-                        str(v) for v in (value.values() if isinstance(value, dict)
-                                         else value) if v
+                    text = (
+                        value
+                        if isinstance(value, str)
+                        else ", ".join(
+                            str(v)
+                            for v in (value.values() if isinstance(value, dict) else value)
+                            if v
+                        )
                     )
                     # Household-scoped on purpose: an address describes everyone
                     # living there, not only the person who enrolled.
-                    add(IdType.ADDRESS, text, Scope.HOUSEHOLD, offset,
-                        f"{base}.metadata.address.value")
+                    add(
+                        IdType.ADDRESS,
+                        text,
+                        Scope.HOUSEHOLD,
+                        offset,
+                        f"{base}.metadata.address.value",
+                    )
 
     def _identities_from_flat_customer(self, blob, add, warnings) -> None:
         """The flat `customer[0]` shape, kept as a fallback."""
@@ -473,14 +514,24 @@ class KrogerAdapter:
         cursor = Cursor(blob.raw, blob.start)
         for field, id_type, scope in IDENTIFIER_FIELDS:
             if field in customer:
-                add(id_type, customer[field], scope,
-                    cursor.find(f'"{field}"'), f"$.customer[0].{field}")
+                add(
+                    id_type,
+                    customer[field],
+                    scope,
+                    cursor.find(f'"{field}"'),
+                    f"$.customer[0].{field}",
+                )
         address = ", ".join(
             part for part in (_text(customer.get(f)) for f in ADDRESS_FIELDS) if part
         )
         if address:
-            add(IdType.ADDRESS, address, Scope.HOUSEHOLD,
-                cursor.find('"addressLine1"'), "$.customer[0].addressLine1")
+            add(
+                IdType.ADDRESS,
+                address,
+                Scope.HOUSEHOLD,
+                cursor.find('"addressLine1"'),
+                "$.customer[0].addressLine1",
+            )
 
     def _identities_from_email(self, blobs, add) -> None:
         """Email identifiers, from either the name/value or the activity shape."""
@@ -496,11 +547,15 @@ class KrogerAdapter:
             name, value = _text(row.get("Name")), row.get("Value")
             offset = cursor.find(f'"{name}"')
             if name == "EmailAddress":
-                add(IdType.EMAIL, value, Scope.INDIVIDUAL, offset,
-                    f"$.emailData[{index}].Value")
+                add(IdType.EMAIL, value, Scope.INDIVIDUAL, offset, f"$.emailData[{index}].Value")
             elif name in ("SubscriberID", "SubscriberKey"):
-                add(IdType.INTERNAL_PERSON, value, Scope.INDIVIDUAL, offset,
-                    f"$.emailData[{index}].Value")
+                add(
+                    IdType.INTERNAL_PERSON,
+                    value,
+                    Scope.INDIVIDUAL,
+                    offset,
+                    f"$.emailData[{index}].Value",
+                )
 
         customer = data.get("customer")
         if isinstance(customer, list) and customer and isinstance(customer[0], dict):
@@ -508,9 +563,13 @@ class KrogerAdapter:
                 if isinstance(record, dict):
                     value = _text(record.get("emailAddress"))
                     if value:
-                        add(IdType.EMAIL, value, Scope.INDIVIDUAL,
+                        add(
+                            IdType.EMAIL,
+                            value,
+                            Scope.INDIVIDUAL,
                             cursor.find(f'"{value}"'),
-                            f"$.customer[0].emailActivity[{index}].emailAddress")
+                            f"$.customer[0].emailActivity[{index}].emailAddress",
+                        )
 
     def _transactions(self, blobs, provenance, warnings) -> tuple[Transaction, ...]:
         blob = reader.blob_for_header(blobs, *reader.PURCHASE_HEADERS)
@@ -521,8 +580,10 @@ class KrogerAdapter:
         customer = self._first_customer(blob.data, warnings, "purchases")
         baskets = (customer or {}).get("basket") or []
         if not isinstance(baskets, list):
-            warnings.error("The purchase section's basket field was not a list.",
-                           locator="$.customer[0].basket")
+            warnings.error(
+                "The purchase section's basket field was not a list.",
+                locator="$.customer[0].basket",
+            )
             return ()
 
         cursor = Cursor(blob.raw, blob.start)
@@ -543,27 +604,22 @@ class KrogerAdapter:
 
     def _basket(self, basket, index, offset, path, provenance, warnings) -> Transaction | None:
         if not isinstance(basket, dict):
-            warnings.error(f"Basket {index} was not an object and was skipped.",
-                           locator=path)
+            warnings.error(f"Basket {index} was not an object and was skipped.", locator=path)
             return None
         occurred_at = _occurred_at(basket.get("date"), basket.get("time"))
         if not occurred_at:
-            warnings.error(f"Basket {index} had no usable date and was skipped.",
-                           locator=path)
+            warnings.error(f"Basket {index} had no usable date and was skipped.", locator=path)
             return None
 
         tenders = basket.get("tenders") or []
-        tender_types = [
-            _text(t.get("tendertype")) for t in tenders if isinstance(t, dict)
-        ]
+        tender_types = [_text(t.get("tendertype")) for t in tenders if isinstance(t, dict)]
         # A split payment is two tender types on one basket. Joining them keeps
         # the fact; dropping the second would quietly rewrite the receipt.
         tender = " + ".join(t for t in tender_types if t) or None
 
         items = basket.get("items") or []
         if not isinstance(items, list):
-            warnings.error(f"Basket {index} had a malformed item list.",
-                           locator=f"{path}.items")
+            warnings.error(f"Basket {index} had a malformed item list.", locator=f"{path}.items")
             items = []
 
         return Transaction(
@@ -633,7 +689,8 @@ class KrogerAdapter:
             customer = blob.data.get("customer")
             source = (
                 customer[0].get("propensities", {})
-                if isinstance(customer, list) and customer else {}
+                if isinstance(customer, list) and customer
+                else {}
             )
             path = "$.customer[0].propensities"
         else:
@@ -684,27 +741,22 @@ class KrogerAdapter:
                 return []
             customer = legacy.data.get("customer")
             first = customer[0] if isinstance(customer, list) and customer else {}
-            groups = [
-                (group, first.get(group) or {})
-                for group in ("demographics", "likelihoods")
-            ]
+            groups = [(group, first.get(group) or {}) for group in ("demographics", "likelihoods")]
             blob = legacy
             path_for = lambda subject, label: f"$.customer[0].{subject}.{label}"  # noqa: E731
 
         cursor = Cursor(blob.raw, blob.start)
         out = []
         for subject, row in groups:
-            scope = (
-                Scope.HOUSEHOLD
-                if str(subject).lower() == "household"
-                else Scope.INDIVIDUAL
-            )
+            scope = Scope.HOUSEHOLD if str(subject).lower() == "household" else Scope.INDIVIDUAL
             for label, value in row.items():
                 raw = _text(value)
                 if raw is None:
                     continue
                 if scope is Scope.INDIVIDUAL and str(subject).lower() not in (
-                    "individual", "demographics", "likelihoods"
+                    "individual",
+                    "demographics",
+                    "likelihoods",
                 ):
                     continue
                 scale, number = self._scale_and_number(str(label), value)
@@ -717,14 +769,11 @@ class KrogerAdapter:
                         scale=scale,
                         subject=(
                             Scope.HOUSEHOLD
-                            if scope is Scope.HOUSEHOLD
-                            or str(label) in HOUSEHOLD_ATTRIBUTES
+                            if scope is Scope.HOUSEHOLD or str(label) in HOUSEHOLD_ATTRIBUTES
                             else Scope.INDIVIDUAL
                         ),
                         derivable_from_txns=self._derivable(str(label)),
-                        provenance=provenance(
-                            cursor.find(f'"{label}"'), path_for(subject, label)
-                        ),
+                        provenance=provenance(cursor.find(f'"{label}"'), path_for(subject, label)),
                     )
                 )
         return out
@@ -783,10 +832,7 @@ class KrogerAdapter:
                 category=DisclosureCategory.SPECIFIC_PIECES,
                 status=DisclosureStatus.PROVIDED,
                 evidence=header,
-                notes=(
-                    f"{len(blobs)} structured data sections were returned under this "
-                    "heading."
-                ),
+                notes=(f"{len(blobs)} structured data sections were returned under this heading."),
                 provenance=provenance(section.start, "$"),
             )
         return absent_disclosures(
@@ -836,8 +882,7 @@ class KrogerAdapter:
                     return customers[0]
             elif isinstance(customers, dict):
                 return customers
-        warnings.error(f"The {where} section had no customer object.",
-                       locator="$.customer[0]")
+        warnings.error(f"The {where} section had no customer object.", locator="$.customer[0]")
         return None
 
 

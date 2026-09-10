@@ -54,7 +54,7 @@ def extract(text: str, version: str) -> str | None:
     match = heading.search(text)
     if match is None:
         return None
-    rest = text[match.end():]
+    rest = text[match.end() :]
     # Past the rest of the heading line, then up to the next version heading.
     rest = rest.split("\n", 1)[1] if "\n" in rest else ""
     nxt = rest.find(f"\n{SECTION}")

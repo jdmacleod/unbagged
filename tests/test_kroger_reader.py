@@ -9,7 +9,12 @@ from unbagged.adapters.kroger import reader
 
 FIXTURE = (
     Path(__file__).parent.parent
-    / "src" / "unbagged" / "adapters" / "kroger" / "fixtures" / "synthetic_report.txt"
+    / "src"
+    / "unbagged"
+    / "adapters"
+    / "kroger"
+    / "fixtures"
+    / "synthetic_report.txt"
 )
 
 
@@ -51,18 +56,18 @@ class TestPageMarkers:
         is what separates a page marker from a value.
         """
         text = (
-            'Email Information\n'
-            '{\n'
+            "Email Information\n"
+            "{\n"
             '  "scores": [\n'
-            '    7,\n'
-            '    9\n'
-            '  ]\n'
-            '}\n'
-            '  2\n'
-            'Information about your purchases:\n'
+            "    7,\n"
+            "    9\n"
+            "  ]\n"
+            "}\n"
+            "  2\n"
+            "Information about your purchases:\n"
             '{"customer": [{"basket": []}]}\n'
-            '  3\n'
-            'End of report.\n'
+            "  3\n"
+            "End of report.\n"
         )
         clean, pages = reader.strip_page_markers(text)
         assert reader.find_blobs(clean)[0].data["scores"] == [7, 9]
@@ -80,6 +85,7 @@ class TestPageMarkers:
     def test_the_naive_strip_would_have_eaten_it(self):
         # Kept as evidence for why the stricter rule exists at all.
         import re
+
         text = '{\n  "scores": [\n    7,\n    9\n  ]\n}\n'
         naive = re.sub(r"\n\s*\d{1,3}\r?\n", "\n", text)
         with pytest.raises(json.JSONDecodeError):
@@ -165,9 +171,9 @@ class TestBlobs:
 
     def test_a_corrupt_blob_is_skipped_not_raised(self):
         text = (
-            'Data we hold related to our Loyalty program:\n'
+            "Data we hold related to our Loyalty program:\n"
             '{"loyaltyno": nonsense}\n'
-            'Information about your purchases:\n'
+            "Information about your purchases:\n"
             '{"customer": [{"basket": []}]}\n'
         )
         blobs = reader.find_blobs(text)

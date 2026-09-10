@@ -115,9 +115,7 @@ class TestTheStrip:
         source = Image.open(build_brand.SOURCE_DIR / "apple-touch-icon-180.png")
         stripped = Image.open(io.BytesIO(build_brand.build_one("apple-touch-icon-180.png")))
         assert source.size == stripped.size
-        difference = ImageChops.difference(
-            source.convert("RGBA"), stripped.convert("RGBA")
-        )
+        difference = ImageChops.difference(source.convert("RGBA"), stripped.convert("RGBA"))
         assert difference.getbbox() is None
 
     def test_the_png_strip_leaves_no_ancillary_chunks(self):
@@ -136,9 +134,10 @@ class TestTheStrip:
         assert set(chunks) <= {"IHDR", "IDAT", "IEND", "PLTE", "tRNS"}, chunks
 
     def test_a_suffix_with_no_strip_passes_through_unchanged(self):
-        assert build_brand.build_one("favicon.ico") == (
-            build_brand.SOURCE_DIR / "favicon.ico"
-        ).read_bytes()
+        assert (
+            build_brand.build_one("favicon.ico")
+            == (build_brand.SOURCE_DIR / "favicon.ico").read_bytes()
+        )
 
 
 class TestTheCommandLine:
@@ -201,9 +200,7 @@ class TestStraysThatAreEasyToMiss:
         (public / "leftover.svg").write_bytes(b"<svg/>")
         assert build_brand.run(check=False) == 1
 
-    def test_the_repair_instruction_admits_make_brand_cannot_clear_a_stray(
-        self, public, capsys
-    ):
+    def test_the_repair_instruction_admits_make_brand_cannot_clear_a_stray(self, public, capsys):
         # The old text said "run `make brand`", which provably does not remove
         # a stray. Being told the wrong fix is worse than being told none.
         (public / "leftover.svg").write_bytes(b"<svg/>")
@@ -236,8 +233,8 @@ class TestTheStripperBreakingIsVisible:
     @pytest.mark.parametrize(
         "svg, why",
         [
-            (b'<svg><script>alert(1)</script></svg>', "a <script> element"),
-            (b'<svg><foreignObject><b/></foreignObject></svg>', "a <foreignObject> element"),
+            (b"<svg><script>alert(1)</script></svg>", "a <script> element"),
+            (b"<svg><foreignObject><b/></foreignObject></svg>", "a <foreignObject> element"),
             (b'<svg onload="alert(1)"/>', "an inline event handler"),
             (b'<svg><image href="https://elsewhere.example/x.png"/></svg>', "an off-origin href"),
         ],
@@ -302,9 +299,9 @@ class TestPngHandlingIsNotLossy:
         out = Image.open(io.BytesIO(build_brand.strip_png(buffer.getvalue())))
         out.load()
         assert out.info.get("transparency") is not None
-        assert "tRNS" in [c.decode() for c in build_brand.png_chunks(
-            build_brand.strip_png(buffer.getvalue())
-        )]
+        assert "tRNS" in [
+            c.decode() for c in build_brand.png_chunks(build_brand.strip_png(buffer.getvalue()))
+        ]
 
     def test_a_repacked_png_with_identical_pixels_is_not_drift(self, public):
         """--check compares decoded pixels, not compressed bytes.
