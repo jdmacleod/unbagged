@@ -58,7 +58,12 @@ export function Upload({
   prominent,
   result = null,
 }: {
-  onDone: (result: UploadResult) => void;
+  /** Called with the parse report, and with `null` whenever there is no
+   *  longer one to show — a new upload starting, or one that failed. The null
+   *  arm is what stops a previous success from sitting under "Reading the
+   *  response…" for the length of a parse, or beside the error from a refused
+   *  re-drop, reading as though the second drop partly worked. */
+  onDone: (result: UploadResult | null) => void;
   prominent?: boolean;
   /** What the last upload returned, owned by the caller.
    *
@@ -80,6 +85,10 @@ export function Upload({
     if (!files.length) return;
     setBusy(true);
     setError(null);
+    // The previous report describes the previous upload. Clear it before this
+    // one starts rather than after it lands: a parse runs 10 to 30 seconds, and
+    // for all of it the old report would sit directly beneath the spinner.
+    onDone(null);
     try {
       const uploaded = await api.upload(files);
       onDone(uploaded);

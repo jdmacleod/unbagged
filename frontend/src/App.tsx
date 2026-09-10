@@ -145,6 +145,25 @@ export default function App() {
   const known = rows.some((r) => r.id === selected);
   const current = (known ? selected : null) ?? rows[0]?.id ?? null;
 
+  // The upload report, but only while the response it describes still exists.
+  //
+  // Holding it on the page is what keeps it alive across the swap from the
+  // first-run uploader to the footer one, and that is the point — but a report
+  // is a claim about a stored response, so it has to die with one. Three ways
+  // it would otherwise outlive its subject, all of them putting a confident
+  // "Read as H Mart · 108 visits" on screen for something that is not there:
+  // the response is removed; a later `GET /api/requests` fails, which empties
+  // `rows` and returns the reader to the first-run screen; or the app is opened
+  // fresh in another tab and the row is deleted from this one.
+  //
+  // Keyed on the id rather than cleared by each of those paths in turn, because
+  // the question is always the same one and a list of triggers is a list to
+  // forget an entry from.
+  const liveUpload =
+    lastUpload && rows.some((r) => r.id === lastUpload.request_id)
+      ? lastUpload
+      : null;
+
   return (
     // A page on a desk. The sheet is sized to hold the reading measure plus the
     // margin the marginalia lives in, and nothing wider: the app does not grow
@@ -234,7 +253,7 @@ export default function App() {
         {!requests.loading && rows.length === 0 && (
           <Upload
             prominent
-            result={lastUpload}
+            result={liveUpload}
             onDone={(r) => {
               setLastUpload(r);
               requests.reload();
@@ -280,7 +299,7 @@ export default function App() {
       {rows.length > 0 && (
         <div className="mt-14">
           <Upload
-            result={lastUpload}
+            result={liveUpload}
             onDone={(r) => {
               setLastUpload(r);
               requests.reload();
@@ -300,15 +319,11 @@ export default function App() {
                   // otherwise name a response that no longer exists, and `?q=`
                   // would keep filtering a timeline that just changed under it.
                   go({ request: null, query: null, label: null });
-                  // And the upload panel, for the same reason one line up. It
-                  // survives the uploader that made it now, which is the point
-                  // — but removing the last response drops the reader back to
-                  // the first-run screen, and a panel there reading "Read as
-                  // H Mart · 108 visits" describes a response that was just
-                  // deleted. Cleared on any removal rather than only when it
-                  // names the one removed: after a deliberate delete, a "just
-                  // read" panel is noise either way.
-                  setLastUpload(null);
+                  // The upload panel needs no clearing here: `liveUpload`
+                  // already hides a report whose response is gone, and only
+                  // that one. Clearing on any removal — which this did — threw
+                  // away a still-accurate report, warnings included, when the
+                  // reader deleted some OTHER response.
                   requests.reload();
                 }}
               />
