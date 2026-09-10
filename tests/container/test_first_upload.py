@@ -33,6 +33,8 @@ import re
 import time
 import urllib.error
 import urllib.request
+import uuid
+from collections.abc import Iterator
 
 import pytest
 
@@ -45,10 +47,15 @@ playwright_api = pytest.importorskip(
 
 pytestmark = [pytest.mark.container, requires_docker]
 
-# Deliberately not test_layout.py's port: that module holds its container for
-# the whole module and the two tiers can run in one session.
-PORT = 8524
-BASE = f"http://127.0.0.1:{PORT}"
+# No fixed port. `test_layout.py` can pin one because it holds a single
+# module-scoped container; this fixture is function-scoped and starts a fresh
+# container per test, and a fixed port turns that into three failure modes: a
+# hard-killed pytest leaks a container still holding the port, so every later
+# run fails on bind with an opaque CalledProcessError (`docker()` captures
+# stderr); rm-to-release is not instantaneous, so back-to-back binds flake; and
+# any `-n auto` collides by construction. Docker picks the port, the fixture
+# reads it back. `conftest.run_container` already avoids the same trap with
+# uuid names and no published port.
 
 KROGER = (
     REPO_ROOT / "src" / "unbagged" / "adapters" / "kroger"
@@ -79,39 +86,49 @@ The Privacy Team
 """
 
 
-def _wait_for_health(timeout: float = 60.0) -> None:
+def _wait_for_health(base: str, timeout: float = 60.0) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
-            with urllib.request.urlopen(f"{BASE}/api/health", timeout=2) as response:
+            with urllib.request.urlopen(f"{base}/api/health", timeout=2) as response:
                 if json.load(response).get("status") == "ok":
                     return
         except (urllib.error.URLError, OSError, ValueError):
             time.sleep(0.5)
-    raise AssertionError(f"the app never answered on {BASE}")
+    raise AssertionError(f"the app never answered on {base}")
 
 
 @pytest.fixture()
-def empty_app(image, tmp_path) -> str:
+def empty_app(image, tmp_path) -> Iterator[str]:
     """A container with nothing ingested.
 
     Function-scoped and unseeded, which is the whole point: `seeded_app` in
     `test_layout.py` ingests before yielding, so the first-run uploader it would
     hand back has already been replaced by the footer one.
+
+    The `try` opens BEFORE the run so a container that starts and then reports
+    failure is still torn down; wrapping only the wait leaks it by name.
     """
     data = tmp_path / "data"
     (data / "db").mkdir(parents=True, exist_ok=True)
     (data / "incoming").mkdir(parents=True, exist_ok=True)
-    name = f"unbagged-first-upload-{int(time.time())}"
-    docker(
-        "run", "-d", "--name", name,
-        "-v", f"{data}:/data",
-        "-p", f"127.0.0.1:{PORT}:8000",
-        image,
-    )
+    name = f"unbagged-first-upload-{uuid.uuid4().hex[:8]}"
     try:
-        _wait_for_health()
-        yield BASE
+        docker(
+            "run", "-d", "--name", name,
+            "-v", f"{data}:/data",
+            # Empty host port: Docker assigns a free one, read back below.
+            "-p", "127.0.0.1::8000",
+            image,
+        )
+        # `docker port` answers "<host>:<port>", and the host half varies by
+        # daemon. Only the port is wanted: the publish above already pinned the
+        # interface to loopback, so reusing the reported host would just be a
+        # second, less reliable source for something already decided.
+        published = docker("port", name, "8000/tcp").stdout.strip().splitlines()[0]
+        base = f"http://127.0.0.1:{published.rsplit(':', 1)[-1]}"
+        _wait_for_health(base)
+        yield base
     finally:
         docker("rm", "-f", name, check=False)
 
@@ -219,6 +236,109 @@ class TestTheFirstUploadReportsOnItself:
         body = page.inner_text("body")
         assert "Read as" in body
         assert "nothing from it is in this report" not in body
+
+    def test_nothing_is_reported_before_anything_is_uploaded(self, page):
+        """The null case, which is the state the panel starts in.
+
+        `lastUpload` begins null and the prominent uploader is handed it, so a
+        pristine first run must show the invitation and no report. Worth
+        asserting rather than assuming: the panel is now fed by state that
+        outlives every uploader on the page, and a report with nothing behind it
+        would be a report about a parse that never happened.
+        """
+        body = page.inner_text("body")
+        assert "Start with a retailer" in body
+        assert "Read as" not in body
+
+    def test_a_weak_match_is_reported_as_a_guess(self, page, tmp_path):
+        """The caveat, on the upload most likely to need it.
+
+        A letter belongs to no retailer, so the fallback adapter takes it at 0.1
+        against a threshold of 0.25. That is the branch where the panel stops
+        saying "match" and says "uncertain match" instead, and adds the sentence
+        telling the reader to check the file before believing anything in it —
+        the sentence that mattered most on a first upload and was the first
+        thing the unmount destroyed.
+        """
+        letter = tmp_path / "response-letter.txt"
+        letter.write_text(LETTER, encoding="utf-8")
+        _upload(page, letter)
+        body = page.inner_text("body")
+        assert "uncertain match" in body
+        assert "10%" in body
+        assert "Low confidence." in body
+
+    def test_a_warning_with_no_locator_renders_without_one(self, page, tmp_path):
+        """The other half of the `w.locator` conditional.
+
+        The bundle case covers a warning that names a file. The fallback
+        adapter's warning names nothing, and a null locator rendering as an
+        empty mono span — or as the word "null" — is the failure mode. Asserted
+        on where the line ENDS, because that is where the locator would appear.
+        """
+        letter = tmp_path / "response-letter.txt"
+        letter.write_text(LETTER, encoding="utf-8")
+        _upload(page, letter)
+        lines = [
+            text
+            for text in page.eval_on_selector_all("li", "els => els.map(e => e.innerText)")
+            if "No adapter recognised this response" in text
+        ]
+        assert lines, "the fallback adapter's warning never reached the panel"
+        assert lines[0].strip().endswith("docs/writing-an-adapter.md.")
+
+
+class TestTheUploadsAfterTheFirst:
+    """The footer uploader, which is where every later upload happens.
+
+    It is the half of the swap that survives, so it is also the half whose
+    behaviour changed least — but the result it renders is now somebody else's
+    state, and these are the paths where that distinction can go wrong.
+    """
+
+    def test_a_second_upload_replaces_the_report(self, page):
+        """State held by the parent still has to be state, not a one-shot.
+
+        Hoisting `result` out of `Upload` is only correct if the footer uploader
+        can still overwrite it. If `onDone` stopped landing — or landed on the
+        wrong owner — the panel would sit on the first upload's report for the
+        rest of the session, and the reader would be looking at a description of
+        Kroger while reading H Mart.
+        """
+        _upload(page, KROGER)
+        assert "Kroger" in _panel(page)
+        _upload_again(page, HMART)
+        panel = _panel(page)
+        assert "H Mart" in panel
+        assert "Kroger" not in panel
+
+    def test_a_refused_upload_says_why(self, page, empty_app):
+        """The error path, which shares the panel with the report.
+
+        Dropping the same report twice is the commonest way to reach it — a long
+        parse gives no immediate sign of progress, so people drop the file again
+        — and the server refuses it by name. The refusal has to be shown; a
+        silent no-op reads as the second drop having worked.
+        """
+        _upload(page, KROGER)
+        assert "Read as" in page.inner_text("body")
+
+        page.set_input_files("input[type=file]", [str(KROGER)])
+        page.wait_for_selector("text=already loaded this response", timeout=120_000)
+        body = page.inner_text("body")
+        assert "remove the existing one" in body
+
+        # The refusal must stand ALONE. Leaving the previous success panel
+        # beside it reads as the second drop having partly worked, which is the
+        # opposite of what happened — and the report now outlives the uploader,
+        # so nothing clears it unless `send()` says so.
+        assert "Read as" not in body
+
+        # One request, not two. Asked of the server rather than of the DOM: the
+        # retailer selector only appears at two responses, so its absence would
+        # also be satisfied by a second request whose reload had not yet landed.
+        with urllib.request.urlopen(f"{empty_app}/api/requests", timeout=10) as r:
+            assert len(json.load(r)["requests"]) == 1
 
     def test_removing_the_last_response_clears_the_panel(self, page):
         """The other end of the result's new lifetime.
