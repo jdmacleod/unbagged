@@ -5,8 +5,9 @@ different positions in the React tree, one inside `<main>` and one after it, so
 no state survives between them. A first upload is precisely what swaps one for
 the other, which meant the panel describing that upload was created and
 destroyed in the same instant.
-Found by /qa on 2026-09-09 against the v0.13.0 image.
-Report: .gstack/qa-reports/qa-report-release-0.13.0-2026-09-09.md
+Found by /qa on 2026-09-09 against the v0.13.0 image. (The QA report lives
+under .gstack/, which is gitignored, so it is not cited here — the account
+that survives a clone is this docstring and the CHANGELOG entry.)
 
 What was lost is the only report a person ever gets on the parse: which retailer
 matched, the "check this is the retailer you meant" caveat on a weak match, and
