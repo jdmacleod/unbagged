@@ -149,9 +149,10 @@ tell from a browser.
 
 `make test-container` builds and runs a real container and checks the things only a
 running one can show: effective uid, data permissions, bounded restart, that the
-shipped image is the runtime stage, that no view scrolls sideways from 320px up, and
+shipped image is the runtime stage, that no view scrolls sideways from 320px up,
 that a first upload's report — which retailer matched, and every parse warning — is
-still on screen once the response has loaded.
+still on screen once the response has loaded, and that adding a response switches to
+it rather than leaving you reading the one you added before.
 Tests needing real uid semantics skip loudly on Docker Desktop, where bind-mount
 ownership is remapped and they would otherwise pass without checking anything.
 
