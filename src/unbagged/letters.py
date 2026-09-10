@@ -31,22 +31,28 @@ CITATIONS: dict[DisclosureCategory, str] = {
 }
 
 READABLE: dict[DisclosureCategory, str] = {
-    DisclosureCategory.CATEGORIES_COLLECTED:
-        "the categories of personal information you collected about me",
+    DisclosureCategory.CATEGORIES_COLLECTED: (
+        "the categories of personal information you collected about me"
+    ),
     DisclosureCategory.SOURCES:
         "the categories of sources you collected it from",
     DisclosureCategory.BUSINESS_PURPOSE:
         "the business or commercial purpose for collecting it",
-    DisclosureCategory.THIRD_PARTIES_SHARED_WITH:
-        "the categories of third parties you disclose it to",
-    DisclosureCategory.SPECIFIC_PIECES:
-        "the specific pieces of personal information you hold about me",
-    DisclosureCategory.SOLD_OR_SHARED:
-        "whether you sold or shared it, and with which categories of third parties",
-    DisclosureCategory.DISCLOSED_FOR_BUSINESS_PURPOSE:
-        "the categories you disclosed for a business purpose",
-    DisclosureCategory.RETENTION_PERIOD:
-        "how long you retain each category, or the criteria you use to decide",
+    DisclosureCategory.THIRD_PARTIES_SHARED_WITH: (
+        "the categories of third parties you disclose it to"
+    ),
+    DisclosureCategory.SPECIFIC_PIECES: (
+        "the specific pieces of personal information you hold about me"
+    ),
+    DisclosureCategory.SOLD_OR_SHARED: (
+        "whether you sold or shared it, and with which categories of third parties"
+    ),
+    DisclosureCategory.DISCLOSED_FOR_BUSINESS_PURPOSE: (
+        "the categories you disclosed for a business purpose"
+    ),
+    DisclosureCategory.RETENTION_PERIOD: (
+        "how long you retain each category, or the criteria you use to decide"
+    ),
 }
 
 DISCLAIMER = (

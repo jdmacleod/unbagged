@@ -56,8 +56,11 @@ def sample_result(doc_id: int | None = 1) -> ParseResult:
             adapter_schema_version=KROGER_SCHEMA_VERSION,
         ),
         identities=(
-            # pii-scan: allow synthetic loyalty number, generated not observed
-            Identity(IdType.LOYALTY_CARD, "0000000000001", Scope.INDIVIDUAL,
+            Identity(
+                IdType.LOYALTY_CARD,
+                # pii-scan: allow synthetic loyalty number, generated not observed
+                "0000000000001",
+                Scope.INDIVIDUAL,
                      first_seen="2024-02-03T00:00:00Z", provenance=prov),
             Identity(IdType.HOUSEHOLD, "HH-000001", Scope.HOUSEHOLD, provenance=prov),
             Identity(IdType.EMAIL, "shopper@example.com", Scope.INDIVIDUAL, provenance=prov),
@@ -88,9 +91,14 @@ def sample_result(doc_id: int | None = 1) -> ParseResult:
                             retail_amt=4.19, loyalty_amt=4.19),
                     # The placeholder row Kroger emits constantly. It is kept, not
                     # filtered, so the count of real products stays honest.
-                    # pii-scan: allow known placeholder UPC, not an identifier
-                    TxnItem("UNKNOWN", upc="00010000080000", quantity=0.0,
-                            retail_amt=0.0, loyalty_amt=0.0),
+                    TxnItem(
+                        "UNKNOWN",
+                        # pii-scan: allow known placeholder UPC, not an identifier
+                        upc="00010000080000",
+                        quantity=0.0,
+                        retail_amt=0.0,
+                        loyalty_amt=0.0,
+                    ),
                 ),
             ),
             Transaction(

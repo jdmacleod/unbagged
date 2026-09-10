@@ -85,6 +85,18 @@ line-length = 100
 target-version = "py312"
 src = ["src", "tools", "tests"]
 
+[tool.ruff.format]
+# Ruff formats Python blocks inside markdown too, not just .py files. The
+# adapter guide is formatted along with everything else — its snippets exist to
+# show a contributor what house style looks like, and a snippet that fails the
+# gate teaches the wrong thing.
+#
+# `docs/handoff.md` is excluded. CLAUDE.md marks its §§0-7 as the live contract,
+# cited from `adapters/base.py`, `models.py`, `db.py` and the tests; its snippets
+# align trailing comments so the spec reads as a table. A contract is changed
+# deliberately, never by a formatting sweep.
+exclude = ["docs/handoff.md"]
+
 [tool.ruff.lint]
 # S is flake8-bandit. It was not selected before, which meant the `# noqa: S608`
 # already sitting in ingest.py silenced a rule that had never been running —
