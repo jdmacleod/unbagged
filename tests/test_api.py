@@ -853,8 +853,7 @@ class TestDisclosedVersusZero:
 
 class TestDuplicateAcrossRequests:
     """Regression: ISSUE-002 — the same report ingested twice as two requests
-    Found by /qa on 2026-09-03
-    Report: .gstack/qa-reports/qa-report-localhost8420-2026-09-03.md
+    Found by /qa on 2026-09-03; fixed in 1b6fd7d.
 
     The in-upload duplicate check only covered one request. Dropping the same
     file again — what people do when a 13-second parse shows no progress —
@@ -899,8 +898,7 @@ class TestDuplicateAcrossRequests:
 
 class TestSearchWildcards:
     """Regression: ISSUE-001 — LIKE wildcards leaked from the search box
-    Found by /qa on 2026-09-03
-    Report: .gstack/qa-reports/qa-report-localhost8420-2026-09-03.md
+    Found by /qa on 2026-09-03; fixed in deaf19b.
 
     The search fed raw input into a LIKE pattern. "%" returned every basket and
     "_" matched any single character, so a product code containing an underscore

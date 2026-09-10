@@ -172,6 +172,32 @@ commit — `ImageChops.difference(a, b).getbbox()` returning `None` means the on
 thing that moved was zlib, and the file should be left alone. Committing those
 is churn that makes a real screenshot change hard to spot in a diff.
 
+## Citing where a test came from
+
+A regression test is worth more when it says what it was written for. Keep the
+"Found by /qa on YYYY-MM-DD" line — knowing a test came from a QA pass on a given
+date is real context, and it survives.
+
+**Do not cite the report file.** `/qa` writes its reports under `.gstack/`, which
+`.gitignore` excludes, so a path like `.gstack/qa-reports/qa-report-<...>.md`
+resolves for nobody who clones this repository — including you, on another
+machine. The `/qa` attribution template assumes that directory is committed. Here
+it is not.
+
+Point at something that ships instead: the commit that landed the fix, or the
+CHANGELOG entry describing it. A short sha is greppable, permanent, and carries
+the reasoning with it.
+
+    Found by /qa on 2026-09-09; fixed in 822c97b.
+
+Where the omission itself is worth explaining — a docstring that would otherwise
+look like it forgot to cite anything — say so in a sentence instead:
+
+    Found by /qa on 2026-09-09 against the v0.13.0 image. (The QA report lives
+    under .gstack/, which is gitignored, so it is not cited here.)
+
+Both forms are in the tree. Neither leaves a path that resolves for nobody.
+
 ## Validating against your own report
 
 You will want to. Do it locally:

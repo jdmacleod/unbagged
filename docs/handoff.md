@@ -95,8 +95,12 @@ publish packages immediately.
                   |
           [ FastAPI read API ]
                   |
-      Timeline | Profile | Compliance | Compare
+              [ the views ]
 ```
+
+The views are deliberately not enumerated here. This diagram is about where the
+read path goes, and naming the views has made it stale twice as tabs were added.
+`README.md` lists them, with a screenshot of each.
 
 ### Stack
 
