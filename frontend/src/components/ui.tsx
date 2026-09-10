@@ -13,10 +13,63 @@ export function Spinner({ label = "Loading" }: { label?: string }) {
   return <p className="px-4 py-8 text-center text-muted">{label}…</p>;
 }
 
-export function ErrorBox({ error }: { error: string }) {
+/**
+ * A request failed and there is nothing to show in its place.
+ *
+ * One of the two call sites DESIGN.md reserves red for, and it means what the
+ * other one means: this is not recoverable. `onRetry` does not soften that —
+ * the box still states a failure whose content the app does not have — it just
+ * stops the only way out being a browser reload. It renders inside the existing
+ * red surface rather than beside it, so the count stays at two.
+ *
+ * When a request fails but the previous data survives, this is the WRONG
+ * component: nothing was lost, so nothing is unrecoverable, and red would be a
+ * severity signal. Use `Caveat`.
+ */
+export function ErrorBox({
+  error,
+  onRetry,
+}: {
+  error: string;
+  onRetry?: () => void;
+}) {
   return (
     <p className="rounded-[2px] border border-danger/40 px-4 py-3 text-danger">
       {error}
+      {onRetry && (
+        <>
+          {" "}
+          <button
+            onClick={onRetry}
+            className="underline decoration-dotted underline-offset-2"
+          >
+            Try again
+          </button>
+        </>
+      )}
+    </p>
+  );
+}
+
+/**
+ * A caveat about the reading, in the app's own voice.
+ *
+ * Hairline and whitespace, no box and no colour — see DESIGN.md: this is a
+ * qualification, not a failure, and colour here would be sentiment. The same
+ * setting `StaleReading` uses, factored out once a second thing needed to say
+ * "what you are looking at is still true, but here is what you should know".
+ */
+export function Caveat({
+  children,
+  action,
+}: {
+  children: ReactNode;
+  action?: ReactNode;
+}) {
+  return (
+    <p className="mt-4 max-w-[62ch] border-l-2 border-dotted border-line pl-3 text-muted">
+      {children}
+      {action && <> {action}</>}
     </p>
   );
 }

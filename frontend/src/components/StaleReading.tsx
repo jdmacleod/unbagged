@@ -1,6 +1,7 @@
 import { api } from "../api";
 import { useAsync } from "../components/useAsync";
 import type { RequestMeta } from "../types";
+import { Caveat } from "./ui";
 
 /**
  * Says so when a stored report was read by an older version of its adapter.
@@ -36,7 +37,7 @@ export function StaleReading({ request }: { request: RequestMeta }) {
     return null;
 
   return (
-    <p className="mt-4 max-w-[62ch] border-l-2 border-dotted border-line pl-3 text-muted">
+    <Caveat>
       This response was read by version <span className="num">{stored}</span> of
       the {request.display_name} adapter; the current version is{" "}
       <span className="num">{current}</span>. What you paid and what you saved
@@ -46,6 +47,6 @@ export function StaleReading({ request }: { request: RequestMeta }) {
       </strong>{" "}
       Nothing was lost: the amounts the retailer disclosed are stored exactly as
       they arrived, so a re-read recovers the correct figures.
-    </p>
+    </Caveat>
   );
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { Ref } from "react";
 import { api } from "../api";
 import type { UploadResult } from "../types";
 import { ErrorBox, Spine } from "./ui";
@@ -55,8 +56,10 @@ function Working() {
  */
 export function Upload({
   onDone,
+  onBusy,
   prominent,
   result = null,
+  resultRef,
 }: {
   /** Called with the parse report, and with `null` whenever there is no
    *  longer one to show — a new upload starting, or one that failed. The null
@@ -64,6 +67,15 @@ export function Upload({
    *  response…" for the length of a parse, or beside the error from a refused
    *  re-drop, reading as though the second drop partly worked. */
   onDone: (result: UploadResult | null) => void;
+  /** Called whenever a parse starts or stops.
+   *
+   *  The caller needs it for two things it cannot see from `onDone`: a failed
+   *  list read must not replace a RUNNING upload with a red "this is not
+   *  recoverable" box, and this component must not be unmounted mid-POST —
+   *  doing so takes `inFlight` with it, and a remounted uploader would happily
+   *  send a second concurrent request. `onDone(null)` cannot stand in: it fires
+   *  when an upload starts AND when one fails, and those need opposite answers. */
+  onBusy?: (busy: boolean) => void;
   prominent?: boolean;
   /** What the last upload returned, owned by the caller.
    *
@@ -75,15 +87,53 @@ export function Upload({
    *  the low-confidence caveat and every parse warning, gone before anyone
    *  could read them. Held by `App`, which does not unmount. */
   result?: UploadResult | null;
+  /** Handle on the report panel, so the caller can move focus and scroll to it
+   *  when an upload lands.
+   *
+   *  The footer uploader means the reader is at the BOTTOM of a long document
+   *  when they drop a file, and since #58 the upload swaps `<main>` for a
+   *  different response — one that can be a very different length. The document
+   *  height changes by a large factor, the browser clamps `scrollY` somewhere
+   *  arbitrary, and the report they waited 10 to 30 seconds for can end up off
+   *  screen. Owned by the caller because the caller is what knows an upload
+   *  just landed. Issue #62. */
+  resultRef?: Ref<HTMLDivElement>;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  // The in-flight flag AGAIN, as a ref, and the ref is the one that decides.
+  //
+  // `busy` is render state, so every entry point below tested it out of a
+  // render closure. Two events dispatched before React re-renders — a fast
+  // double-click, or a drop landing on top of a click — both read the stale
+  // `false` and both passed. Two POSTs went out; the loser's `finally` unlocked
+  // the drop zone while the winner was still in flight, and whichever `onDone`
+  // resolved last won the result panel. The server dedupes on content hash so
+  // nothing was corrupted, but the reader got an error that reads like a bug
+  // and a report that may describe the wrong upload.
+  //
+  // A ref is written synchronously, so the second event sees the first one's
+  // write. `busy` stays for what it is actually good at: `aria-busy`,
+  // `disabled`, the cursor and the spinner. Ref decides, state renders.
+  // Issue #48.
+  const inFlight = useRef(false);
 
   async function send(files: File[]) {
     if (!files.length) return;
+    if (inFlight.current) {
+      // Say so. The `click()` path tests `busy`, which is still false for the
+      // render between a drop and its re-render, so the file dialog opens, the
+      // reader picks a file, and a silent `return` here swallows it: no error,
+      // no spinner change, nothing at all. A refusal the reader can see beats a
+      // drop zone that appears to ignore them.
+      setError("Still reading the last file. Wait for it to finish, then try again.");
+      return;
+    }
+    inFlight.current = true;
     setBusy(true);
+    onBusy?.(true);
     setError(null);
     // The previous report describes the previous upload. Clear it before this
     // one starts rather than after it lands: a parse runs 10 to 30 seconds, and
@@ -95,7 +145,9 @@ export function Upload({
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      inFlight.current = false;
       setBusy(false);
+      onBusy?.(false);
     }
   }
 
@@ -206,13 +258,32 @@ export function Upload({
       </div>
 
       {error && (
-        <div className="mt-3">
+        // `role="alert"` because a refusal is an outcome too. The success path
+        // announces through the caller's polite live region; without this the
+        // failure path stayed silent, and the reader who most needs telling —
+        // one who cannot see the box appear — got nothing back from a drop that
+        // did not work. Assertive by role, which is right here: this is the
+        // answer to something they just did. Issue #62.
+        <div role="alert" className="mt-3">
           <ErrorBox error={error} />
         </div>
       )}
 
       {result && (
-        <div className="mt-4 border-t border-rule pt-3">
+        <div
+          ref={resultRef}
+          // Focusable by script but not in the tab order: the caller moves
+          // focus here when an upload lands so a screen reader lands ON the
+          // report rather than being told nothing happened, and so a sighted
+          // reader's next Tab continues from the report instead of from
+          // wherever scroll clamping left them. Issue #62.
+          tabIndex={-1}
+          // A real focus ring, not `outline-none`. This element genuinely
+          // receives focus, and a keyboard reader who cannot see where they
+          // landed is worse off than one who was never moved. `offset-1` because
+          // that is what all six other focus rings in the app use.
+          className="mt-4 border-t border-rule pt-3 focus:outline-2 focus:outline-offset-1 focus:outline-accent"
+        >
           <p>
             Read as <strong>{result.display_name}</strong>
             {/* A word, not a coloured pill. Confidence is a fact about the
