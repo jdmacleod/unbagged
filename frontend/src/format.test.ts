@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   CATEGORY_COUNT,
+  assignStoreHues,
   barAxisLabel,
   categoryIndex,
+  storeVar,
   day,
   humanise,
   money,
@@ -127,5 +129,134 @@ describe("paidWord and its two phrasings", () => {
       expect(paidLabel(disclosed)).toContain(paidWord(disclosed));
       expect(barAxisLabel(disclosed)).toContain(paidWord(disclosed));
     }
+  });
+});
+
+describe("assignStoreHues", () => {
+  /** Two keys that hash to the same bucket. Found by search, not assumed —
+   *  if the hash ever changes this fails loudly rather than testing nothing. */
+  const collidingPair = (() => {
+    const seen = new Map<number, string>();
+    for (let i = 0; i < 20000; i++) {
+      const key = `STORE-${i}`;
+      const bucket = categoryIndex(key);
+      const first = seen.get(bucket);
+      if (first) return [first, key];
+      seen.set(bucket, key);
+    }
+    throw new Error("no colliding pair found; the hash changed");
+  })();
+
+  it("leaves a set with no collisions exactly as the hash had it", () => {
+    // The whole point of breaking ties rather than reassigning: a store that
+    // was not part of the problem keeps the colour it has always had.
+    const keys = ["00318", "00427"];
+    const hues = assignStoreHues(keys);
+    for (const key of keys) {
+      expect(hues.get(key)).toBe(categoryIndex(key));
+    }
+  });
+
+  it("separates two keys that the hash puts on the same hue", () => {
+    const [a, b] = collidingPair;
+    expect(categoryIndex(a)).toBe(categoryIndex(b));
+    const hues = assignStoreHues([a, b]);
+    expect(hues.get(a)).not.toBe(hues.get(b));
+  });
+
+  it("moves only the later key, and leaves the first one on its hash", () => {
+    const [a, b] = collidingPair;
+    const [first, second] = [a, b].sort();
+    const hues = assignStoreHues([a, b]);
+    expect(hues.get(first)).toBe(categoryIndex(first));
+    expect(hues.get(second)).not.toBe(categoryIndex(second));
+  });
+
+  it("does not depend on the order the keys arrive in", () => {
+    // The caller passes stats.stores, which is ordered by visit count. A store
+    // gaining a visit must not repaint the legend.
+    const [a, b] = collidingPair;
+    const forward = assignStoreHues([a, b]);
+    const backward = assignStoreHues([b, a]);
+    expect([...forward.entries()].sort()).toEqual(
+      [...backward.entries()].sort(),
+    );
+  });
+
+  it("gives every key a hue inside the palette", () => {
+    const keys = Array.from({ length: 10 }, (_, i) => `STORE-${i}`);
+    for (const index of assignStoreHues(keys).values()) {
+      expect(index).toBeGreaterThanOrEqual(0);
+      expect(index).toBeLessThan(CATEGORY_COUNT);
+    }
+  });
+
+  it("keeps the hash's answer once there is no free hue left", () => {
+    // Past CATEGORY_COUNT there is nothing to move to. Collisions come back,
+    // which is the behaviour this had before and is why DESIGN.md records the
+    // ladder rather than claiming the palette scales.
+    const keys = Array.from({ length: 12 }, (_, i) => `S${i}`);
+    const hues = assignStoreHues(keys);
+    expect(hues.size).toBe(12);
+    const used = new Set(hues.values());
+    expect(used.size).toBeLessThanOrEqual(CATEGORY_COUNT);
+  });
+
+  /** Pairs a reader cannot tell apart, from the measured table in format.ts.
+   *  Different indices, same colour. */
+  const INDISTINGUISHABLE_PAIRS = [
+    [1, 3], // cat-2 / cat-4, ΔE 1.1 under deuteranopia
+    [1, 5], // cat-2 / cat-6, ΔE 2.8 under protanopia
+    [0, 4], // cat-1 / cat-5, ΔE 4.8 under deuteranopia
+    [3, 5], // cat-4 / cat-6, ΔE 6.0 under protanopia
+  ];
+
+  const anyIndistinguishable = (hues: Map<string, number>) => {
+    const got = [...hues.values()];
+    return INDISTINGUISHABLE_PAIRS.some(([x, y]) =>
+      got.includes(x) && got.includes(y),
+    );
+  };
+
+  it("resolves a colliding pair into hues that are far apart, not merely different", () => {
+    // The finding that made this worth doing: --cat-2 and --cat-4 are ΔE 1.1
+    // apart under deuteranopia, so "pick any free index" can change nothing at
+    // all for a colour-blind reader while a test passes on the numbers
+    // differing.
+    const [a, b] = collidingPair;
+    expect(anyIndistinguishable(assignStoreHues([a, b]))).toBe(false);
+  });
+
+  it("separates two keys whose hues merely LOOK the same", () => {
+    // Caught in review on #72. These two do not share an index, so an
+    // index-only collision test never sees them — and they render as the same
+    // colour to roughly 1 in 12 men. STORE-1 is cat-2 and STORE-3 is cat-6,
+    // ΔE 2.8 apart under protanopia.
+    const a = "STORE-1";
+    const b = "STORE-3";
+    expect(categoryIndex(a)).not.toBe(categoryIndex(b));
+    expect(anyIndistinguishable(assignStoreHues([a, b]))).toBe(false);
+  });
+
+  it("keeps two and three store sets distinguishable whatever the names", () => {
+    // The claim DESIGN.md makes, asserted rather than assumed. Sampling rather
+    // than exhausting: the hash makes the input space unbounded, and 500 sets
+    // is enough to catch a rule that only holds sometimes.
+    for (let seed = 0; seed < 500; seed++) {
+      for (const n of [2, 3]) {
+        const keys = Array.from({ length: n }, (_, i) => `BRANCH-${seed}-${i}`);
+        expect(anyIndistinguishable(assignStoreHues(keys))).toBe(false);
+      }
+    }
+  });
+
+  it("falls back to the hash for a key it was never given", () => {
+    // A basket can carry a store code that stats.stores excludes, because that
+    // query drops nulls. Returning undefined would paint a transparent dot.
+    const hues = assignStoreHues(["00318"]);
+    expect(storeVar(hues, "00427")).toBe(
+      `var(--cat-${categoryIndex("00427") + 1})`,
+    );
+    expect(storeVar(hues, "00318")).toBe(`var(--cat-${hues.get("00318")! + 1})`);
   });
 });
