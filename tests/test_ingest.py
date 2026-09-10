@@ -1,7 +1,22 @@
+from pathlib import Path
+
 import pytest
 
-from unbagged import db, ingest
+from unbagged import db, ingest, repository
+from unbagged.extraction import extract
 from unbagged.ingest import IngestError, safe_filename, store_upload
+from unbagged.models import SourceDocument
+
+HMART_FIXTURE = (
+    Path(__file__).resolve().parent.parent
+    / "src"
+    / "unbagged"
+    / "adapters"
+    / "hmart"
+    / "fixtures"
+    / "synthetic_history.xls"
+)
+LETTER = "Dear customer,\n\nThank you for writing to us.\n"
 
 
 class TestSafeFilename:
@@ -66,3 +81,63 @@ class TestIngest:
     def test_the_default_incoming_directory_is_gitignored(self, monkeypatch):
         monkeypatch.delenv(ingest.INCOMING_ENV, raising=False)
         assert ingest.incoming_dir().parts[0] == "data"
+
+
+@pytest.fixture
+def conn(tmp_path):
+    with db.open_db(tmp_path / "ingest.sqlite") as c:
+        yield c
+
+
+class TestWhatIsStoredAboutTheFileItself:
+    """Issue #46: `media_type` and `page_count` were NULL for every document.
+
+    Both columns existed in the schema, `repository.py` wrote and read them,
+    `ExtractedDocument` carried them, and `test_extraction.py` asserted them at
+    the extraction layer. They simply never travelled the last step: `ingest()`
+    hardcoded `media_type=None` and never set `page_count` at all.
+
+    Nothing rendered them, so nothing looked wrong — and the test factory
+    supplied `application/pdf` and 48, so every test touching a stored document
+    got values the real path could not produce. That is the fixture-fiction
+    shape `test_layout.py`'s own docstring counts as having bitten this project
+    four times, and the reason this asserts against the ingest path rather than
+    against a factory.
+    """
+
+    def test_a_text_response_records_what_it_is(self, conn, tmp_path):
+        stored = store_upload("response.txt", LETTER.encode("utf-8"), directory=tmp_path)
+        result = ingest.ingest(conn, [stored])
+        documents = repository.get_documents(conn, result.request_id)
+        assert documents, "no document was stored"
+        assert documents[0].media_type == "text/plain"
+        assert documents[0].page_count == 1
+
+    def test_a_spreadsheet_records_no_page_count_rather_than_a_wrong_one(self, conn, tmp_path):
+        """A spreadsheet is sheets and rows. Zero pages would be a claim; null is not."""
+        stored = store_upload("history.xls", HMART_FIXTURE.read_bytes(), directory=tmp_path)
+        result = ingest.ingest(conn, [stored])
+        documents = repository.get_documents(conn, result.request_id)
+        assert documents[0].media_type == "application/vnd.ms-excel"
+        assert documents[0].page_count is None
+
+    def test_what_is_stored_is_what_extraction_would_say(self, conn, tmp_path):
+        """The relationship, not two lists of expected values.
+
+        The failure this guards is the two drifting: a document stored with one
+        media type and read with another. Both go through `classify()`, and this
+        is what proves it end to end rather than at the seam.
+        """
+        stored = store_upload("history.xls", HMART_FIXTURE.read_bytes(), directory=tmp_path)
+        result = ingest.ingest(conn, [stored])
+        document = repository.get_documents(conn, result.request_id)[0]
+
+        as_read = extract(
+            SourceDocument(
+                original_filename=stored.original_filename,
+                sha256=stored.sha256,
+                path=str(stored.path),
+            )
+        )
+        assert document.media_type == as_read.media_type
+        assert document.page_count == (as_read.page_count or None)
