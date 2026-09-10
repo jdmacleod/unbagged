@@ -294,6 +294,61 @@ class TestUploadsAndRemovalsAreNotNavigations:
         # And it landed somewhere real, rather than out of the app entirely.
         showing(page, "H Mart")
 
+    def test_back_onto_a_removed_response_corrects_the_address_bar(self, page):
+        """Landing on a dead entry must not leave the URL naming it.
+
+        The sibling test above walks Back onto a LIVE response, so it never
+        reaches this state. Here the entry Back restores names a response that
+        has since been deleted: the view falls back, and the address bar has to
+        follow it. It did not — the URL correction was suppressed for exactly
+        one commit after a popstate, and the effect that lifted the suppression
+        touched none of the correction effect's dependencies, so it never ran
+        again. `?r=` went on naming the deleted response for the rest of the
+        session, with a different one on screen, and any link copied out of that
+        state was wrong.
+
+        Two tab clicks before the removal are what build a stale entry: the
+        removal replaces the entry it happens on, so the one that still NAMES
+        the doomed response has to be further back than that.
+
+        Reported by review on PR #68.
+        """
+        upload(page, HMART)
+        upload_again(page, KROGER)
+        kroger = selected(page)
+        assert kroger != ""
+
+        # Two real navigations while on Kroger. The second is the entry the
+        # removal will rewrite; the first is the one that outlives it.
+        page.get_by_role("button", name=re.compile(r"^Profile")).click()
+        assert f"r={kroger}" in page.url
+        page.get_by_role("button", name=re.compile(r"^Timeline")).click()
+
+        page.get_by_role("button", name="Remove this response").click()
+        page.get_by_role("button", name="Remove Kroger").click()
+        page.wait_for_selector("select[aria-label]", state="detached", timeout=30_000)
+        page.wait_for_load_state("networkidle")
+
+        # Back onto `?tab=profile&r=<kroger>`, which now names nothing.
+        page.go_back()
+
+        # Polled, not snapshotted. The correction is a React effect and touches
+        # no network, so `networkidle` says nothing about whether it has run —
+        # waiting on it would read the URL a tick too early and fail against a
+        # working build.
+        try:
+            page.wait_for_function(
+                "id => !new URLSearchParams(location.search).getAll('r').includes(id)",
+                arg=kroger,
+                timeout=10_000,
+            )
+        except Exception:  # noqa: BLE001 - re-raised as the real assertion
+            raise AssertionError(
+                "the address bar went on naming a response that had been "
+                f"deleted: {page.url}"
+            ) from None
+        showing(page, "H Mart")
+
     def test_a_tab_you_are_already_on_is_not_a_new_entry(self, page):
         """The same phantom by another route.
 
@@ -583,15 +638,18 @@ class TestAFailedReadNeverSpeaksForDataItCannotSee:
         reading is unaffected" while offering to delete it.
         """
         upload(page, KROGER)
-        assert page.get_by_role("button", name="Remove this response").is_visible()
+        # `expect`, not `is_visible()`: the footer control commits a tick after
+        # `upload()`'s own wait, and a one-shot snapshot loses that race under
+        # the load of a full-tier run. Caught flaking exactly that way.
+        expect(page.get_by_role("button", name="Remove this response")).to_be_visible()
 
         _fail_list_reads(page)
         return_to_tab(page)
         page.wait_for_selector("text=could not be re-read", timeout=30_000)
 
-        assert not page.get_by_role(
-            "button", name="Remove this response"
-        ).is_visible(), "offered an irreversible delete against a stale list"
+        expect(
+            page.get_by_role("button", name="Remove this response")
+        ).not_to_be_visible()
 
         # And it comes back the moment the list can be read again.
         page.unroute(REQUESTS_ROUTE)

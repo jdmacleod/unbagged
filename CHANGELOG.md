@@ -98,6 +98,10 @@ from a specific response. See `CONTRIBUTING.md`.
   you had asked for. And a failed refresh immediately after an upload took the
   new response with it — the report stayed on screen while the page moved to a
   different one.
+- **Back onto a removed response left the address bar naming it.** Pressing Back
+  onto a link to a response that had since been deleted showed a different one
+  while the address bar went on naming the deleted one for the rest of the
+  session, so anything copied from there was wrong.
 - **A failed refresh could hide an upload that was still running.** Tabbing away
   and back during a long parse could replace the running progress indicator with
   an error about something else entirely.

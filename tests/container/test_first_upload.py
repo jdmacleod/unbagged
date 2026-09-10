@@ -45,6 +45,9 @@ from tests.container.browser import (
     upload,
     upload_again,
 )
+from tests.container.browser import (
+    playwright_expect as expect,
+)
 from tests.container.conftest import requires_docker
 
 pytestmark = [pytest.mark.container, requires_docker]
@@ -211,7 +214,7 @@ class TestTheUploadsAfterTheFirst:
         # And the destructive control targets it, rather than the one the
         # reader was looking at before they added anything.
         page.get_by_role("button", name="Remove this response").click()
-        assert page.get_by_role("button", name="Remove Kroger").is_visible()
+        expect(page.get_by_role("button", name="Remove Kroger")).to_be_visible()
 
     def test_an_upload_keeps_the_view_you_were_reading(self, page):
         """Selecting the new response must not also move the reader's view.
@@ -313,7 +316,7 @@ class TestTheUploadsAfterTheFirst:
         assert selected(page) == hmart
         # And the destructive control still points at what is on screen.
         page.get_by_role("button", name="Remove this response").click()
-        assert page.get_by_role("button", name="Remove H Mart").is_visible()
+        expect(page.get_by_role("button", name="Remove H Mart")).to_be_visible()
 
     def test_removing_the_response_you_just_added_falls_back_to_the_other(self, page):
         """The whole reported loop — "I cannot reliably add and remove" — end to end.
@@ -350,7 +353,7 @@ class TestTheUploadsAfterTheFirst:
         assert selected(page) == ""
 
         page.get_by_role("button", name="Remove this response").click()
-        assert page.get_by_role("button", name="Remove H Mart").is_visible()
+        expect(page.get_by_role("button", name="Remove H Mart")).to_be_visible()
 
     def test_a_refused_upload_says_why(self, page, empty_app):
         """The error path, which shares the panel with the report.

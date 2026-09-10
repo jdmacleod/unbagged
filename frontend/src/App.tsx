@@ -202,9 +202,6 @@ export default function App() {
   // re-fire for one it already made. `arrival` is derived from `liveUpload`,
   // which is not monotonic: it can go null and come back. See the effect.
   const announcedSeq = useRef(0);
-  // Set for exactly one commit after a popstate, so the URL-correction effect
-  // can tell "the reader pressed Back" from "the app derived a new selection".
-  const fromPopstate = useRef(false);
 
   const requests = useAsync(() => api.requests(), []);
   const rows = requests.data?.requests ?? [];
@@ -433,10 +430,7 @@ export default function App() {
 
   useEffect(() => {
     // Back and forward restore a view instead of leaving the app.
-    const onPop = () => {
-      fromPopstate.current = true;
-      setView(readUrl());
-    };
+    const onPop = () => setView(readUrl());
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
@@ -497,25 +491,21 @@ export default function App() {
     // the new id is not in the retained rows, and the reader is moved onto the
     // oldest response while the panel above still names the one they added.
     if (requests.error !== null) return;
-    // Not while walking history either. `replaceState` here rewrites the entry
-    // popstate just restored, so Back through several entries naming a removed
-    // `?r=7` rewrites each one as it is passed; Forward then Back replays
-    // identical renders, which is "Back appears to do nothing" — the exact
-    // symptom issue #61 was filed for, reintroduced through #65's correction.
-    if (fromPopstate.current) return;
+    // Popstate is NOT excluded, and it was: `replaceState` rewrites the entry
+    // popstate just restored, so walking Back through several entries naming a
+    // removed `?r=7` rewrites each as it is passed, and two adjacent entries
+    // differing only by a dead id collapse to the same render. That residual is
+    // real and is accepted here, because suppressing the correction bought
+    // something far worse and far likelier: the FIRST Back onto ANY dead `?r=`
+    // left the address bar naming a deleted response for the rest of the
+    // session, with a different one on screen. One press of Back against a
+    // narrow two-dead-entries-on-one-tab case is not a trade worth making — a
+    // URL that lies is the whole bug class this file exists to close, and a
+    // link copied out of that state is wrong. Found by review on PR #68.
     if (selected === null || selected === current) return;
     go({ request: current }, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, current, requests.loading, settling]);
-
-  useEffect(() => {
-    // Cleared here rather than inside the effect above, and declared after it
-    // on purpose: effects run in declaration order, so this is the first point
-    // at which the correction effect has certainly had its one commit to see
-    // the flag. Clearing it inside that effect would leave it set whenever that
-    // effect's deps did not change — a Back press that only moves the tab.
-    fromPopstate.current = false;
-  });
 
   useEffect(() => {
     if (announcement === "") return;
