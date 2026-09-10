@@ -156,11 +156,29 @@ export default function App() {
   // `rows` and returns the reader to the first-run screen; or the app is opened
   // fresh in another tab and the row is deleted from this one.
   //
-  // Keyed on the id rather than cleared by each of those paths in turn, because
+  // Keyed on the row rather than cleared by each of those paths in turn, because
   // the question is always the same one and a list of triggers is a list to
   // forget an entry from.
+  //
+  // The retailer is compared as well as the id, and that is not belt-and-braces.
+  // `request.id` is `INTEGER PRIMARY KEY` with no `AUTOINCREMENT`, so it is a
+  // rowid alias and SQLite REUSES the highest id once its row is deleted. Delete
+  // the newest response in another tab, upload a different one, and it can be
+  // handed the same id — an id-only check would then pass and pin the old
+  // report to the new response, naming the wrong retailer with confident counts.
+  // That is a worse failure than the staleness this whole guard exists for.
+  //
+  // Residual, and small enough to name rather than chase: a reused id whose new
+  // response is from the SAME retailer still matches, so the counts could be a
+  // response out of date. Closing that needs something per-response in both
+  // `UploadResult` and the request list, and today they share only these two.
   const liveUpload =
-    lastUpload && rows.some((r) => r.id === lastUpload.request_id)
+    lastUpload &&
+    rows.some(
+      (r) =>
+        r.id === lastUpload.request_id &&
+        r.retailer_id === lastUpload.retailer_id,
+    )
       ? lastUpload
       : null;
 
