@@ -45,9 +45,19 @@ from a specific response. See `CONTRIBUTING.md`.
   Now held by the page rather than by the panel, so it survives the moment the
   screen changes under it. A browser-tier test drives a real first upload of two
   responses at once and fails against the previous build.
-- **A removed response left its upload panel behind.** Removing the last one
-  returns you to the first-run screen, which then reported on a response that
-  had just been deleted.
+- **The report outlived the thing it described.** Keeping it on the page is what
+  makes the fix above work, and it also meant the report stopped dying when it
+  should. Removing a response left its report standing; so did a failure to
+  re-read the stored responses, which returns you to the first-run screen. It is
+  now tied to the response it names, so it goes when that goes and stays while
+  that stays — deleting some *other* response no longer throws away an accurate
+  report, warnings included.
+- **A refused upload showed the refusal above the previous success.** Dropping
+  the same response twice is the ordinary way to reach it: a long parse gives no
+  sign of progress, so people drop the file again, and the server refuses it by
+  name. The old report stood directly beneath that refusal, reading as though
+  the second drop had partly worked. A report is now cleared when an upload
+  starts, so it also stops sitting under the spinner for the whole of a parse.
 
 ## [0.13.0] - 2026-09-09
 
