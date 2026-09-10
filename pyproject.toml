@@ -50,7 +50,15 @@ dev = [
     "pillow>=11",
     "pytest>=8.0",
     "pre-commit>=3.7",
-    "ruff>=0.5",
+    # Capped, and coupled to the `rev` in .pre-commit-config.yaml. `ruff format`
+    # output is version-dependent: stable style changes land in minor releases.
+    # CI installs `.[dev]` and runs `ruff format --check`, while the pre-commit
+    # hook runs its own pinned build, so an uncapped floor here means the two
+    # eventually format differently and CI rejects what the hook just wrote.
+    # Nothing bumps either automatically — dependabot has no pre-commit
+    # ecosystem, and its pip entry covers /docker only — so both move by hand,
+    # together.
+    "ruff>=0.16.6,<0.17",
 ]
 
 # A browser, only for the layout regression test. Its own group because it

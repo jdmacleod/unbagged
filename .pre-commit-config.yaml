@@ -17,6 +17,9 @@ repos:
       - id: gitleaks
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Keep this rev and the `ruff` cap in pyproject.toml on the same minor
+    # version. The formatter's stable style changes between minor releases, and
+    # this hook and CI must not disagree about what formatted means.
     rev: v0.16.6
     hooks:
       - id: ruff
