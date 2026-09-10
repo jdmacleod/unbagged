@@ -56,23 +56,41 @@ function Working() {
 export function Upload({
   onDone,
   prominent,
+  result = null,
 }: {
-  onDone: (result: UploadResult) => void;
+  /** Called with the parse report, and with `null` whenever there is no
+   *  longer one to show — a new upload starting, or one that failed. The null
+   *  arm is what stops a previous success from sitting under "Reading the
+   *  response…" for the length of a parse, or beside the error from a refused
+   *  re-drop, reading as though the second drop partly worked. */
+  onDone: (result: UploadResult | null) => void;
   prominent?: boolean;
+  /** What the last upload returned, owned by the caller.
+   *
+   *  **Not local state, and that is the whole point.** The first-run uploader
+   *  and the footer one are different positions in the tree — one inside
+   *  `<main>`, one after it — so React cannot carry state between them. A first
+   *  upload is exactly what swaps one for the other, which destroyed the panel
+   *  reporting on it in the same instant it was created: the retailer match,
+   *  the low-confidence caveat and every parse warning, gone before anyone
+   *  could read them. Held by `App`, which does not unmount. */
+  result?: UploadResult | null;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [result, setResult] = useState<UploadResult | null>(null);
   const input = useRef<HTMLInputElement>(null);
 
   async function send(files: File[]) {
     if (!files.length) return;
     setBusy(true);
     setError(null);
+    // The previous report describes the previous upload. Clear it before this
+    // one starts rather than after it lands: a parse runs 10 to 30 seconds, and
+    // for all of it the old report would sit directly beneath the spinner.
+    onDone(null);
     try {
       const uploaded = await api.upload(files);
-      setResult(uploaded);
       onDone(uploaded);
     } catch (e) {
       setError((e as Error).message);

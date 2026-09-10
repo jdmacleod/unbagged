@@ -4,6 +4,7 @@ import { useAsync } from "./components/useAsync";
 import { RemoveRequest } from "./components/RemoveRequest";
 import { StaleReading } from "./components/StaleReading";
 import { Upload } from "./components/Upload";
+import type { UploadResult } from "./types";
 import { ErrorBox, Spine, Spinner } from "./components/ui";
 import { Compare } from "./views/Compare";
 import { Compliance } from "./views/Compliance";
@@ -83,6 +84,13 @@ export default function App() {
   // previous view, a reload always dumped you back on Timeline, and there was
   // no way to bookmark or send someone a link to the compliance matrix.
   const [{ tab, request: selected, query, label }, setView] = useState(readUrl);
+  // Owned here rather than inside Upload because the first upload swaps the
+  // prominent uploader for the footer one, and a component that unmounts takes
+  // its state with it. That state is the only report on the parse: which
+  // retailer matched, how confident, and every warning — including "this file
+  // was read but holds no spreadsheet, so nothing from it is in this report",
+  // which is how a bundle holding two retailers tells you it kept one.
+  const [lastUpload, setLastUpload] = useState<UploadResult | null>(null);
 
   function href(
     next: Partial<{
@@ -136,6 +144,43 @@ export default function App() {
   // handling them is part of the same change.
   const known = rows.some((r) => r.id === selected);
   const current = (known ? selected : null) ?? rows[0]?.id ?? null;
+
+  // The upload report, but only while the response it describes still exists.
+  //
+  // Holding it on the page is what keeps it alive across the swap from the
+  // first-run uploader to the footer one, and that is the point — but a report
+  // is a claim about a stored response, so it has to die with one. Three ways
+  // it would otherwise outlive its subject, all of them putting a confident
+  // "Read as H Mart · 108 visits" on screen for something that is not there:
+  // the response is removed; a later `GET /api/requests` fails, which empties
+  // `rows` and returns the reader to the first-run screen; or the app is opened
+  // fresh in another tab and the row is deleted from this one.
+  //
+  // Keyed on the row rather than cleared by each of those paths in turn, because
+  // the question is always the same one and a list of triggers is a list to
+  // forget an entry from.
+  //
+  // The retailer is compared as well as the id, and that is not belt-and-braces.
+  // `request.id` is `INTEGER PRIMARY KEY` with no `AUTOINCREMENT`, so it is a
+  // rowid alias and SQLite REUSES the highest id once its row is deleted. Delete
+  // the newest response in another tab, upload a different one, and it can be
+  // handed the same id — an id-only check would then pass and pin the old
+  // report to the new response, naming the wrong retailer with confident counts.
+  // That is a worse failure than the staleness this whole guard exists for.
+  //
+  // Residual, and small enough to name rather than chase: a reused id whose new
+  // response is from the SAME retailer still matches, so the counts could be a
+  // response out of date. Closing that needs something per-response in both
+  // `UploadResult` and the request list, and today they share only these two.
+  const liveUpload =
+    lastUpload &&
+    rows.some(
+      (r) =>
+        r.id === lastUpload.request_id &&
+        r.retailer_id === lastUpload.retailer_id,
+    )
+      ? lastUpload
+      : null;
 
   return (
     // A page on a desk. The sheet is sized to hold the reading measure plus the
@@ -224,7 +269,14 @@ export default function App() {
             already the empty state, and on a first run it is the whole screen,
             so it is the one place in the app that gets to be large. */}
         {!requests.loading && rows.length === 0 && (
-          <Upload prominent onDone={() => requests.reload()} />
+          <Upload
+            prominent
+            result={liveUpload}
+            onDone={(r) => {
+              setLastUpload(r);
+              requests.reload();
+            }}
+          />
         )}
 
         {current !== null && (
@@ -264,7 +316,13 @@ export default function App() {
           competing with the document above it on every single view. */}
       {rows.length > 0 && (
         <div className="mt-14">
-          <Upload onDone={() => requests.reload()} />
+          <Upload
+            result={liveUpload}
+            onDone={(r) => {
+              setLastUpload(r);
+              requests.reload();
+            }}
+          />
           {/* Removing one is a smaller footnote still, and it lives here rather
               than beside the retailer selector: the selector is used constantly
               and a destructive control does not belong under a hand that is
@@ -279,6 +337,11 @@ export default function App() {
                   // otherwise name a response that no longer exists, and `?q=`
                   // would keep filtering a timeline that just changed under it.
                   go({ request: null, query: null, label: null });
+                  // The upload panel needs no clearing here: `liveUpload`
+                  // already hides a report whose response is gone, and only
+                  // that one. Clearing on any removal — which this did — threw
+                  // away a still-accurate report, warnings included, when the
+                  // reader deleted some OTHER response.
                   requests.reload();
                 }}
               />

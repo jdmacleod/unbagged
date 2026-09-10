@@ -137,7 +137,7 @@ make dev             # compose + Vite, on http://localhost:5173
 make test            # fast suite
 make test-frontend   # UI unit tests (vitest)
 make test-container  # slow: builds and runs a real container
-make setup-browser   # once, if you want the layout test to run rather than skip
+make setup-browser   # once, if you want the browser tests to run rather than skip
 make screenshots     # regenerate docs/screenshots from the fixture
 make check-pii       # run this before every commit
 ```
@@ -149,7 +149,9 @@ tell from a browser.
 
 `make test-container` builds and runs a real container and checks the things only a
 running one can show: effective uid, data permissions, bounded restart, that the
-shipped image is the runtime stage, and that no view scrolls sideways from 320px up.
+shipped image is the runtime stage, that no view scrolls sideways from 320px up, and
+that a first upload's report — which retailer matched, and every parse warning — is
+still on screen once the response has loaded.
 Tests needing real uid semantics skip loudly on Docker Desktop, where bind-mount
 ownership is remapped and they would otherwise pass without checking anything.
 

@@ -23,6 +23,42 @@ from a specific response. See `CONTRIBUTING.md`.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/
 
+## Unreleased
+
+### Fixed
+
+- **The first upload never showed what it had just read.** Every upload produces
+  a short report — which retailer matched, how confident that match is, the
+  counts, and any warning the adapter raised — and on the very first one it was
+  created and destroyed in the same instant. The screen a first-time reader is
+  looking at is replaced by the report the moment a response loads, and the
+  panel went with it.
+
+  The warning that mattered most was the one about a file that did not make it
+  in. Dropping two retailers' responses together is one upload, and one upload
+  belongs to one retailer: the reader that recognises its own format wins, and
+  the other file is named in a warning saying nothing from it is in this report.
+  That line was destroyed before it could be read, so a whole second response
+  could go missing with nothing on screen to say so. The "check this is the
+  retailer you meant" caveat on a weak match went the same way.
+
+  Now held by the page rather than by the panel, so it survives the moment the
+  screen changes under it. A browser-tier test drives a real first upload of two
+  responses at once and fails against the previous build.
+- **The report outlived the thing it described.** Keeping it on the page is what
+  makes the fix above work, and it also meant the report stopped dying when it
+  should. Removing a response left its report standing; so did a failure to
+  re-read the stored responses, which returns you to the first-run screen. It is
+  now tied to the response it names, so it goes when that goes and stays while
+  that stays — deleting some *other* response no longer throws away an accurate
+  report, warnings included.
+- **A refused upload showed the refusal above the previous success.** Dropping
+  the same response twice is the ordinary way to reach it: a long parse gives no
+  sign of progress, so people drop the file again, and the server refuses it by
+  name. The old report stood directly beneath that refusal, reading as though
+  the second drop had partly worked. A report is now cleared when an upload
+  starts, so it also stops sitting under the spinner for the whole of a parse.
+
 ## [0.13.0] - 2026-09-09
 
 **This release changes what already-ingested data displays.** No migration runs
