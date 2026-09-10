@@ -20,6 +20,11 @@ repos:
     rev: v0.16.6
     hooks:
       - id: ruff
+      # `ruff` above is the linter. This is the formatter, and it is a separate
+      # hook: the two check different things, and only the first was ever wired
+      # up. It rewrites files rather than only reporting, so a commit that would
+      # have failed the gate is fixed in place and re-staged.
+      - id: ruff-format
 
   - repo: local
     hooks:

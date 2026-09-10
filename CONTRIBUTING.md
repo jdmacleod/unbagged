@@ -172,6 +172,19 @@ commit — `ImageChops.difference(a, b).getbbox()` returning `None` means the on
 thing that moved was zlib, and the file should be left alone. Committing those
 is churn that makes a real screenshot change hard to spot in a diff.
 
+## Formatting, and git blame
+
+`ruff format` had never been run until issue #66, so one commit reformatted 64 of
+97 files. That commit is listed in `.git-blame-ignore-revs`. GitHub reads that file
+automatically; your local checkout does not, until you tell it once:
+
+    git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+Add a commit to that file only if it is purely mechanical — no logic, no renames.
+Anything a human had to decide belongs in a different commit, so that ignoring the
+mechanical one cannot hide a real change. That is why the #66 sweep is two commits
+rather than one.
+
 ## Citing where a test came from
 
 A regression test is worth more when it says what it was written for. Keep the
@@ -287,7 +300,10 @@ an authentication key), and add yourself to `.github/allowed_signers` with
 
 ## Style
 
-`ruff` for lint and format, 100-column lines, Python 3.12. `make lint` and `make test`
+`ruff` for lint and format, 100-column lines, Python 3.12. `make lint` runs both
+halves — `ruff check` and `ruff format --check` — and `make format` applies the
+formatter. The pre-commit hook reformats in place, so a badly formatted commit is
+fixed rather than argued with; re-stage and commit again. `make lint` and `make test`
 before you push.
 
 Editing the logo or an icon is the one change with a step that is easy to miss.

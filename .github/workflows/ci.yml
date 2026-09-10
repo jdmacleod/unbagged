@@ -127,6 +127,7 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: pip install -e ".[dev]"
       - run: ruff check .
+      - run: ruff format --check .
       - run: pytest -q
       # The image installs docker/requirements.txt with --require-hashes; this
       # fails when it no longer covers what pyproject.toml declares. Regenerating

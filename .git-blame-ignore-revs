@@ -1,0 +1,16 @@
+# Commits that changed formatting only, and would otherwise bury every line of
+# this repository under one author and one date in `git blame`.
+#
+# Git does not read this file on its own. Point your checkout at it once:
+#
+#     git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# GitHub reads it automatically. Add a commit here ONLY if it is purely
+# mechanical — no logic, no renames — so that ignoring it cannot hide a real
+# change. Full 40-character SHAs; git rejects short ones.
+
+# style: apply ruff format across the repository (issue #66).
+# The formatter had never been run; 64 of 97 files differed from its output.
+# Anything a human had to decide was settled in the commit before this one,
+# precisely so that this one could be listed here.
+a3664731f75104fc20405e28f54127bd233096f0
