@@ -72,6 +72,15 @@ from a specific response. See `CONTRIBUTING.md`.
 
 ### Fixed
 
+- **One drawing fault blanked the whole page.** React removes everything when a
+  view fails to draw, so a value in a shape nothing anticipated left a white
+  screen with no explanation — no header, no tabs, no version number to quote,
+  and no way to tell whether the response had been lost. The views are drawn from
+  files this tool has often never seen before, so that is a real risk rather than
+  a theoretical one. A failure now stays inside the view it happened in: the
+  page says what went wrong, says the response is still stored, and leaves the
+  tabs and the footer where they were so another view is one click away.
+
 - **A response could be handed the id of one you had just deleted.** The id is
   what the upload report panel and the `?r=` in the address bar both use to name
   a response, and SQLite hands the highest one out again after a delete. Remove
