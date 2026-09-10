@@ -21,14 +21,17 @@ from unbagged.models import (
 
 FIXTURE = (
     Path(__file__).parent.parent
-    / "src" / "unbagged" / "adapters" / "kroger" / "fixtures" / "synthetic_report.txt"
+    / "src"
+    / "unbagged"
+    / "adapters"
+    / "kroger"
+    / "fixtures"
+    / "synthetic_report.txt"
 )
 
 
 def bundle_for(path: Path, **kwargs) -> SourceBundle:
-    document = SourceDocument(
-        original_filename=path.name, sha256="0" * 64, path=str(path), id=1
-    )
+    document = SourceDocument(original_filename=path.name, sha256="0" * 64, path=str(path), id=1)
     return SourceBundle(documents=(document,), **kwargs)
 
 
@@ -73,8 +76,13 @@ class TestRequestMeta:
 class TestIdentities:
     def test_every_documented_identifier_type_is_emitted(self, result):
         assert {i.id_type for i in result.identities} >= {
-            IdType.NAME, IdType.LOYALTY_CARD, IdType.ALTERNATE_ID, IdType.HOUSEHOLD,
-            IdType.INTERNAL_PERSON, IdType.EMAIL, IdType.ADDRESS,
+            IdType.NAME,
+            IdType.LOYALTY_CARD,
+            IdType.ALTERNATE_ID,
+            IdType.HOUSEHOLD,
+            IdType.INTERNAL_PERSON,
+            IdType.EMAIL,
+            IdType.ADDRESS,
         }
 
     def test_loyalty_card_numbers_are_read_from_dictionary_keys(self, result):
@@ -159,7 +167,11 @@ class TestInferences:
             f for f in result.inferences if f.origin is InferenceOrigin.FIRST_PARTY_MODEL
         ]
         assert {f.label for f in first_party} == {
-            "Convenience", "Loyalty", "Price", "Quality", "Variety Seeking"
+            "Convenience",
+            "Loyalty",
+            "Price",
+            "Quality",
+            "Variety Seeking",
         }
         assert all(f.derivable_from_txns for f in first_party)
         assert all(f.scale is Scale.CATEGORICAL for f in first_party)
@@ -172,21 +184,24 @@ class TestInferences:
         report does not say from whom.
         """
         appended = {
-            f.label for f in result.inferences
-            if f.origin is InferenceOrigin.APPENDED_THIRD_PARTY
+            f.label for f in result.inferences if f.origin is InferenceOrigin.APPENDED_THIRD_PARTY
         }
-        assert {"Education Level of Individual", "Year of Birth for Individual",
-                "Income Predictor Score (in $000)"} <= appended
+        assert {
+            "Education Level of Individual",
+            "Year of Birth for Individual",
+            "Income Predictor Score (in $000)",
+        } <= appended
         assert any("Cruise" in label for label in appended)
 
     def test_household_attributes_describe_the_household(self, result):
         # The report groups these itself, so the subject is read rather than
         # guessed from the field name.
-        household = {
-            f.label for f in result.inferences if f.subject is Scope.HOUSEHOLD
-        }
-        assert {"Income Predictor Score (in $000)", "Number of Adults in Household",
-                "Number of Children in Household"} <= household
+        household = {f.label for f in result.inferences if f.subject is Scope.HOUSEHOLD}
+        assert {
+            "Income Predictor Score (in $000)",
+            "Number of Adults in Household",
+            "Number of Children in Household",
+        } <= household
         # Stated explicitly rather than by keyword: the two buckets come from
         # the report, and the whole point is that nothing crosses between them.
         assert household == {
@@ -197,11 +212,12 @@ class TestInferences:
             "Number of Individuals in Household",
             "Presence of Children Ages 0-2",
         }
-        individual = {
-            f.label for f in result.inferences if f.subject is Scope.INDIVIDUAL
-        }
-        assert {"Education Level of Individual", "Gender of Individual",
-                "Year of Birth for Individual"} <= individual
+        individual = {f.label for f in result.inferences if f.subject is Scope.INDIVIDUAL}
+        assert {
+            "Education Level of Individual",
+            "Gender of Individual",
+            "Year of Birth for Individual",
+        } <= individual
 
     def test_ordinal_scales_are_taken_from_the_label(self, result):
         # The scale is stated in the label — "(7=Most Likely; 1=Least Likely)" —
@@ -247,19 +263,13 @@ class TestDisclosures:
         assert len(result.disclosures) == len(DisclosureCategory)
 
     def test_specific_pieces_is_the_only_one_provided(self, result):
-        provided = [
-            d.category for d in result.disclosures
-            if d.status is DisclosureStatus.PROVIDED
-        ]
+        provided = [d.category for d in result.disclosures if d.status is DisclosureStatus.PROVIDED]
         assert provided == [DisclosureCategory.SPECIFIC_PIECES]
 
     def test_the_missing_sections_are_recorded_as_findings(self, result):
         # There is no Section 2, 3 or 4. Silence in the data model would be
         # indistinguishable from "not yet parsed".
-        absent = {
-            d.category for d in result.disclosures
-            if d.status is DisclosureStatus.ABSENT
-        }
+        absent = {d.category for d in result.disclosures if d.status is DisclosureStatus.ABSENT}
         assert DisclosureCategory.SOURCES in absent
         assert DisclosureCategory.THIRD_PARTIES_SHARED_WITH in absent
         assert DisclosureCategory.RETENTION_PERIOD in absent
@@ -272,26 +282,20 @@ class TestDisclosures:
 
 class TestFollowUps:
     def test_the_supplemental_window_is_recorded_not_scored_as_a_failure(self, result):
-        supplemental = [
-            f for f in result.follow_ups if f.kind is FollowUpKind.SUPPLEMENTAL_PERIOD
-        ]
+        supplemental = [f for f in result.follow_ups if f.kind is FollowUpKind.SUPPLEMENTAL_PERIOD]
         assert len(supplemental) == 1
         assert "privacy office" in supplemental[0].description
 
     def test_follow_ups_are_written_for_a_person_not_a_parser(self, result):
         # These strings end up in the UI and in a letter someone sends.
-        missing = [
-            f for f in result.follow_ups if f.kind is FollowUpKind.MISSING_CATEGORY
-        ]
+        missing = [f for f in result.follow_ups if f.kind is FollowUpKind.MISSING_CATEGORY]
         assert missing
         for action in missing:
             assert "_" not in action.description
             assert action.description.isupper() is False
 
     def test_every_absent_category_gets_a_follow_up(self, result):
-        missing = [
-            f for f in result.follow_ups if f.kind is FollowUpKind.MISSING_CATEGORY
-        ]
+        missing = [f for f in result.follow_ups if f.kind is FollowUpKind.MISSING_CATEGORY]
         absent = [d for d in result.disclosures if d.status is DisclosureStatus.ABSENT]
         assert len(missing) == len(absent)
 

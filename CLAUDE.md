@@ -43,7 +43,9 @@ historical**: `DESIGN.md` is the authority for anything the user sees, and it de
 
 ## Conventions
 
-- Python 3.12, `src/` layout, `ruff` for lint and format.
+- Python 3.12, `src/` layout, `ruff` for lint and format. `make lint` runs both
+  halves and CI runs the same two commands; `make format` applies the formatter.
+  `docs/handoff.md` is excluded from formatting because it is the live contract.
 - Adapters degrade with `ParseWarning`s rather than raising; absence of a disclosure is
   recorded explicitly as `status=absent`, never as a missing row.
 - Every emitted record carries provenance: `source_document_id`, `page`, `locator`.

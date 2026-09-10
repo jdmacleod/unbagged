@@ -147,8 +147,9 @@ def verdict(c: dict) -> str:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("--report", required=True, type=Path, help="the response to read")
     ap.add_argument("--request", required=True, type=int, help="request id in the database")
     ap.add_argument("--dates", help="comma-separated YYYY-MM-DD; default: the flagged ones")
@@ -171,7 +172,8 @@ def main() -> int:
         chosen = [b for b in stored_baskets if b["occurred_at"][:10] in wanted]
     else:
         flagged = [
-            b for b in stored_baskets
+            b
+            for b in stored_baskets
             if b["stated_pre_discount_delta"] is not None
             and abs(b["stated_pre_discount_delta"]) >= TOLERANCE
         ]
@@ -188,9 +190,13 @@ def main() -> int:
         date = stored["occurred_at"][:10]
         candidates = from_source.get(date, [])
         if len(candidates) != 1:
-            report.append({"date": date, "error":
-                           f"{len(candidates)} baskets on this date in the source; "
-                           "cannot pair them one to one"})
+            report.append(
+                {
+                    "date": date,
+                    "error": f"{len(candidates)} baskets on this date in the source; "
+                    "cannot pair them one to one",
+                }
+            )
             continue
         entry = {"date": date}
         entry.update(compare(candidates[0], stored, pattern))
@@ -208,20 +214,31 @@ def main() -> int:
         if "error" in entry:
             print(f"    {entry['error']}\n")
             continue
-        print(f"    lines   source {entry['source_lines']:>3}  stored {entry['stored_lines']:>3}"
-              f"   match={entry['lines_match']}")
-        print(f"    shelf   source-vs-stored match={entry['shelf_matches']}"
-              f"   unparseable amounts={entry['unparseable_amounts']}")
-        print(f"    stated  present={entry['stated_total_present']}"
-              f"  agrees with stored={entry['stated_matches_stored']}")
-        print(f"    gap     {entry['delta']:+.2f} (source lines minus source stated total)"
-              if entry["delta"] is not None else "    gap     n/a")
+        print(
+            f"    lines   source {entry['source_lines']:>3}  stored {entry['stored_lines']:>3}"
+            f"   match={entry['lines_match']}"
+        )
+        print(
+            f"    shelf   source-vs-stored match={entry['shelf_matches']}"
+            f"   unparseable amounts={entry['unparseable_amounts']}"
+        )
+        print(
+            f"    stated  present={entry['stated_total_present']}"
+            f"  agrees with stored={entry['stated_matches_stored']}"
+        )
+        print(
+            f"    gap     {entry['delta']:+.2f} (source lines minus source stated total)"
+            if entry["delta"] is not None
+            else "    gap     n/a"
+        )
         # The pattern is a net, not a classifier: an ordinary product whose name
         # happens to contain one of these words is caught too. A count here is a
         # hint to look, and only "gap==fee" being true is evidence.
-        print(f"    fee-like lines {entry['fee_like_lines']}"
-              f"  summing {entry['fee_like_sum']:.2f}"
-              f"  gap==fee: {entry['delta_is_the_fee']}")
+        print(
+            f"    fee-like lines {entry['fee_like_lines']}"
+            f"  summing {entry['fee_like_sum']:.2f}"
+            f"  gap==fee: {entry['delta_is_the_fee']}"
+        )
         print(f"    -> {entry['verdict']}\n")
     return 0
 

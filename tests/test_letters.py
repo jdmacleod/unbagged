@@ -17,9 +17,7 @@ from unbagged.models import (
     RequestMeta,
 )
 
-META = RequestMeta(
-    retailer_id="kroger", display_name="Kroger", report_reference="SYNTH-1"
-)
+META = RequestMeta(retailer_id="kroger", display_name="Kroger", report_reference="SYNTH-1")
 
 ACCUSATIONS = ("violat", "unlawful", "illegal", "breach", "failed to comply", "must ")
 
@@ -41,17 +39,13 @@ class TestCoverage:
             assert CITATIONS[category] in draft["letter"]
 
     def test_partial_categories_are_flagged_as_partial(self):
-        disclosures = [
-            Disclosure(DisclosureCategory.SOURCES, DisclosureStatus.PARTIAL)
-        ]
+        disclosures = [Disclosure(DisclosureCategory.SOURCES, DisclosureStatus.PARTIAL)]
         draft = draft_follow_up(META, disclosures)
         assert "only in part" in draft["letter"]
         assert draft["partial_categories"] == ["SOURCES"]
 
     def test_provided_categories_are_not_asked_for_again(self):
-        disclosures = [
-            Disclosure(DisclosureCategory.SPECIFIC_PIECES, DisclosureStatus.PROVIDED)
-        ]
+        disclosures = [Disclosure(DisclosureCategory.SPECIFIC_PIECES, DisclosureStatus.PROVIDED)]
         draft = draft_follow_up(META, disclosures)
         assert draft["absent_categories"] == []
         assert READABLE[DisclosureCategory.SPECIFIC_PIECES] not in draft["letter"]
@@ -92,8 +86,6 @@ class TestDetails:
         assert "earlier period" not in draft_follow_up(META, all_absent())["letter"]
 
     def test_a_complete_response_produces_a_letter_that_says_so(self):
-        disclosures = [
-            Disclosure(c, DisclosureStatus.PROVIDED) for c in DisclosureCategory
-        ]
+        disclosures = [Disclosure(c, DisclosureStatus.PROVIDED) for c in DisclosureCategory]
         letter = draft_follow_up(META, disclosures)["letter"]
         assert "no further questions" in letter

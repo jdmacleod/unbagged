@@ -10,11 +10,21 @@ from unbagged.models import DisclosureCategory
 
 FIXTURE = (
     Path(__file__).parent.parent
-    / "src" / "unbagged" / "adapters" / "kroger" / "fixtures" / "synthetic_report.txt"
+    / "src"
+    / "unbagged"
+    / "adapters"
+    / "kroger"
+    / "fixtures"
+    / "synthetic_report.txt"
 )
 HMART_FIXTURE = (
     Path(__file__).parent.parent
-    / "src" / "unbagged" / "adapters" / "hmart" / "fixtures" / "synthetic_history.xls"
+    / "src"
+    / "unbagged"
+    / "adapters"
+    / "hmart"
+    / "fixtures"
+    / "synthetic_history.xls"
 )
 
 
@@ -55,9 +65,7 @@ class TestProductIndex:
     """The index endpoint, and the properties the view is designed around."""
 
     def test_it_lists_products_alphabetically(self, client, uploaded):
-        body = client.get(
-            f"/api/requests/{uploaded['request_id']}/product-index"
-        ).json()
+        body = client.get(f"/api/requests/{uploaded['request_id']}/product-index").json()
         names = [p["description"] for p in body["products"]]
         assert names == sorted(names)
 
@@ -107,9 +115,7 @@ class TestProductIndex:
         right answer is those products — not all of them, and not none."""
         rid = uploaded["request_id"]
         everything = client.get(f"/api/requests/{rid}/product-index").json()
-        wild = client.get(
-            f"/api/requests/{rid}/product-index", params={"q": "%"}
-        ).json()
+        wild = client.get(f"/api/requests/{rid}/product-index", params={"q": "%"}).json()
         assert 0 < wild["product_count"] < everything["product_count"]
         assert all("%" in p["description"] for p in wild["products"])
 
@@ -140,9 +146,7 @@ class TestProductIndex:
 
     def test_the_cap_discloses_itself(self, client, uploaded):
         rid = uploaded["request_id"]
-        body = client.get(
-            f"/api/requests/{rid}/product-index", params={"limit": 5}
-        ).json()
+        body = client.get(f"/api/requests/{rid}/product-index", params={"limit": 5}).json()
         assert body["truncated"] is True
         assert len(body["products"]) == 5
         assert body["product_count"] > 5
@@ -163,9 +167,7 @@ class TestClickThroughContract:
         # A product bought several times, so the assertion is about matching
         # rather than about a single lucky row.
         product = max(index["products"], key=lambda p: p["purchases"])
-        timeline = client.get(
-            f"/api/requests/{rid}/timeline", params={"q": product["upc"]}
-        ).json()
+        timeline = client.get(f"/api/requests/{rid}/timeline", params={"q": product["upc"]}).json()
         assert timeline["baskets"], product["upc"]
         # Every visit that shows a positive line, plus at most the visits where
         # the product came back as a refund. Never more.
@@ -185,11 +187,7 @@ class TestClickThroughContract:
         index = client.get(f"/api/requests/{rid}/product-index").json()
         by_name = {p["description"]: p for p in index["products"]}
         contained = next(
-            (
-                name
-                for name in by_name
-                if any(name != other and name in other for other in by_name)
-            ),
+            (name for name in by_name if any(name != other and name in other for other in by_name)),
             None,
         )
         assert contained is not None, "fixture no longer has overlapping names"
@@ -220,9 +218,7 @@ class TestUpload:
         assert stored[0].name.endswith("synthetic_report.txt")
 
     def test_an_empty_upload_is_rejected_with_a_readable_message(self, client):
-        response = client.post(
-            "/api/requests", files={"files": ("empty.txt", b"", "text/plain")}
-        )
+        response = client.post("/api/requests", files={"files": ("empty.txt", b"", "text/plain")})
         assert response.status_code == 400
         assert "empty" in response.json()["detail"].lower()
 
@@ -243,8 +239,7 @@ class TestUpload:
         assert body["confident"] is False
         assert body["summary"]["transactions"] == 0
         assert body["summary"]["disclosures"] == len(DisclosureCategory)
-        assert any("no adapter recognised" in w["message"].lower()
-                   for w in body["warnings"])
+        assert any("no adapter recognised" in w["message"].lower() for w in body["warnings"])
 
     def test_a_scanned_pdf_is_told_it_has_no_text_layer(self, client):
         """The app already knew this and used to say something else.
@@ -322,9 +317,7 @@ class TestTimeline:
         assert stats["stores"]
 
     def test_placeholder_lines_are_counted_separately_not_as_products(self, client, uploaded):
-        stats = client.get(
-            f"/api/requests/{uploaded['request_id']}/timeline"
-        ).json()["stats"]
+        stats = client.get(f"/api/requests/{uploaded['request_id']}/timeline").json()["stats"]
         # Counting them as products would inflate the number; hiding them would
         # conceal a fact about the quality of the disclosure.
         assert stats["zero_value_lines"] > 0
@@ -332,9 +325,7 @@ class TestTimeline:
         assert stats["distinct_products"] < stats["line_count"]
 
     def test_returns_are_visible_rather_than_filtered(self, client, uploaded):
-        stats = client.get(
-            f"/api/requests/{uploaded['request_id']}/timeline"
-        ).json()["stats"]
+        stats = client.get(f"/api/requests/{uploaded['request_id']}/timeline").json()["stats"]
         assert stats["negative_lines"] > 0
 
     def test_filtering_by_store(self, client, uploaded):
@@ -354,14 +345,11 @@ class TestTimeline:
             params={"date_from": "2025-01-01", "date_to": "2025-06-30"},
         ).json()
         assert data["baskets"]
-        assert all("2025-01-01" <= b["occurred_at"][:10] <= "2025-06-30"
-                   for b in data["baskets"])
+        assert all("2025-01-01" <= b["occurred_at"][:10] <= "2025-06-30" for b in data["baskets"])
 
     def test_searching_returns_the_baskets_containing_a_match(self, client, uploaded):
         request_id = uploaded["request_id"]
-        data = client.get(
-            f"/api/requests/{request_id}/timeline", params={"q": "BANANA"}
-        ).json()
+        data = client.get(f"/api/requests/{request_id}/timeline", params={"q": "BANANA"}).json()
         assert data["filtered_count"] > 0
         detail = client.get(f"/api/transactions/{data['baskets'][0]['id']}").json()
         assert any("BANANA" in i["description_raw"] for i in detail["items"])
@@ -382,9 +370,7 @@ class TestTransactionDetail:
         for item in detail["items"]:
             if item["retail_amt"] is None:
                 continue
-            expected = (
-                item["retail_amt"] if item["loyalty_amt"] is None else item["loyalty_amt"]
-            )
+            expected = item["retail_amt"] if item["loyalty_amt"] is None else item["loyalty_amt"]
             assert item["paid_amt"] == expected
             assert item["saved_amt"] == round(item["retail_amt"] - expected, 2)
 
@@ -430,15 +416,11 @@ class TestTransactionDetail:
         checked = 0
         for basket in timeline["baskets"][:10]:
             detail = client.get(f"/api/transactions/{basket['id']}").json()
-            paid_from_lines = round(
-                sum(i["paid_amt"] or 0 for i in detail["items"]), 2
-            )
+            paid_from_lines = round(sum(i["paid_amt"] or 0 for i in detail["items"]), 2)
             assert detail["paid_total"] == paid_from_lines
             assert basket["paid_total"] == paid_from_lines
             assert basket["shelf_total"] == detail["shelf_total"]
-            assert basket["saved_total"] == round(
-                basket["shelf_total"] - basket["paid_total"], 2
-            )
+            assert basket["saved_total"] == round(basket["shelf_total"] - basket["paid_total"], 2)
             checked += 1
         assert checked == 10
 
@@ -486,8 +468,7 @@ class TestProfile:
         # These describe people who never enrolled in anything.
         data = client.get(f"/api/requests/{uploaded['request_id']}/profile").json()
         labels = {i["label"] for i in data["household_scoped"]}
-        assert {"Income Predictor Score (in $000)",
-                "Number of Children in Household"} <= labels
+        assert {"Income Predictor Score (in $000)", "Number of Children in Household"} <= labels
 
     def test_the_identity_graph_is_returned_with_provenance(self, client, uploaded):
         data = client.get(f"/api/requests/{uploaded['request_id']}/profile").json()
@@ -529,25 +510,19 @@ class TestCompliance:
 
 class TestFollowUpLetter:
     def test_the_letter_names_the_missing_categories(self, client, uploaded):
-        data = client.get(
-            f"/api/requests/{uploaded['request_id']}/follow-up-letter"
-        ).json()
+        data = client.get(f"/api/requests/{uploaded['request_id']}/follow-up-letter").json()
         assert len(data["absent_categories"]) == 7
         assert "1798.110(a)(2)" in data["letter"]
         assert "[your name]" in data["letter"]
 
     def test_the_letter_reports_rather_than_accuses(self, client, uploaded):
-        data = client.get(
-            f"/api/requests/{uploaded['request_id']}/follow-up-letter"
-        ).json()
+        data = client.get(f"/api/requests/{uploaded['request_id']}/follow-up-letter").json()
         assert "not legal advice" in data["note"]
         for word in ("violat", "unlawful", "illegal", "breach"):
             assert word not in data["letter"].lower()
 
     def test_the_supplemental_period_is_requested_too(self, client, uploaded):
-        data = client.get(
-            f"/api/requests/{uploaded['request_id']}/follow-up-letter"
-        ).json()
+        data = client.get(f"/api/requests/{uploaded['request_id']}/follow-up-letter").json()
         assert "earlier period" in data["letter"]
 
 
@@ -572,8 +547,7 @@ class TestCompare:
         """
         client.post(
             "/api/requests",
-            files={"files": ("letter.txt", b"Dear customer, we do not sell data.\n",
-                             "text/plain")},
+            files={"files": ("letter.txt", b"Dear customer, we do not sell data.\n", "text/plain")},
             data={"declared_retailer": "Corner Market"},
         )
         data = client.get("/api/compare").json()
@@ -596,9 +570,7 @@ class TestCompare:
 
 class TestPriceHistory:
     def test_products_seen_repeatedly_get_a_series(self, client, uploaded):
-        data = client.get(
-            f"/api/requests/{uploaded['request_id']}/price-history"
-        ).json()
+        data = client.get(f"/api/requests/{uploaded['request_id']}/price-history").json()
         assert data["product_count"] > 20
         product = data["products"][0]
         assert product["purchases"] >= data["min_observations"]
@@ -659,25 +631,19 @@ class TestPriceHistory:
         assert flags == sorted(flags, reverse=True), "priceable first, then the rest"
 
     def test_points_carry_what_was_paid_not_only_the_shelf_price(self, client, uploaded):
-        data = client.get(
-            f"/api/requests/{uploaded['request_id']}/price-history"
-        ).json()
+        data = client.get(f"/api/requests/{uploaded['request_id']}/price-history").json()
         discounted = 0
         for product in data["products"]:
             for point in product["points"]:
                 assert point["paid_amt"] <= point["retail_amt"] + 0.005
-                assert point["saved_amt"] == round(
-                    point["retail_amt"] - point["paid_amt"], 2
-                )
+                assert point["saved_amt"] == round(point["retail_amt"] - point["paid_amt"], 2)
                 discounted += point["saved_amt"] > 0
         assert discounted, "the fixture must carry discounts or this proves nothing"
 
     def test_refunds_are_excluded_from_prices(self, client, uploaded):
         # A negative amount is a refund, not a price — but it stays in the
         # transaction record.
-        data = client.get(
-            f"/api/requests/{uploaded['request_id']}/price-history"
-        ).json()
+        data = client.get(f"/api/requests/{uploaded['request_id']}/price-history").json()
         for product in data["products"]:
             assert all(p["retail_amt"] > 0 for p in product["points"])
 
@@ -706,8 +672,9 @@ class TestDisclosedVersusZero:
     def letter_only(self, client):
         response = client.post(
             "/api/requests",
-            files={"files": ("letter.txt", b"Dear customer, thank you for writing.\n",
-                             "text/plain")},
+            files={
+                "files": ("letter.txt", b"Dear customer, thank you for writing.\n", "text/plain")
+            },
             data={"declared_retailer": "Corner Market"},
         )
         assert response.status_code == 201
@@ -741,9 +708,9 @@ class TestDisclosedVersusZero:
         # the statutory phrase parses to PARTIAL with zero transactions; the
         # plain widening made it render Visits 0 / Total paid $0.00, which is a
         # claim about the retailer that the letter never made.
-        stats = client.get(
-            f"/api/requests/{letter_using_the_statutory_phrase}/timeline"
-        ).json()["stats"]
+        stats = client.get(f"/api/requests/{letter_using_the_statutory_phrase}/timeline").json()[
+            "stats"
+        ]
         assert stats["disclosed"] is False
         assert stats["basket_count"] is None
         assert stats["total_paid"] is None
@@ -751,17 +718,30 @@ class TestDisclosedVersusZero:
     def test_a_letter_reports_not_disclosed_rather_than_zero(self, client, letter_only):
         stats = client.get(f"/api/requests/{letter_only}/timeline").json()["stats"]
         assert stats["disclosed"] is False
-        for key in ("basket_count", "total_shelf", "total_paid", "distinct_products",
-                    "first_visit", "last_visit", "line_count"):
+        for key in (
+            "basket_count",
+            "total_shelf",
+            "total_paid",
+            "distinct_products",
+            "first_visit",
+            "last_visit",
+            "line_count",
+        ):
             assert stats[key] is None, f"{key} should be null, not zero"
 
     def test_compare_nulls_the_metrics_it_cannot_support(self, client, uploaded, letter_only):
         rows = {r["display_name"]: r for r in client.get("/api/compare").json()["requests"]}
         letter = rows["Corner Market"]
         assert letter["disclosed"] is False
-        for key in ("visits", "total_paid", "total_shelf", "distinct_products",
-                    "identifier_count", "inference_count",
-                    "appended_inference_count"):
+        for key in (
+            "visits",
+            "total_paid",
+            "total_shelf",
+            "distinct_products",
+            "identifier_count",
+            "inference_count",
+            "appended_inference_count",
+        ):
             assert letter[key] is None, f"{key} should be null, not zero"
 
     def test_what_the_retailer_failed_to_address_is_still_counted(
@@ -816,29 +796,21 @@ class TestDisclosedVersusZero:
         response never addressed inferences, so a 0 in that cell was a claim
         about the company that nothing in the file supports.
         """
-        rows = {
-            r["id"]: r for r in client.get("/api/compare").json()["requests"]
-        }
+        rows = {r["id"]: r for r in client.get("/api/compare").json()["requests"]}
         assert rows[hmart]["inference_count"] is None
         assert rows[hmart]["appended_inference_count"] is None
 
-    def test_the_same_response_still_reports_the_card_it_did_disclose(
-        self, client, hmart
-    ):
+    def test_the_same_response_still_reports_the_card_it_did_disclose(self, client, hmart):
         """The other half of the same column, and the overcorrection guard.
 
         H Mart discloses a loyalty card number. Gating the whole figure rather
         than the zero would render that as an em dash, which is the same
         overclaim in the opposite direction. These two cells must disagree.
         """
-        rows = {
-            r["id"]: r for r in client.get("/api/compare").json()["requests"]
-        }
+        rows = {r["id"]: r for r in client.get("/api/compare").json()["requests"]}
         assert rows[hmart]["identifier_count"] > 0
 
-    def test_a_partial_response_keeps_the_purchases_it_did_disclose(
-        self, client, hmart
-    ):
+    def test_a_partial_response_keeps_the_purchases_it_did_disclose(self, client, hmart):
         """The Timeline must be untouched by the count gate.
 
         Tightening `disclosed_specific_pieces` instead of adding a sibling
@@ -867,9 +839,7 @@ class TestDuplicateAcrossRequests:
 
     def test_the_same_report_cannot_be_loaded_twice(self, client, uploaded):
         with FIXTURE.open("rb") as fh:
-            second = client.post(
-                "/api/requests", files={"files": ("again.txt", fh, "text/plain")}
-            )
+            second = client.post("/api/requests", files={"files": ("again.txt", fh, "text/plain")})
         assert second.status_code == 400
         detail = second.json()["detail"]
         assert "already loaded" in detail
@@ -890,9 +860,7 @@ class TestDuplicateAcrossRequests:
         # path has to actually work.
         client.delete(f"/api/requests/{uploaded['request_id']}")
         with FIXTURE.open("rb") as fh:
-            again = client.post(
-                "/api/requests", files={"files": ("again.txt", fh, "text/plain")}
-            )
+            again = client.post("/api/requests", files={"files": ("again.txt", fh, "text/plain")})
         assert again.status_code == 201
 
 
@@ -910,9 +878,7 @@ class TestSearchWildcards:
     def test_a_percent_matches_a_literal_percent_not_everything(self, client, uploaded):
         rid = uploaded["request_id"]
         everything = client.get(f"/api/requests/{rid}/timeline").json()["filtered_count"]
-        percent = client.get(
-            f"/api/requests/{rid}/timeline", params={"q": "%"}
-        ).json()
+        percent = client.get(f"/api/requests/{rid}/timeline", params={"q": "%"}).json()
         assert percent["filtered_count"] < everything, "% still behaves as a wildcard"
         # The fixture carries "SIMPLE TRUTH 2% MILK", so a literal match is expected.
         assert percent["filtered_count"] > 0
@@ -922,16 +888,14 @@ class TestSearchWildcards:
     def test_an_underscore_matches_a_literal_underscore(self, client, uploaded):
         rid = uploaded["request_id"]
         everything = client.get(f"/api/requests/{rid}/timeline").json()["filtered_count"]
-        under = client.get(
-            f"/api/requests/{rid}/timeline", params={"q": "_"}
-        ).json()["filtered_count"]
+        under = client.get(f"/api/requests/{rid}/timeline", params={"q": "_"}).json()[
+            "filtered_count"
+        ]
         assert under < everything, "_ still behaves as a single-character wildcard"
 
     def test_ordinary_searches_are_unaffected(self, client, uploaded):
         rid = uploaded["request_id"]
-        hits = client.get(
-            f"/api/requests/{rid}/timeline", params={"q": "BANANA"}
-        ).json()
+        hits = client.get(f"/api/requests/{rid}/timeline", params={"q": "BANANA"}).json()
         assert hits["filtered_count"] > 0
         detail = client.get(f"/api/transactions/{hits['baskets'][0]['id']}").json()
         assert any("BANANA" in i["description_raw"] for i in detail["items"])
@@ -1066,9 +1030,9 @@ class TestSecurityHeaders:
 
     @staticmethod
     def _assert_carries(response):
-        assert response.headers.get("content-security-policy") == (
-            api.CONTENT_SECURITY_POLICY
-        ), response.headers
+        assert response.headers.get("content-security-policy") == (api.CONTENT_SECURITY_POLICY), (
+            response.headers
+        )
         assert response.headers.get("x-content-type-options") == "nosniff"
 
     def test_a_json_response_carries_them(self, client):
@@ -1078,9 +1042,7 @@ class TestSecurityHeaders:
 
     def test_a_400_carries_them(self, client):
         # An empty upload. Produced by an exception handler, not a route.
-        response = client.post(
-            "/api/requests", files={"files": ("empty.txt", b"", "text/plain")}
-        )
+        response = client.post("/api/requests", files={"files": ("empty.txt", b"", "text/plain")})
         assert response.status_code == 400
         self._assert_carries(response)
 
@@ -1190,14 +1152,16 @@ class TestSecurityHeaders:
         import anyio
 
         async def emits_its_own(scope, receive, send):
-            await send({
-                "type": "http.response.start",
-                "status": 200,
-                "headers": [
-                    (b"content-type", b"text/plain"),
-                    (b"content-security-policy", b"default-src *"),
-                ],
-            })
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 200,
+                    "headers": [
+                        (b"content-type", b"text/plain"),
+                        (b"content-security-policy", b"default-src *"),
+                    ],
+                }
+            )
             await send({"type": "http.response.body", "body": b""})
 
         sent = []
@@ -1206,18 +1170,14 @@ class TestSecurityHeaders:
             sent.append(message)
 
         async def drive():
-            await api.SecurityHeaders(emits_its_own)(
-                {"type": "http"}, None, record
-            )
+            await api.SecurityHeaders(emits_its_own)({"type": "http"}, None, record)
 
         anyio.run(drive)
 
         headers = sent[0]["headers"]
         names = [k.lower() for k, _ in headers]
         assert names.count(b"content-security-policy") == 1
-        assert dict(headers)[b"content-security-policy"] == (
-            api.CONTENT_SECURITY_POLICY.encode()
-        )
+        assert dict(headers)[b"content-security-policy"] == (api.CONTENT_SECURITY_POLICY.encode())
         # The response's own unrelated headers survive.
         assert (b"content-type", b"text/plain") in headers
 
@@ -1238,11 +1198,7 @@ class TestSecurityHeaders:
         async def sentinel(message):
             pass
 
-        anyio.run(
-            lambda: api.SecurityHeaders(inner)(
-                {"type": "websocket"}, None, sentinel
-            )
-        )
+        anyio.run(lambda: api.SecurityHeaders(inner)({"type": "websocket"}, None, sentinel))
         assert seen["scope"]["type"] == "websocket"
         # Handed the original send, not a wrapper.
         assert seen["send"] is sentinel

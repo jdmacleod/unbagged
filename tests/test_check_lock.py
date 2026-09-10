@@ -87,9 +87,7 @@ class TestDriftIsDetected:
         assert any("does not satisfy" in p for p in problems)
 
     def test_an_entry_that_lost_its_hash(self, monkeypatch):
-        monkeypatch.setattr(
-            check_lock, "locked", lambda: {"fastapi": ("0.141.1", False)}
-        )
+        monkeypatch.setattr(check_lock, "locked", lambda: {"fastapi": ("0.141.1", False)})
         monkeypatch.setattr(check_lock, "declared", lambda: [])
         problems = check_lock.findings()
         assert any("no --hash" in p for p in problems)

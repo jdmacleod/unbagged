@@ -81,17 +81,17 @@ def changed_paths(base: str) -> list[str]:
     """
     result = subprocess.run(
         ["git", "diff", "--name-only", f"{base}...HEAD"],
-        cwd=REPO_ROOT, capture_output=True, text=True, check=True,
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
     )
     return [line for line in result.stdout.splitlines() if line]
 
 
 def changed_sources(paths: list[str]) -> list[str]:
     """The watched source SVGs among `paths`."""
-    return sorted(
-        p for p in paths
-        if p.startswith(f"{WATCHED_DIR}/") and p.endswith(SOURCE_SUFFIX)
-    )
+    return sorted(p for p in paths if p.startswith(f"{WATCHED_DIR}/") and p.endswith(SOURCE_SUFFIX))
 
 
 def unaccompanied(paths: list[str], reasons: dict[str, str]) -> list[str]:
@@ -139,7 +139,10 @@ def escape_reasons(base: str) -> dict[str, str]:
     """`icons-unchanged: <source> <reason>` lines, keyed by the source named."""
     result = subprocess.run(
         ["git", "log", "--format=%B", f"{base}..HEAD"],
-        cwd=REPO_ROOT, capture_output=True, text=True, check=True,
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
     )
     return parse_reasons(result.stdout)
 
@@ -150,7 +153,7 @@ def parse_reasons(text: str) -> dict[str, str]:
         marker = line.strip()
         if not marker.lower().startswith(ESCAPE):
             continue
-        rest = marker[len(ESCAPE):].strip()
+        rest = marker[len(ESCAPE) :].strip()
         if not rest:
             continue
         named, _, reason = rest.partition(" ")
@@ -173,17 +176,19 @@ def run(paths: list[str], reasons: dict[str, str] | None = None) -> int:
         if source in sources:
             print(f'check_icon_sync: {source} allowed by "{reason}"')
     if not stale:
-        print(f"check_icon_sync: {len(sources)} source(s) changed, "
-              "each with what it produces or a stated reason")
+        print(
+            f"check_icon_sync: {len(sources)} source(s) changed, "
+            "each with what it produces or a stated reason"
+        )
         return 0
 
-    print("check_icon_sync: a source SVG changed and nothing it produces did",
-          file=sys.stderr)
+    print("check_icon_sync: a source SVG changed and nothing it produces did", file=sys.stderr)
     for source in stale:
         produced = PRODUCES.get(source)
         if produced is None:
-            print(f"  UNMAPPED  {source}  (not in PRODUCES, so nothing watches it)",
-                  file=sys.stderr)
+            print(
+                f"  UNMAPPED  {source}  (not in PRODUCES, so nothing watches it)", file=sys.stderr
+            )
             continue
         print(f"  STALE  {source}", file=sys.stderr)
         for name in produced:

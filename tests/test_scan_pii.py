@@ -345,7 +345,7 @@ class TestHistoryScan:
             "--- /dev/null\n"
             "+++ b/f.json\n"
             "@@ -0,0 +1,2 @@\n"
-            '+// pii-scan: allow synthetic fixture\n'
+            "+// pii-scan: allow synthetic fixture\n"
             f'+"street": "{ADDRESS}"\n'
         )
         assert scan_pii.scan_diff_stream(stream) == []
@@ -357,7 +357,7 @@ class TestHistoryScan:
             "--- a/f.json\n"
             "+++ b/f.json\n"
             "@@ -1,1 +1,2 @@\n"
-            ' // pii-scan: allow synthetic fixture\n'
+            " // pii-scan: allow synthetic fixture\n"
             f'+"street": "{ADDRESS}"\n'
         )
         assert scan_pii.scan_diff_stream(stream) == []

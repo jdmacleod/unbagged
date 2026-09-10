@@ -89,7 +89,7 @@ class TestFiles:
 
 # Named once so the suppressions live in one place rather than down a parametrize
 # list. Both are synthetic: fabricated to the right shape to exercise the rule.
-CARD_KEY = "4166872310945"      # pii-scan: allow synthetic card-shaped test literal
+CARD_KEY = "4166872310945"  # pii-scan: allow synthetic card-shaped test literal
 HOUSEHOLD_KEY = "600123456789"  # pii-scan: allow synthetic household-id test literal
 # The UUID from RFC 4122 section 3, a documentation value with no owner.
 # gitleaks reads any 36-char hyphenated hex string as a high-entropy secret.
@@ -131,9 +131,19 @@ class TestIdentifierKeys:
     @pytest.mark.parametrize(
         "key",
         [
-            "loyaltyCards", "cardNumberWithCD", "ehhn", "householdId",
-            "total_amount_prior_to_discounts", "purchasedescription", "productupc",
-            "2024", "01", "Section 1", "EmailAddress", "store", "orderno",
+            "loyaltyCards",
+            "cardNumberWithCD",
+            "ehhn",
+            "householdId",
+            "total_amount_prior_to_discounts",
+            "purchasedescription",
+            "productupc",
+            "2024",
+            "01",
+            "Section 1",
+            "EmailAddress",
+            "store",
+            "orderno",
         ],
     )
     def test_field_names_survive(self, key):
@@ -187,8 +197,7 @@ class TestSpreadsheetSkeleton:
 
     def _row(self, *values: str) -> str:
         cells = "".join(
-            f'<ss:Cell><ss:Data ss:Type="String">{v}</ss:Data></ss:Cell>'
-            for v in values
+            f'<ss:Cell><ss:Data ss:Type="String">{v}</ss:Data></ss:Cell>' for v in values
         )
         return f"<ss:Row>{cells}</ss:Row>"
 
@@ -209,9 +218,7 @@ class TestSpreadsheetSkeleton:
         assert "2024-01-18" not in rendered
 
     def test_the_banner_row_is_not_mistaken_for_the_header(self):
-        body = self._sheet(
-            self._row("Workbook") + self._row("Smartcard", "Amount")
-        )
+        body = self._sheet(self._row("Workbook") + self._row("Smartcard", "Amount"))
         sheet = sanitize_text(body, filename="h.xls")["sheets"][0]
         assert sheet["header"] == ["Smartcard", "Amount"]
 

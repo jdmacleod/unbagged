@@ -45,13 +45,39 @@ LOG_FORMAT = "--format=%x01%H%n%B"
 
 # Never scanned: binary by nature, or not ours.
 SKIP_DIR_PARTS = {
-    ".git", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cache",
-    ".pytest_cache", ".ruff_cache", "dist", "build", "htmlcov",
+    ".git",
+    "node_modules",
+    "__pycache__",
+    ".venv",
+    "venv",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    "dist",
+    "build",
+    "htmlcov",
 }
 SKIP_SUFFIXES = {
-    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".svg", ".pdf", ".zip",
-    ".gz", ".tgz", ".woff", ".woff2", ".ttf", ".otf", ".eot", ".sqlite",
-    ".sqlite3", ".db", ".lock",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".ico",
+    ".svg",
+    ".pdf",
+    ".zip",
+    ".gz",
+    ".tgz",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".otf",
+    ".eot",
+    ".sqlite",
+    ".sqlite3",
+    ".db",
+    ".lock",
 }
 
 # Suffixes that may legitimately sit in a fixtures directory while being
@@ -68,9 +94,14 @@ OPAQUE_FIXTURE_HINT = (
 
 # Email domains that cannot belong to a real person.
 ALLOWED_EMAIL_DOMAINS = {
-    "example.com", "example.org", "example.net", "localhost",
+    "example.com",
+    "example.org",
+    "example.net",
+    "localhost",
     # Machine identities that appear in commit trailers, not people's inboxes.
-    "noreply.github.com", "users.noreply.github.com", "anthropic.com",
+    "noreply.github.com",
+    "users.noreply.github.com",
+    "anthropic.com",
 }
 
 # Exact addresses, where the domain itself cannot be allowed. `github.com` holds
@@ -109,17 +140,14 @@ STREET_TYPES = (
 
 @dataclass(frozen=True)
 class Finding:
-    origin: str          # file path, or a commit identifier during a history scan
+    origin: str  # file path, or a commit identifier during a history scan
     line_no: int
     rule: str
     matched: str
     hint: str
 
     def render(self) -> str:
-        return (
-            f"{self.origin}:{self.line_no}: [{self.rule}] {mask(self.matched)}"
-            f"\n    {self.hint}"
-        )
+        return f"{self.origin}:{self.line_no}: [{self.rule}] {mask(self.matched)}\n    {self.hint}"
 
 
 @dataclass(frozen=True)
@@ -164,9 +192,7 @@ def _email_is_real(m: re.Match[str]) -> bool:
     if m.group(0).lower() in ALLOWED_EMAILS:
         return False
     domain = m.group("domain").lower()
-    return not (
-        domain in ALLOWED_EMAIL_DOMAINS or domain.endswith(ALLOWED_EMAIL_SUFFIXES)
-    )
+    return not (domain in ALLOWED_EMAIL_DOMAINS or domain.endswith(ALLOWED_EMAIL_SUFFIXES))
 
 
 def _phone_is_real(m: re.Match[str]) -> bool:
@@ -198,17 +224,14 @@ def _not_inside_hash(m: re.Match[str]) -> bool:
     """
     text = m.string
     return not any(
-        run.start() <= m.start() and m.end() <= run.end()
-        for run in HEX_RUN.finditer(text)
+        run.start() <= m.start() and m.end() <= run.end() for run in HEX_RUN.finditer(text)
     )
 
 
 RULES: tuple[Rule, ...] = (
     Rule(
         name="EMAIL",
-        pattern=re.compile(
-            r"\b[A-Za-z0-9._%+-]+@(?P<domain>[A-Za-z0-9.-]+\.[A-Za-z]{2,})\b"
-        ),
+        pattern=re.compile(r"\b[A-Za-z0-9._%+-]+@(?P<domain>[A-Za-z0-9.-]+\.[A-Za-z]{2,})\b"),
         hint="Use an example.com / example.org address instead.",
         accept=_email_is_real,
     ),
@@ -255,7 +278,7 @@ RULES: tuple[Rule, ...] = (
         name="LOYALTY_NUMBER",
         pattern=re.compile(r"(?<![\d.])\d{12,14}(?![\d.])"),
         hint="Loyalty-card-length digit run. Move it into a fixture, or suppress "
-             "it inline if it is a UPC or other non-identifying code.",
+        "it inline if it is a UPC or other non-identifying code.",
         accept=_not_inside_hash,
         applies_in_fixtures=False,
     ),
@@ -349,7 +372,8 @@ def scan_lines(
     holds only a window into a larger file — the history walker sees one line at a
     time, and would otherwise miss every previous-line suppression."""
     active = [
-        r for r in RULES
+        r
+        for r in RULES
         if (r.applies_in_fixtures or not is_fixture)
         and (r.applies_in_tests or not is_test)
         and (r.applies_in_generated_fixtures or not is_generated_fixture)
@@ -361,8 +385,15 @@ def scan_lines(
         lowered = line.lower()
         for needle in denylist:
             if needle in lowered:
-                found.append(Finding(origin, idx + line_offset, "DENYLIST", needle,
-                                     "Literal string from tools/denylist.txt."))
+                found.append(
+                    Finding(
+                        origin,
+                        idx + line_offset,
+                        "DENYLIST",
+                        needle,
+                        "Literal string from tools/denylist.txt.",
+                    )
+                )
         for rule in active:
             for m in rule.pattern.finditer(line):
                 if rule.accept(m):
@@ -390,8 +421,11 @@ def is_scannable(path: Path) -> bool:
 
 def git(*args: str) -> str:
     return subprocess.run(
-        ["git", *args], cwd=REPO_ROOT, check=True,
-        capture_output=True, text=True,
+        ["git", *args],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
     ).stdout
 
 
@@ -408,9 +442,7 @@ def scan_paths(paths: Iterable[str], denylist: Sequence[str]) -> list[Finding]:
         path = (REPO_ROOT / rel).resolve()
         if not is_scannable(path):
             if path.is_file() and opaque_in_fixtures(rel):
-                findings.append(
-                    Finding(rel, 1, "OPAQUE_FIXTURE", path.name, OPAQUE_FIXTURE_HINT)
-                )
+                findings.append(Finding(rel, 1, "OPAQUE_FIXTURE", path.name, OPAQUE_FIXTURE_HINT))
             continue
         try:
             text = path.read_text(encoding="utf-8", errors="replace")
@@ -418,8 +450,14 @@ def scan_paths(paths: Iterable[str], denylist: Sequence[str]) -> list[Finding]:
             continue
         is_fixture, is_test = classify(rel)
         findings.extend(
-            scan_lines(text.splitlines(), rel, is_fixture=is_fixture, is_test=is_test,
-                       is_generated_fixture=is_generated_fixture(rel), denylist=denylist)
+            scan_lines(
+                text.splitlines(),
+                rel,
+                is_fixture=is_fixture,
+                is_test=is_test,
+                is_generated_fixture=is_generated_fixture(rel),
+                denylist=denylist,
+            )
         )
     return findings
 
@@ -452,9 +490,9 @@ def scan_diff_stream(out: str, denylist: Sequence[str] = ()) -> list[Finding]:
     commit = "HEAD"
     current_file = ""
     in_message = False
-    lineno = 0        # line number within the post-image of current_file
-    msg_lineno = 0    # line number within the commit message
-    prev_line = ""    # previous post-image line, so previous-line suppressions work
+    lineno = 0  # line number within the post-image of current_file
+    msg_lineno = 0  # line number within the commit message
+    prev_line = ""  # previous post-image line, so previous-line suppressions work
     prev_msg = ""
 
     for line in out.splitlines():
@@ -475,21 +513,39 @@ def scan_diff_stream(out: str, denylist: Sequence[str] = ()) -> list[Finding]:
             m = HUNK_HEADER.match(line)
             lineno = int(m.group(1)) if m else 0
             continue
-        if line.startswith(("--- ", "index ", "old mode", "new mode", "similarity ",
-                            "rename ", "new file", "deleted file", "Binary files")):
+        if line.startswith(
+            (
+                "--- ",
+                "index ",
+                "old mode",
+                "new mode",
+                "similarity ",
+                "rename ",
+                "new file",
+                "deleted file",
+                "Binary files",
+            )
+        ):
             continue
 
         if in_message:
             msg_lineno += 1
-            findings.extend(scan_lines([line], f"{commit}:<message>", denylist=denylist,
-                                       line_offset=msg_lineno, preceding=prev_msg))
+            findings.extend(
+                scan_lines(
+                    [line],
+                    f"{commit}:<message>",
+                    denylist=denylist,
+                    line_offset=msg_lineno,
+                    preceding=prev_msg,
+                )
+            )
             prev_msg = line
             continue
         if not current_file:
             continue
 
         if line.startswith("-"):
-            continue          # removed line: it is not in the post-image
+            continue  # removed line: it is not in the post-image
         if line.startswith("+"):
             content, at = line[1:], lineno
             lineno += 1
@@ -504,10 +560,16 @@ def scan_diff_stream(out: str, denylist: Sequence[str] = ()) -> list[Finding]:
 
         is_fixture, is_test = classify(current_file)
         findings.extend(
-            scan_lines([content], f"{commit}:{current_file}", is_fixture=is_fixture,
-                       is_test=is_test,
-                       is_generated_fixture=is_generated_fixture(current_file),
-                       denylist=denylist, line_offset=at, preceding=prev_line)
+            scan_lines(
+                [content],
+                f"{commit}:{current_file}",
+                is_fixture=is_fixture,
+                is_test=is_test,
+                is_generated_fixture=is_generated_fixture(current_file),
+                denylist=denylist,
+                line_offset=at,
+                preceding=prev_line,
+            )
         )
         prev_line = content
     return findings
@@ -517,7 +579,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("paths", nargs="*", help="specific paths to scan")
     parser.add_argument(
-        "--history", nargs="?", const="", default=None, metavar="RANGE",
+        "--history",
+        nargs="?",
+        const="",
+        default=None,
+        metavar="RANGE",
         help="scan commit messages and diffs, optionally limited to a revision range",
     )
     args = parser.parse_args(argv)

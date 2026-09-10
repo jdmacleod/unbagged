@@ -54,7 +54,10 @@ class TestPrivileges:
             "the dev stage is running: docker-compose.yml must pin target: runtime"
         )
         editable = docker(
-            "exec", name, "python", "-c",
+            "exec",
+            name,
+            "python",
+            "-c",
             "import unbagged, os; print(os.path.dirname(unbagged.__file__))",
         ).stdout.strip()
         assert "site-packages" in editable, f"non-production install at {editable}"
@@ -73,9 +76,7 @@ class TestDataDirectory:
         state = json.loads(docker("inspect", name).stdout)[0]["State"]
         assert state["Running"], "container should have taken ownership and started"
 
-    def test_an_unwritable_data_directory_stops_instead_of_looping(
-        self, run_container, tmp_path
-    ):
+    def test_an_unwritable_data_directory_stops_instead_of_looping(self, run_container, tmp_path):
         """The crash loop, from the other side.
 
         Measured before the fix: 7 restarts in 12 seconds with the explanation
@@ -118,7 +119,10 @@ class TestServing:
         name = run_container("-p", "127.0.0.1:18801:8000")
         for _ in range(60):
             probe = docker(
-                "exec", name, "python", "-c",
+                "exec",
+                name,
+                "python",
+                "-c",
                 "import urllib.request;"
                 "print(urllib.request.urlopen('http://127.0.0.1:8000/api/health').status)",
                 check=False,
@@ -130,7 +134,10 @@ class TestServing:
             pytest.fail("health endpoint never came up")
 
         page = docker(
-            "exec", name, "python", "-c",
+            "exec",
+            name,
+            "python",
+            "-c",
             "import urllib.request;"
             "print(urllib.request.urlopen('http://127.0.0.1:8000/').read().decode())",
             check=False,
@@ -147,7 +154,10 @@ class TestServing:
         """
         name = run_container()
         declared = docker(
-            "exec", name, "python", "-c",
+            "exec",
+            name,
+            "python",
+            "-c",
             "import inspect, unbagged.api as a;"
             "print(inspect.iscoroutinefunction(a.create_request))",
         ).stdout.strip()
@@ -175,7 +185,10 @@ class TestVersionReachesTheImage:
         declared = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
         # Asked of the app inside the container, not of the host's checkout.
         result = docker(
-            "exec", name, "python", "-c",
+            "exec",
+            name,
+            "python",
+            "-c",
             "from unbagged import __version__; print(__version__)",
         )
         reported = result.stdout.strip()

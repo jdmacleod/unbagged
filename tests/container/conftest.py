@@ -63,9 +63,7 @@ def uid_semantics_are_real() -> bool:
     return platform.system() == "Linux"
 
 
-requires_docker = pytest.mark.skipif(
-    not have_docker(), reason="Docker is not available"
-)
+requires_docker = pytest.mark.skipif(not have_docker(), reason="Docker is not available")
 requires_real_uids = pytest.mark.skipif(
     not uid_semantics_are_real(),
     reason=(
@@ -169,10 +167,15 @@ def empty_app(image, tmp_path) -> Iterator[str]:
     name = f"unbagged-browser-{uuid.uuid4().hex[:8]}"
     try:
         docker(
-            "run", "-d", "--name", name,
-            "-v", f"{data}:/data",
+            "run",
+            "-d",
+            "--name",
+            name,
+            "-v",
+            f"{data}:/data",
             # Empty host port: Docker assigns a free one, read back below.
-            "-p", "127.0.0.1::8000",
+            "-p",
+            "127.0.0.1::8000",
             image,
         )
         # `docker port` answers "<host>:<port>", and the host half varies by
@@ -209,10 +212,7 @@ def page(empty_app):
     """
     playwright_api = pytest.importorskip(
         "playwright.sync_api",
-        reason=(
-            'needs a browser: pip install -e ".[dev,browser]" '
-            "&& playwright install chromium"
-        ),
+        reason=('needs a browser: pip install -e ".[dev,browser]" && playwright install chromium'),
     )
     with playwright_api.sync_playwright() as p:
         instance = p.chromium.launch()

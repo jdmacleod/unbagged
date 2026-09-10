@@ -64,9 +64,7 @@ def test_touch_targets_are_raised_on_coarse_pointers():
     unconditionally: 11 elements under 44px went to 0, smallest 26px to 44px.
     """
     css = "".join(f.read_text(encoding="utf-8") for f in STATIC.rglob("*.css"))
-    assert "pointer:coarse" in css.replace(" ", ""), (
-        "the coarse-pointer touch-target block is gone"
-    )
+    assert "pointer:coarse" in css.replace(" ", ""), "the coarse-pointer touch-target block is gone"
     assert "min-height:44px" in css.replace(" ", "")
 
 
@@ -252,7 +250,7 @@ def test_the_build_inlines_nothing_as_a_data_url():
         # matters is a URL the browser is asked to load. Both forms Vite emits
         # for an inlined asset are covered: url(data:...) in CSS, and a bare
         # data: URI assigned in HTML or as a module's default export.
-        if "url(data:" in text or 'src="data:' in text or "href=\"data:" in text:
+        if "url(data:" in text or 'src="data:' in text or 'href="data:' in text:
             offenders.append(path.relative_to(ROOT).as_posix())
     assert not offenders, (
         f"built assets carry a data: URL, which img-src 'self' blocks: {offenders}. "

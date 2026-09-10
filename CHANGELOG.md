@@ -27,6 +27,22 @@ from a specific response. See `CONTRIBUTING.md`.
 
 ### Changed
 
+- **The formatter the project said it used had never been run.** `CLAUDE.md` has
+  claimed `ruff` for lint and format since the start, but `make lint` only ever
+  ran the check half, so nothing applied or enforced the other one and 64 of 97
+  Python files differed from what it produces. The formatter has now been applied
+  in a single mechanical commit, listed in `.git-blame-ignore-revs` so history
+  stays navigable, and `make lint`, the pre-commit hook and CI all run
+  `ruff format --check` from here on. `make format` applies it. Two things had to
+  be decided rather than swept: the formatter splits calls across lines, which
+  moved two `# pii-scan: allow` suppressions away from the values they protect —
+  caught by the scanner, and fixed by moving them next to the literal — and it
+  joins strings onto lines it will not then split, which pushed six letter
+  phrases past the 100-column limit its own linter enforces. Those are
+  parenthesised now, so both tools are satisfied and the column limit stands.
+  `docs/handoff.md` is excluded from formatting: it is the live contract, and a
+  contract is changed deliberately rather than by a sweep.
+
 - **Four places where the documentation described something the repository does
   not do.** The architecture diagram in the handoff named four views when there
   are six, and stops naming them at all now — it is about where the read path

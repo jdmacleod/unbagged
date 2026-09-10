@@ -94,9 +94,7 @@ class WarningCollector:
         locator: str | None = None,
         severity: Severity = Severity.WARNING,
     ) -> None:
-        self._warnings.append(
-            ParseWarning(message=message, severity=severity, locator=locator)
-        )
+        self._warnings.append(ParseWarning(message=message, severity=severity, locator=locator))
 
     def info(self, message: str, *, locator: str | None = None) -> None:
         self.add(message, locator=locator, severity=Severity.INFO)

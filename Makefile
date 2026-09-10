@@ -8,7 +8,7 @@ PY := $(shell test -x .venv/bin/python && echo .venv/bin/python || echo $(BOOTST
 COMPOSE := docker compose
 DEV_COMPOSE := docker compose -f docker-compose.yml -f docker-compose.dev.yml
 
-.PHONY: help setup setup-frontend build-frontend serve up down logs reset dev test test-frontend test-container setup-browser lint denylist check-pii check-pii-history fixtures fixtures-check lock lock-check brand brand-check icons-check screenshots clean
+.PHONY: help format setup setup-frontend build-frontend serve up down logs reset dev test test-frontend test-container setup-browser lint denylist check-pii check-pii-history fixtures fixtures-check lock lock-check brand brand-check icons-check screenshots clean
 
 help:  ## Show this help
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -77,8 +77,14 @@ setup-browser:  ## Install Chromium for the browser tests
 	$(PY) -m pip install -e ".[browser]"
 	$(PY) -m playwright install chromium -p no:cacheprovider
 
-lint:  ## Lint with ruff
+format:  ## Reformat with ruff
+	$(PY) -m ruff format .
+
+lint:  ## Lint and check formatting with ruff
 	$(PY) -m ruff check .
+# The half that had never run. `ruff check` and `ruff format` police
+# different things, and CLAUDE.md has always claimed both.
+	$(PY) -m ruff format --check .
 
 denylist:  ## Build tools/denylist.txt from your own report (REPORT=path)
 	@test -n "$(REPORT)" || { echo "Usage: make denylist REPORT=data/incoming/your-report.pdf"; exit 1; }

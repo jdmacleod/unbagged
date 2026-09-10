@@ -67,10 +67,10 @@ C2PA_NS = re.compile(r'\s+xmlns:c2pa(?::\w+)?="[^"]*"')
 # already bundled inside favicon.ico, so shipping them would be dead weight on
 # a page that never asks for them.
 SERVED = (
-    "favicon.ico",                 # the tab, everywhere
-    "unbagged-logo-small.svg",     # the tab, where SVG favicons are supported
-    "apple-touch-icon-180.png",    # iOS home screen
-    "unbagged-logo.svg",           # the first-run screen
+    "favicon.ico",  # the tab, everywhere
+    "unbagged-logo-small.svg",  # the tab, where SVG favicons are supported
+    "apple-touch-icon-180.png",  # iOS home screen
+    "unbagged-logo.svg",  # the first-run screen
 )
 
 # PNG chunks that carry pixels or the information needed to draw them. Anything
@@ -127,8 +127,8 @@ def png_chunks(data: bytes) -> list[bytes]:
     chunks: list[bytes] = []
     offset = 8
     while offset + 8 <= len(data):
-        (length,) = struct.unpack(">I", data[offset:offset + 4])
-        kind = data[offset + 4:offset + 8]
+        (length,) = struct.unpack(">I", data[offset : offset + 4])
+        kind = data[offset + 4 : offset + 8]
         chunks.append(kind)
         offset += 12 + length
         if kind == b"IEND":
@@ -148,8 +148,8 @@ def ico_png_streams(data: bytes) -> list[bytes]:
         entry = 6 + index * 16
         if entry + 16 > len(data):
             break
-        size, offset = struct.unpack("<II", data[entry + 8:entry + 16])
-        blob = data[offset:offset + size]
+        size, offset = struct.unpack("<II", data[entry + 8 : entry + 16])
+        blob = data[offset : offset + size]
         if blob.startswith(b"\x89PNG\r\n\x1a\n"):
             streams.append(blob)
     return streams
@@ -167,15 +167,19 @@ def uncleanliness(name: str, data: bytes) -> list[str]:
         text = data.decode("utf-8", "replace")
         faults.extend(f"carries {why}" for pattern, why in SVG_FORBIDDEN if pattern.search(text))
     elif name.endswith(".png"):
-        extra = sorted({c.decode("ascii", "replace") for c in png_chunks(data)} -
-                       {c.decode("ascii") for c in PNG_PIXEL_CHUNKS})
+        extra = sorted(
+            {c.decode("ascii", "replace") for c in png_chunks(data)}
+            - {c.decode("ascii") for c in PNG_PIXEL_CHUNKS}
+        )
         faults.extend(f"carries a {kind} chunk" for kind in extra)
     elif name.endswith(".ico"):
         if b"c2pa" in data:
             faults.append("carries a c2pa reference")
         for index, stream in enumerate(ico_png_streams(data)):
-            extra = sorted({c.decode("ascii", "replace") for c in png_chunks(stream)} -
-                           {c.decode("ascii") for c in PNG_PIXEL_CHUNKS})
+            extra = sorted(
+                {c.decode("ascii", "replace") for c in png_chunks(stream)}
+                - {c.decode("ascii") for c in PNG_PIXEL_CHUNKS}
+            )
             faults.extend(f"image {index} carries a {kind} chunk" for kind in extra)
     return faults
 
@@ -190,8 +194,13 @@ def png_pixels(data: bytes) -> tuple:
 
     with Image.open(io.BytesIO(data)) as image:
         image.load()
-        return (image.mode, image.size, image.tobytes(),
-                tuple(image.getpalette() or ()), image.info.get("transparency"))
+        return (
+            image.mode,
+            image.size,
+            image.tobytes(),
+            tuple(image.getpalette() or ()),
+            image.info.get("transparency"),
+        )
 
 
 def equivalent(name: str, produced: bytes, committed: bytes) -> bool:
@@ -315,8 +324,11 @@ def run(check: bool = False) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--check", action="store_true",
-                        help="fail if a served asset differs from what the source produces")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="fail if a served asset differs from what the source produces",
+    )
     return run(check=parser.parse_args(argv).check)
 
 

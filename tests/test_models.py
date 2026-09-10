@@ -92,9 +92,7 @@ class TestParseResult:
         # is what this method exists to police.
         result = ParseResult(
             request=META,
-            disclosures=tuple(
-                Disclosure(c, DisclosureStatus.ABSENT) for c in DisclosureCategory
-            ),
+            disclosures=tuple(Disclosure(c, DisclosureStatus.ABSENT) for c in DisclosureCategory),
         )
         assert result.missing_categories() == ()
 

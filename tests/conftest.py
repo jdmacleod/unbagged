@@ -15,7 +15,12 @@ import pytest
 
 FIXTURE = (
     Path(__file__).parent.parent
-    / "src" / "unbagged" / "adapters" / "kroger" / "fixtures" / "synthetic_report.txt"
+    / "src"
+    / "unbagged"
+    / "adapters"
+    / "kroger"
+    / "fixtures"
+    / "synthetic_report.txt"
 )
 
 

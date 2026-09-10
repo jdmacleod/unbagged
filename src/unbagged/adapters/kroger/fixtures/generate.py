@@ -42,8 +42,14 @@ PLACEHOLDER_UPC = "00010000080000"  # pii-scan: allow placeholder UPC, not an id
 # Street names that do not exist anywhere, so a fabricated address cannot
 # accidentally name a real household.
 FICTIONAL_STREETS = (
-    "Thistlewick Row", "Kelmarsh Bend", "Ombersley Reach", "Farrowgate Close",
-    "Nether Quill Walk", "Pennywhistle Bank", "Yarrowmede Rise", "Cobbleshaw Mews",
+    "Thistlewick Row",
+    "Kelmarsh Bend",
+    "Ombersley Reach",
+    "Farrowgate Close",
+    "Nether Quill Walk",
+    "Pennywhistle Bank",
+    "Yarrowmede Rise",
+    "Cobbleshaw Mews",
 )
 
 # The catalogue is built rather than listed: the reference dataset had roughly
@@ -51,57 +57,136 @@ FICTIONAL_STREETS = (
 # price-history view look like noise instead of a personal inflation series.
 DEPARTMENTS = (
     # (department, [(item, low, high)], brands)
-    ("PRODUCE", (
-        ("BANANAS", 0.59, 0.89), ("HASS AVOCADO", 0.89, 2.49), ("ROMA TOMATO", 1.19, 2.99),
-        ("GALA APPLE", 1.29, 2.79), ("BABY CARROT", 1.09, 2.29), ("BABY SPINACH", 2.49, 4.49),
-        ("BROCCOLI CROWN", 1.49, 3.19), ("RED ONION", 0.99, 2.19), ("RUSSET POTATO", 3.49, 6.99),
-        ("SEEDLESS GRAPE", 2.99, 5.99), ("STRAWBERRY", 2.49, 5.49), ("BLUEBERRY PINT", 2.99, 6.49),
-        ("ROMAINE HEART", 2.29, 4.29), ("BELL PEPPER", 0.99, 2.49), ("LEMON", 0.59, 1.29),
-    ), ("", "ORGANIC", "SIMPLE TRUTH ORG")),
-    ("DAIRY", (
-        ("2% MILK", 2.79, 4.99), ("WHOLE MILK", 2.89, 5.19), ("LARGE EGGS", 2.19, 6.49),
-        ("SHRED CHEDDAR", 2.19, 4.29), ("GREEK YOGURT", 3.99, 6.79), ("BUTTER", 3.49, 6.99),
-        ("SOUR CREAM", 1.79, 3.29), ("CREAM CHEESE", 1.99, 3.79), ("HALF AND HALF", 1.99, 3.99),
-        ("STRING CHEESE", 3.29, 5.99),
-    ), ("KRO", "SIMPLE TRUTH", "PRIVATE SELECTION")),
-    ("MEAT", (
-        ("CHICKEN BREAST", 3.99, 12.49), ("GROUND BEEF 80/20", 4.49, 9.99),
-        ("PORK CHOP", 3.29, 8.49), ("SALMON FILLET", 8.99, 16.99), ("BACON", 4.99, 9.49),
-        ("SIRLOIN STEAK", 7.99, 15.99), ("CHICKEN THIGH", 2.49, 6.99),
-        ("GROUND TURKEY", 3.99, 7.49), ("DELI TURKEY", 4.49, 8.99),
-    ), ("KRO", "HERITAGE FARM", "PRIVATE SELECTION")),
-    ("GROCERY", (
-        ("WHOLE WHEAT BREAD", 1.99, 3.99), ("SPAGHETTI", 0.99, 2.49),
-        ("MARINARA SAUCE", 1.79, 3.99), ("PEANUT BUTTER", 2.49, 4.99),
-        ("HONEY NUT CEREAL", 3.29, 5.99), ("GROUND COFFEE", 5.49, 11.49),
-        ("OLIVE OIL", 6.99, 13.49), ("CANNED TOMATO", 0.89, 2.19),
-        ("BLACK BEANS", 0.79, 1.89), ("WHITE RICE", 2.49, 6.49),
-        ("CHICKEN BROTH", 1.29, 2.99), ("TORTILLA CHIP", 2.49, 4.99),
-        ("SALSA", 2.19, 4.49), ("HONEY", 3.99, 7.99), ("MAPLE SYRUP", 4.99, 9.99),
-    ), ("KRO", "SIMPLE TRUTH", "")),
-    ("FROZEN", (
-        ("PEPPERONI PIZZA", 4.49, 8.99), ("VANILLA ICE CREAM", 3.29, 6.99),
-        ("MIXED VEGETABLE", 1.29, 2.99), ("CHICKEN NUGGET", 4.99, 9.49),
-        ("WAFFLE", 2.29, 4.29), ("FRENCH FRY", 2.49, 4.99),
-    ), ("KRO", "PRIVATE SELECTION", "")),
-    ("BEVERAGE", (
-        ("ORANGE JUICE", 2.79, 5.29), ("SPARKLING WATER", 3.49, 6.99),
-        ("COLA", 4.99, 9.49), ("ICED TEA", 1.99, 3.99), ("SPORTS DRINK", 4.49, 8.99),
-    ), ("KRO", "SIMPLE TRUTH", "")),
-    ("HOUSEHOLD", (
-        ("PAPER TOWEL", 5.99, 11.49), ("BATHROOM TISSUE", 7.49, 14.99),
-        ("LAUNDRY DETERGENT", 8.49, 15.99), ("DISH SOAP", 2.29, 4.49),
-        ("TRASH BAG", 8.99, 16.49), ("ALUMINUM FOIL", 3.49, 6.49),
-        ("SPONGE", 2.49, 4.99),
-    ), ("KRO", "HOME SENSE", "")),
-    ("PERSONAL CARE", (
-        ("TOOTHPASTE", 2.99, 5.49), ("SHAMPOO", 4.49, 9.99), ("BAR SOAP", 3.29, 6.49),
-        ("DEODORANT", 3.49, 6.99), ("HAND SOAP", 2.49, 4.99),
-    ), ("KRO", "SIMPLE TRUTH", "")),
-    ("PET", (
-        ("DRY DOG FOOD", 12.99, 28.99), ("CAT LITTER", 8.49, 16.99),
-        ("DOG TREAT", 3.99, 8.49), ("WET CAT FOOD", 0.79, 1.69),
-    ), ("KRO", "PET PRIDE", "")),
+    (
+        "PRODUCE",
+        (
+            ("BANANAS", 0.59, 0.89),
+            ("HASS AVOCADO", 0.89, 2.49),
+            ("ROMA TOMATO", 1.19, 2.99),
+            ("GALA APPLE", 1.29, 2.79),
+            ("BABY CARROT", 1.09, 2.29),
+            ("BABY SPINACH", 2.49, 4.49),
+            ("BROCCOLI CROWN", 1.49, 3.19),
+            ("RED ONION", 0.99, 2.19),
+            ("RUSSET POTATO", 3.49, 6.99),
+            ("SEEDLESS GRAPE", 2.99, 5.99),
+            ("STRAWBERRY", 2.49, 5.49),
+            ("BLUEBERRY PINT", 2.99, 6.49),
+            ("ROMAINE HEART", 2.29, 4.29),
+            ("BELL PEPPER", 0.99, 2.49),
+            ("LEMON", 0.59, 1.29),
+        ),
+        ("", "ORGANIC", "SIMPLE TRUTH ORG"),
+    ),
+    (
+        "DAIRY",
+        (
+            ("2% MILK", 2.79, 4.99),
+            ("WHOLE MILK", 2.89, 5.19),
+            ("LARGE EGGS", 2.19, 6.49),
+            ("SHRED CHEDDAR", 2.19, 4.29),
+            ("GREEK YOGURT", 3.99, 6.79),
+            ("BUTTER", 3.49, 6.99),
+            ("SOUR CREAM", 1.79, 3.29),
+            ("CREAM CHEESE", 1.99, 3.79),
+            ("HALF AND HALF", 1.99, 3.99),
+            ("STRING CHEESE", 3.29, 5.99),
+        ),
+        ("KRO", "SIMPLE TRUTH", "PRIVATE SELECTION"),
+    ),
+    (
+        "MEAT",
+        (
+            ("CHICKEN BREAST", 3.99, 12.49),
+            ("GROUND BEEF 80/20", 4.49, 9.99),
+            ("PORK CHOP", 3.29, 8.49),
+            ("SALMON FILLET", 8.99, 16.99),
+            ("BACON", 4.99, 9.49),
+            ("SIRLOIN STEAK", 7.99, 15.99),
+            ("CHICKEN THIGH", 2.49, 6.99),
+            ("GROUND TURKEY", 3.99, 7.49),
+            ("DELI TURKEY", 4.49, 8.99),
+        ),
+        ("KRO", "HERITAGE FARM", "PRIVATE SELECTION"),
+    ),
+    (
+        "GROCERY",
+        (
+            ("WHOLE WHEAT BREAD", 1.99, 3.99),
+            ("SPAGHETTI", 0.99, 2.49),
+            ("MARINARA SAUCE", 1.79, 3.99),
+            ("PEANUT BUTTER", 2.49, 4.99),
+            ("HONEY NUT CEREAL", 3.29, 5.99),
+            ("GROUND COFFEE", 5.49, 11.49),
+            ("OLIVE OIL", 6.99, 13.49),
+            ("CANNED TOMATO", 0.89, 2.19),
+            ("BLACK BEANS", 0.79, 1.89),
+            ("WHITE RICE", 2.49, 6.49),
+            ("CHICKEN BROTH", 1.29, 2.99),
+            ("TORTILLA CHIP", 2.49, 4.99),
+            ("SALSA", 2.19, 4.49),
+            ("HONEY", 3.99, 7.99),
+            ("MAPLE SYRUP", 4.99, 9.99),
+        ),
+        ("KRO", "SIMPLE TRUTH", ""),
+    ),
+    (
+        "FROZEN",
+        (
+            ("PEPPERONI PIZZA", 4.49, 8.99),
+            ("VANILLA ICE CREAM", 3.29, 6.99),
+            ("MIXED VEGETABLE", 1.29, 2.99),
+            ("CHICKEN NUGGET", 4.99, 9.49),
+            ("WAFFLE", 2.29, 4.29),
+            ("FRENCH FRY", 2.49, 4.99),
+        ),
+        ("KRO", "PRIVATE SELECTION", ""),
+    ),
+    (
+        "BEVERAGE",
+        (
+            ("ORANGE JUICE", 2.79, 5.29),
+            ("SPARKLING WATER", 3.49, 6.99),
+            ("COLA", 4.99, 9.49),
+            ("ICED TEA", 1.99, 3.99),
+            ("SPORTS DRINK", 4.49, 8.99),
+        ),
+        ("KRO", "SIMPLE TRUTH", ""),
+    ),
+    (
+        "HOUSEHOLD",
+        (
+            ("PAPER TOWEL", 5.99, 11.49),
+            ("BATHROOM TISSUE", 7.49, 14.99),
+            ("LAUNDRY DETERGENT", 8.49, 15.99),
+            ("DISH SOAP", 2.29, 4.49),
+            ("TRASH BAG", 8.99, 16.49),
+            ("ALUMINUM FOIL", 3.49, 6.49),
+            ("SPONGE", 2.49, 4.99),
+        ),
+        ("KRO", "HOME SENSE", ""),
+    ),
+    (
+        "PERSONAL CARE",
+        (
+            ("TOOTHPASTE", 2.99, 5.49),
+            ("SHAMPOO", 4.49, 9.99),
+            ("BAR SOAP", 3.29, 6.49),
+            ("DEODORANT", 3.49, 6.99),
+            ("HAND SOAP", 2.49, 4.99),
+        ),
+        ("KRO", "SIMPLE TRUTH", ""),
+    ),
+    (
+        "PET",
+        (
+            ("DRY DOG FOOD", 12.99, 28.99),
+            ("CAT LITTER", 8.49, 16.99),
+            ("DOG TREAT", 3.99, 8.49),
+            ("WET CAT FOOD", 0.79, 1.69),
+        ),
+        ("KRO", "PET PRIDE", ""),
+    ),
 )
 
 # Sizes are per-department so the catalogue reads like a shelf rather than a
@@ -177,11 +262,11 @@ CATALOGUE = build_catalogue()
 # measured real shape above; see tests/test_fixture_shape.py, which fails if a
 # change to this drifts the fixture back off it.
 SHELF_WEIGHTS = (
-    (0.004, 90.0),   # ~10 products: the weekly staples, bought 12-22 times
-    (0.019, 30.0),   # ~38 more: the regular core
-    (0.080, 7.0),    # ~153: bought occasionally
-    (0.600, 1.0),    # ~1300: the tail, mostly bought once
-    (1.000, 0.0),    # the rest of the shelf, never bought
+    (0.004, 90.0),  # ~10 products: the weekly staples, bought 12-22 times
+    (0.019, 30.0),  # ~38 more: the regular core
+    (0.080, 7.0),  # ~153: bought occasionally
+    (0.600, 1.0),  # ~1300: the tail, mostly bought once
+    (1.000, 0.0),  # the rest of the shelf, never bought
 )
 
 
@@ -229,23 +314,39 @@ PROPENSITY_AXES = (
 )
 
 ORDINAL_1_7 = (
-    "1 - Very Unlikely", "2 - Unlikely", "3 - Somewhat Unlikely", "4 - Neutral",
-    "5 - Somewhat Likely", "6 - Likely", "7 - Very Likely",
+    "1 - Very Unlikely",
+    "2 - Unlikely",
+    "3 - Somewhat Unlikely",
+    "4 - Neutral",
+    "5 - Somewhat Likely",
+    "6 - Likely",
+    "7 - Very Likely",
 )
 
 INCOME_BANDS = (
-    "1 - Under $25,000", "2 - $25,000-$49,999", "3 - $50,000-$74,999",
-    "4 - $75,000-$99,999", "5 - $100,000-$149,999", "6 - $150,000-$199,999",
+    "1 - Under $25,000",
+    "2 - $25,000-$49,999",
+    "3 - $50,000-$74,999",
+    "4 - $75,000-$99,999",
+    "5 - $100,000-$149,999",
+    "6 - $150,000-$199,999",
     "7 - $200,000+",
 )
 
 EDUCATION_LEVELS = (
-    "High School", "Some College", "Bachelors Degree", "Graduate Degree",
+    "High School",
+    "Some College",
+    "Bachelors Degree",
+    "Graduate Degree",
 )
 
 HOUSEHOLD_COMPOSITIONS = (
-    "Single, No Children", "Couple, No Children", "Family with Young Children",
-    "Family with Teens", "Multi-Generational", "Empty Nesters",
+    "Single, No Children",
+    "Couple, No Children",
+    "Family with Young Children",
+    "Family with Teens",
+    "Multi-Generational",
+    "Empty Nesters",
 )
 
 PROSE_INTRO = """\
@@ -359,9 +460,7 @@ def _identity_blob(fake: Faker, rng: random.Random, loyalty: str) -> dict:
                         },
                     }
                 ],
-                "attributes": [
-                    {"name": "CPA Data Request Date", "value": "2026-01-04 00:00:00"}
-                ],
+                "attributes": [{"name": "CPA Data Request Date", "value": "2026-01-04 00:00:00"}],
             }
         ],
         "groups": [
@@ -432,12 +531,15 @@ def _inference_blob(rng: random.Random) -> dict:
                 "Gender of Individual": rng.choice(("M", "F", "U")),
                 "Likelihood of Being in-the-Market for a New/Used Auto "
                 "(7=Most Likely; 1=Least Likely)": str(rng.randrange(1, 8)),
-                "Likelihood of Going on a Cruise (7=Most Likely; 1=Least Likely)":
-                    str(rng.randrange(1, 8)),
-                "Likelihood of Traveling Domestically (7=Most Likely; 1=Least Likely)":
-                    str(rng.randrange(1, 8)),
-                "Likelihood of Traveling Internationally "
-                "(7=Most Likely; 1=Least Likely)": str(rng.randrange(1, 8)),
+                "Likelihood of Going on a Cruise (7=Most Likely; 1=Least Likely)": str(
+                    rng.randrange(1, 8)
+                ),
+                "Likelihood of Traveling Domestically (7=Most Likely; 1=Least Likely)": str(
+                    rng.randrange(1, 8)
+                ),
+                "Likelihood of Traveling Internationally (7=Most Likely; 1=Least Likely)": str(
+                    rng.randrange(1, 8)
+                ),
                 "Year of Birth for Individual": str(rng.randrange(1948, 2002)),
             }
         ],
@@ -500,9 +602,7 @@ def _sold_by_weight(upc: str) -> bool:
     return int(upc[-3:]) % 12 == 0
 
 
-def _pick(
-    rng: random.Random, seen: set[str] | None = None
-) -> tuple[str, str, float] | None:
+def _pick(rng: random.Random, seen: set[str] | None = None) -> tuple[str, str, float] | None:
     """One product off the shelf, weighted so the tail is long.
 
     `rng.choice` here is what produced a fixture in which the median product was
@@ -625,9 +725,7 @@ def _basket(rng: random.Random, when: datetime, index: int, origin: datetime) ->
     }
 
 
-def _purchase_blob(
-    rng: random.Random, start: datetime, months: int, loyalty: str
-) -> dict:
+def _purchase_blob(rng: random.Random, start: datetime, months: int, loyalty: str) -> dict:
     baskets = []
     when = start
     index = 1
@@ -638,8 +736,7 @@ def _purchase_blob(
             break
         baskets.append(_basket(rng, _shopping_time(rng, when), index, start))
         index += 1
-    return {"customer": [{"subtaskid": _uuid(rng), "loyaltyno": loyalty,
-                          "basket": baskets}]}
+    return {"customer": [{"subtaskid": _uuid(rng), "loyaltyno": loyalty, "basket": baskets}]}
 
 
 def _interleave_page_numbers(text: str, lines_per_page: int = LINES_PER_PAGE) -> str:

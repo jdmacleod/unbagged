@@ -109,8 +109,11 @@ def skeleton_text(text: str) -> list[str]:
     """Keep punctuation, whitespace and line breaks; mask everything else."""
     out = []
     for line in text.splitlines():
-        out.append(ALNUM_RUN.sub(lambda m: ("a" if m.group(0)[0].isalpha() else "9")
-                                 + f"{len(m.group(0))}", line))
+        out.append(
+            ALNUM_RUN.sub(
+                lambda m: ("a" if m.group(0)[0].isalpha() else "9") + f"{len(m.group(0))}", line
+            )
+        )
     return out
 
 
@@ -123,13 +126,15 @@ def skeleton_csv(text: str) -> dict[str, Any]:
     columns = []
     for i, name in enumerate(header):
         values = [r[i] for r in body if i < len(r)]
-        columns.append({
-            # A header is a field name in every CSV anyone has sent, but it costs
-            # nothing to route it through the same rule as an object key.
-            "name": skeleton_key(name),
-            "non_empty": sum(1 for v in values if v.strip()),
-            "sample_shape": skeleton_string(values[0]) if values else None,
-        })
+        columns.append(
+            {
+                # A header is a field name in every CSV anyone has sent, but it costs
+                # nothing to route it through the same rule as an object key.
+                "name": skeleton_key(name),
+                "non_empty": sum(1 for v in values if v.strip()),
+                "sample_shape": skeleton_string(values[0]) if values else None,
+            }
+        )
     return {"format": "csv", "rows": len(body), "columns": columns}
 
 
@@ -155,9 +160,7 @@ def skeleton_spreadsheet(text: str) -> dict[str, Any]:
         # header, so taking the first row reports the sheet's title as its
         # column names. The header is the first row that is actually a row of
         # columns.
-        head_at = next(
-            (i for i, row in enumerate(table.rows[:4]) if len(row) > 1), 0
-        )
+        head_at = next((i for i, row in enumerate(table.rows[:4]) if len(row) > 1), 0)
         header = table.rows[head_at].cells if table.rows else ()
         body = table.rows[head_at + 1 :]
         sheets.append(
@@ -169,12 +172,8 @@ def skeleton_spreadsheet(text: str) -> dict[str, Any]:
                 # The widest row, which is what a reader has to allocate for.
                 "columns": max((len(row) for row in table.rows), default=0),
                 "header": [skeleton_key(cell or "") for cell in header],
-                "sparse_rows": sum(
-                    1 for row in body if any(cell is None for cell in row.cells)
-                ),
-                "cell_types": sorted(
-                    {_leaf_kind(cell) for row in body for cell in row.cells}
-                ),
+                "sparse_rows": sum(1 for row in body if any(cell is None for cell in row.cells)),
+                "cell_types": sorted({_leaf_kind(cell) for row in body for cell in row.cells}),
             }
         )
     return {"format": "spreadsheetml", "sheets": sheets}

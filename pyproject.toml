@@ -50,7 +50,15 @@ dev = [
     "pillow>=11",
     "pytest>=8.0",
     "pre-commit>=3.7",
-    "ruff>=0.5",
+    # Capped, and coupled to the `rev` in .pre-commit-config.yaml. `ruff format`
+    # output is version-dependent: stable style changes land in minor releases.
+    # CI installs `.[dev]` and runs `ruff format --check`, while the pre-commit
+    # hook runs its own pinned build, so an uncapped floor here means the two
+    # eventually format differently and CI rejects what the hook just wrote.
+    # Nothing bumps either automatically — dependabot has no pre-commit
+    # ecosystem, and its pip entry covers /docker only — so both move by hand,
+    # together.
+    "ruff>=0.16.6,<0.17",
 ]
 
 # A browser, only for the layout regression test. Its own group because it
@@ -84,6 +92,18 @@ markers = [
 line-length = 100
 target-version = "py312"
 src = ["src", "tools", "tests"]
+
+[tool.ruff.format]
+# Ruff formats Python blocks inside markdown too, not just .py files. The
+# adapter guide is formatted along with everything else — its snippets exist to
+# show a contributor what house style looks like, and a snippet that fails the
+# gate teaches the wrong thing.
+#
+# `docs/handoff.md` is excluded. CLAUDE.md marks its §§0-7 as the live contract,
+# cited from `adapters/base.py`, `models.py`, `db.py` and the tests; its snippets
+# align trailing comments so the spec reads as a table. A contract is changed
+# deliberately, never by a formatting sweep.
+exclude = ["docs/handoff.md"]
 
 [tool.ruff.lint]
 # S is flake8-bandit. It was not selected before, which meant the `# noqa: S608`

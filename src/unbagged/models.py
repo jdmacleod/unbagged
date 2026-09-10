@@ -147,7 +147,7 @@ class SourceDocument:
     sha256: str
     media_type: str | None = None
     page_count: int | None = None
-    path: str | None = None      # inside the data volume; never persisted to the DB
+    path: str | None = None  # inside the data volume; never persisted to the DB
     id: int | None = None
 
 
@@ -156,7 +156,7 @@ class SourceBundle:
     """Everything the user handed us for one request."""
 
     documents: tuple[SourceDocument, ...] = ()
-    declared_retailer: str | None = None   # user hint from the upload form, may be wrong
+    declared_retailer: str | None = None  # user hint from the upload form, may be wrong
 
     def text_documents(self) -> tuple[SourceDocument, ...]:
         return tuple(d for d in self.documents if d.path)
@@ -321,9 +321,9 @@ class SniffResult:
 
 
 class RetailerAdapter(Protocol):
-    retailer_id: str        # "kroger"
-    display_name: str       # "Kroger"
-    schema_version: int     # bump when the retailer changes their format
+    retailer_id: str  # "kroger"
+    display_name: str  # "Kroger"
+    schema_version: int  # bump when the retailer changes their format
 
     def sniff(self, bundle: SourceBundle) -> float | SniffResult:
         """Confidence 0.0-1.0 that this adapter handles this bundle.

@@ -56,9 +56,14 @@ def sample_result(doc_id: int | None = 1) -> ParseResult:
             adapter_schema_version=KROGER_SCHEMA_VERSION,
         ),
         identities=(
-            # pii-scan: allow synthetic loyalty number, generated not observed
-            Identity(IdType.LOYALTY_CARD, "0000000000001", Scope.INDIVIDUAL,
-                     first_seen="2024-02-03T00:00:00Z", provenance=prov),
+            Identity(
+                IdType.LOYALTY_CARD,
+                # pii-scan: allow synthetic loyalty number, generated not observed
+                "0000000000001",
+                Scope.INDIVIDUAL,
+                first_seen="2024-02-03T00:00:00Z",
+                provenance=prov,
+            ),
             Identity(IdType.HOUSEHOLD, "HH-000001", Scope.HOUSEHOLD, provenance=prov),
             Identity(IdType.EMAIL, "shopper@example.com", Scope.INDIVIDUAL, provenance=prov),
         ),
@@ -71,26 +76,42 @@ def sample_result(doc_id: int | None = 1) -> ParseResult:
                 channel=Channel.IN_STORE,
                 tender_type="CREDIT",
                 total_pre_discount=41.20,
-                provenance=Provenance(source_document_id=doc_id, page=5,
-                                      locator="$.customer[0].basket[0]"),
+                provenance=Provenance(
+                    source_document_id=doc_id, page=5, locator="$.customer[0].basket[0]"
+                ),
                 items=(
                     # `loyalty_amt` is the PRICE the line cost, not a discount.
                     # This was 2.49 / 0.30, which read as a price is an 88%-off
                     # banana, so every assertion built on it was checking the
                     # arithmetic against a purchase nobody made. 2.49 shelf,
                     # 2.29 paid, 0.20 saved.
-                    TxnItem("ORGANIC BANANAS", upc="00000004011", quantity=1.0,
-                            retail_amt=2.49, loyalty_amt=2.29),
+                    TxnItem(
+                        "ORGANIC BANANAS",
+                        upc="00000004011",
+                        quantity=1.0,
+                        retail_amt=2.49,
+                        loyalty_amt=2.29,
+                    ),
                     # A full-price line: most lines are, and `loyalty_amt`
                     # equalling `retail_amt` is the case that broke when the
                     # field was read as a discount.
-                    TxnItem("WHOLE MILK GAL", upc="00011110002", quantity=1.0,
-                            retail_amt=4.19, loyalty_amt=4.19),
+                    TxnItem(
+                        "WHOLE MILK GAL",
+                        upc="00011110002",
+                        quantity=1.0,
+                        retail_amt=4.19,
+                        loyalty_amt=4.19,
+                    ),
                     # The placeholder row Kroger emits constantly. It is kept, not
                     # filtered, so the count of real products stays honest.
-                    # pii-scan: allow known placeholder UPC, not an identifier
-                    TxnItem("UNKNOWN", upc="00010000080000", quantity=0.0,
-                            retail_amt=0.0, loyalty_amt=0.0),
+                    TxnItem(
+                        "UNKNOWN",
+                        # pii-scan: allow known placeholder UPC, not an identifier
+                        upc="00010000080000",
+                        quantity=0.0,
+                        retail_amt=0.0,
+                        loyalty_amt=0.0,
+                    ),
                 ),
             ),
             Transaction(
@@ -99,8 +120,9 @@ def sample_result(doc_id: int | None = 1) -> ParseResult:
                 store_code="00318",
                 channel=Channel.IN_STORE,
                 total_pre_discount=-6.99,
-                provenance=Provenance(source_document_id=doc_id, page=6,
-                                      locator="$.customer[0].basket[1]"),
+                provenance=Provenance(
+                    source_document_id=doc_id, page=6, locator="$.customer[0].basket[1]"
+                ),
                 # Returns are real transactions and are never filtered out.
                 items=(TxnItem("RETURN WHOLE MILK", upc="00011110001", retail_amt=-6.99),),
             ),

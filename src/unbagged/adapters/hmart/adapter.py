@@ -215,9 +215,7 @@ class HMartAdapter:
                     transactions.append(txn)
                 card = row.value(columns["smartcard"])
                 if card and card not in cards:
-                    cards[card] = _provenance(
-                        table, row.number, columns["smartcard"], document_id
-                    )
+                    cards[card] = _provenance(table, row.number, columns["smartcard"], document_id)
 
         # Sorted, because a bundle of several files arrives in upload order and
         # a timeline built from it would otherwise jump between them.
@@ -247,9 +245,7 @@ class HMartAdapter:
                 display_name=DISPLAY_NAME,
                 period_start=first[:10] if first else None,
                 period_end=(
-                    max(t.occurred_at for t in transactions)[:10]
-                    if transactions
-                    else None
+                    max(t.occurred_at for t in transactions)[:10] if transactions else None
                 ),
                 adapter_schema_version=SCHEMA_VERSION,
             ),
@@ -274,9 +270,7 @@ class HMartAdapter:
         )
 
 
-def _provenance(
-    table: Table, row: int, column: int, document_id: int | None
-) -> Provenance:
+def _provenance(table: Table, row: int, column: int, document_id: int | None) -> Provenance:
     """Where a value came from.
 
     `page` is None and stays None: a spreadsheet has no printed pages, and
@@ -317,8 +311,7 @@ def _check_declared(table: Table, warnings: WarningCollector) -> None:
         widest = max(len(row) for row in table.rows)
         if widest > table.declared_columns:
             warnings.info(
-                f"The sheet declares {table.declared_columns} columns and a row "
-                f"reaches {widest}.",
+                f"The sheet declares {table.declared_columns} columns and a row reaches {widest}.",
                 locator=table.name,
             )
 
@@ -371,9 +364,7 @@ def _transaction(
         # data does not support — the same call the Kroger adapter makes.
         channel=None,
         total_pre_discount=amount,
-        provenance=_provenance(
-            table, row.number, columns["amount"], document_id
-        ),
+        provenance=_provenance(table, row.number, columns["amount"], document_id),
     )
 
 
@@ -423,8 +414,7 @@ def _disclosures(
             category=DisclosureCategory.SPECIFIC_PIECES,
             status=DisclosureStatus.PARTIAL,
             evidence=(
-                f"{len(transactions)} visits, each with a date, a store and a "
-                "total. No line items."
+                f"{len(transactions)} visits, each with a date, a store and a total. No line items."
             ),
             notes=(
                 "The response says what each visit cost and never what was in "

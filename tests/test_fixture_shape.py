@@ -61,9 +61,7 @@ class TestLongTail:
 
         from tools import make_fixtures
 
-        module = make_fixtures.load(
-            Path("src/unbagged/adapters/kroger/fixtures/generate.py")
-        )
+        module = make_fixtures.load(Path("src/unbagged/adapters/kroger/fixtures/generate.py"))
         assert len(module.CATALOGUE) > 2000
 
 
@@ -114,8 +112,7 @@ class TestSizeTiersAreAllExercised:
 
     def test_every_tier_has_members(self, purchases):
         populations = {
-            lo: sum(1 for n in purchases.values() if lo <= n <= hi)
-            for lo, hi in self.TIERS
+            lo: sum(1 for n in purchases.values() if lo <= n <= hi) for lo, hi in self.TIERS
         }
         empty = [lo for lo, count in populations.items() if count < 3]
         assert not empty, f"tiers with fewer than 3 members: {empty} ({populations})"

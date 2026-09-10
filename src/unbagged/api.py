@@ -80,14 +80,16 @@ app = FastAPI(
 # executes its script in this origin, next to report data in the same browser
 # profile. `tools/build_brand.py --check` already refuses a served SVG carrying
 # a script, so this is defence that does not depend on that check being right.
-CONTENT_SECURITY_POLICY = "; ".join((
-    "default-src 'self'",
-    "img-src 'self'",
-    "object-src 'none'",
-    "base-uri 'none'",
-    "frame-ancestors 'none'",
-    "form-action 'none'",
-))
+CONTENT_SECURITY_POLICY = "; ".join(
+    (
+        "default-src 'self'",
+        "img-src 'self'",
+        "object-src 'none'",
+        "base-uri 'none'",
+        "frame-ancestors 'none'",
+        "form-action 'none'",
+    )
+)
 
 SECURITY_HEADERS: tuple[tuple[bytes, bytes], ...] = (
     (b"content-security-policy", CONTENT_SECURITY_POLICY.encode("ascii")),
@@ -372,9 +374,7 @@ def price_history(
     limit: Annotated[int, Query(ge=1, le=2000)] = 200,
 ) -> dict[str, Any]:
     _require_request(conn, request_id)
-    return views.price_history(
-        conn, request_id, min_observations=min_observations, limit=limit
-    )
+    return views.price_history(conn, request_id, min_observations=min_observations, limit=limit)
 
 
 @app.get("/api/requests/{request_id}/product-index")
@@ -386,9 +386,7 @@ def product_index(
     limit: Annotated[int, Query(ge=1, le=5000)] = views.INDEX_LIMIT,
 ) -> dict[str, Any]:
     _require_request(conn, request_id)
-    return views.product_index(
-        conn, request_id, query=q, min_purchases=min_purchases, limit=limit
-    )
+    return views.product_index(conn, request_id, query=q, min_purchases=min_purchases, limit=limit)
 
 
 @app.get("/api/requests/{request_id}/follow-up-letter")
@@ -428,9 +426,7 @@ def mount_frontend(application: FastAPI = app) -> bool:
         return False
 
     if (root / "assets").is_dir():
-        application.mount(
-            "/assets", StaticFiles(directory=root / "assets"), name="assets"
-        )
+        application.mount("/assets", StaticFiles(directory=root / "assets"), name="assets")
 
     # Every file the bundle contains, mapped from its request path to the Path
     # that serves it. The request then only *selects* an entry, so no path is

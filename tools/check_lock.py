@@ -106,8 +106,7 @@ def findings() -> list[str]:
     for name, spec in declared():
         if name not in pins:
             problems.append(
-                f"{name} is declared in pyproject.toml and absent from the lock. "
-                "Run `make lock`."
+                f"{name} is declared in pyproject.toml and absent from the lock. Run `make lock`."
             )
             continue
         version, _ = pins[name]

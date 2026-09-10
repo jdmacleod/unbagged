@@ -115,7 +115,7 @@ class ExtractedDocument:
         starts, offset = [], 0
         for page in self.pages:
             starts.append(offset)
-            offset += len(page) + 1   # the joining newline
+            offset += len(page) + 1  # the joining newline
         return tuple(starts)
 
     def page_of(self, offset: int) -> int:
@@ -199,9 +199,7 @@ class Table:
         wrong number of columns. The projection is lossy by design and is not a
         data source; `rows` is.
         """
-        return "\n".join(
-            "\t".join(_flatten(cell) for cell in row.cells) for row in self.rows
-        )
+        return "\n".join("\t".join(_flatten(cell) for cell in row.cells) for row in self.rows)
 
 
 def _flatten(cell: str | None) -> str:
@@ -312,14 +310,10 @@ def read_tables(
                         row_number = 0
                     elif tag == "Table":
                         declared_rows = _as_int(element.get(f"{{{SS}}}ExpandedRowCount"))
-                        declared_columns = _as_int(
-                            element.get(f"{{{SS}}}ExpandedColumnCount")
-                        )
+                        declared_columns = _as_int(element.get(f"{{{SS}}}ExpandedColumnCount"))
                 elif event == "end":
                     if tag == "Row":
-                        row_number = _as_int(element.get(f"{{{SS}}}Index")) or (
-                            row_number + 1
-                        )
+                        row_number = _as_int(element.get(f"{{{SS}}}Index")) or (row_number + 1)
                         rows.append(Row(cells=_cells_of(element), number=row_number))
                         element.clear()
                         if max_rows is not None and len(rows) >= max_rows:
@@ -355,10 +349,7 @@ def read_tables(
 def _malformed_message(source: str, exc: ET.ParseError) -> str:
     """Two different problems wear the same exception, and the fixes differ."""
     if not source.rstrip().endswith(">"):
-        return (
-            "This file is incomplete; it ends part way through. Download it "
-            "again and re-upload."
-        )
+        return "This file is incomplete; it ends part way through. Download it again and re-upload."
     return f"This file is not readable as a spreadsheet ({exc})."
 
 
@@ -449,9 +440,7 @@ def extract_text_file(path: Path) -> tuple[str, ...]:
     return (content,)
 
 
-def extract_spreadsheet(
-    path: Path, max_rows: int | None = None
-) -> tuple[tuple[Table, ...], bool]:
+def extract_spreadsheet(path: Path, max_rows: int | None = None) -> tuple[tuple[Table, ...], bool]:
     """Read a SpreadsheetML file into sheets."""
     try:
         source = path.read_text(encoding="utf-8", errors="replace")

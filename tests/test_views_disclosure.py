@@ -61,9 +61,7 @@ def _save(
     is a response nothing has graded.
     """
     result = ParseResult(
-        request=RequestMeta(
-            retailer_id=retailer, display_name=retailer.title(), statute="CCPA"
-        ),
+        request=RequestMeta(retailer_id=retailer, display_name=retailer.title(), statute="CCPA"),
         transactions=tuple(
             Transaction(occurred_at=WHEN, total_pre_discount=10.0, provenance=PROV)
             for _ in range(purchases)
@@ -166,9 +164,7 @@ class TestCompareCounts:
         zero would turn a disclosed 1 into an em dash, which is the same
         overclaim pointing the other way.
         """
-        request_id = _save(
-            conn, DisclosureStatus.PARTIAL, purchases=3, identities=1
-        )
+        request_id = _save(conn, DisclosureStatus.PARTIAL, purchases=3, identities=1)
         row = _row(conn, request_id)
         assert row["identifier_count"] == 1, "a disclosed fact, whatever the grade"
         assert row["inference_count"] is None, "on the same column, at the same time"

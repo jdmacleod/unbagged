@@ -20,18 +20,23 @@ def main(argv: list[str] | None = None) -> int:
         "sanitize",
         help="reduce a report to a structure-only skeleton safe to attach to an issue",
     )
-    san.add_argument("file", type=Path,
-                     help="the report to reduce; PDF and zip are not read, unzip first")
+    san.add_argument(
+        "file", type=Path, help="the report to reduce; PDF and zip are not read, unzip first"
+    )
     san.add_argument("-o", "--output", type=Path, help="default: stdout")
 
     serve = sub.add_parser("serve", help="run the local web app")
     # 127.0.0.1, not 0.0.0.0. The alternative is publishing two years of someone's
     # groceries to their LAN, which has to be a deliberate choice.
-    serve.add_argument("--host", default="127.0.0.1",
-                       help="default 127.0.0.1; use 0.0.0.0 only if you mean it")
+    serve.add_argument(
+        "--host", default="127.0.0.1", help="default 127.0.0.1; use 0.0.0.0 only if you mean it"
+    )
     serve.add_argument("--port", type=int, default=8000, help="default 8000")
-    serve.add_argument("--reload", action="store_true",
-                       help="restart on code changes; for development, not for running a report")
+    serve.add_argument(
+        "--reload",
+        action="store_true",
+        help="restart on code changes; for development, not for running a report",
+    )
 
     args = parser.parse_args(argv)
 
@@ -45,7 +50,10 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
         uvicorn.run(
-            "unbagged.api:app", host=args.host, port=args.port, reload=args.reload,
+            "unbagged.api:app",
+            host=args.host,
+            port=args.port,
+            reload=args.reload,
             log_level="info",
         )
         return 0

@@ -13,19 +13,21 @@ from unbagged.models import SourceDocument
 
 
 def document(path, **kwargs) -> SourceDocument:
-    return SourceDocument(
-        original_filename=path.name, sha256="0" * 64, path=str(path), **kwargs
-    )
+    return SourceDocument(original_filename=path.name, sha256="0" * 64, path=str(path), **kwargs)
 
 
 @pytest.fixture
 def pdf_path(tmp_path):
     path = tmp_path / "report.pdf"
-    path.write_bytes(build_pdf([
-        "Section 1: Specific Pieces of Personal Information Collected",
-        "Data we hold related to our Loyalty program:",
-        "Information about your purchases:",
-    ]))
+    path.write_bytes(
+        build_pdf(
+            [
+                "Section 1: Specific Pieces of Personal Information Collected",
+                "Data we hold related to our Loyalty program:",
+                "Information about your purchases:",
+            ]
+        )
+    )
     return path
 
 
@@ -106,9 +108,7 @@ class TestExtractAll:
         good = tmp_path / "letter.txt"
         good.write_text("Dear customer,\n")
         missing = tmp_path / "nowhere.txt"
-        extracted = extract_all(
-            (document(pdf_path), document(missing), document(good))
-        )
+        extracted = extract_all((document(pdf_path), document(missing), document(good)))
         assert [e.filename for e in extracted] == ["report.pdf", "letter.txt"]
 
 
@@ -138,30 +138,23 @@ def _row(*values, index: int | None = None) -> str:
         if isinstance(value, tuple):
             column, text = value
             cells += (
-                f'<ss:Cell ss:Index="{column}">'
-                f'<ss:Data ss:Type="String">{text}</ss:Data></ss:Cell>'
+                f'<ss:Cell ss:Index="{column}"><ss:Data ss:Type="String">{text}</ss:Data></ss:Cell>'
             )
         else:
-            cells += (
-                f'<ss:Cell><ss:Data ss:Type="String">{value}</ss:Data></ss:Cell>'
-            )
+            cells += f'<ss:Cell><ss:Data ss:Type="String">{value}</ss:Data></ss:Cell>'
     return f"<ss:Row{at}>{cells}</ss:Row>"
 
 
 class TestSpreadsheet:
     def test_cells_land_at_the_columns_they_declare(self):
         # The whole reason this reader exists rather than a positional one.
-        table = extraction.read_tables(
-            _sheet(_row("a", "b", (4, "d"), "e"))
-        ).tables[0]
+        table = extraction.read_tables(_sheet(_row("a", "b", (4, "d"), "e"))).tables[0]
         assert table.rows[0].cells == ("a", "b", None, "d", "e")
 
     def test_a_row_can_declare_its_own_number(self):
         # ss:Index on a Row skips empty rows above it, and the row number is
         # half of every locator this adapter emits.
-        table = extraction.read_tables(
-            _sheet(_row("a") + _row("z", index=5))
-        ).tables[0]
+        table = extraction.read_tables(_sheet(_row("a") + _row("z", index=5))).tables[0]
         assert [row.number for row in table.rows] == [1, 5]
 
     def test_a_locator_is_an_a1_reference_qualified_by_sheet(self):
@@ -190,9 +183,7 @@ class TestSpreadsheet:
 
     def test_a_document_type_declaration_is_refused(self):
         with pytest.raises(extraction.ExtractionError, match="document type"):
-            extraction.read_tables(
-                '<?xml version="1.0"?><!DOCTYPE r [<!ENTITY a "b">]><r/>'
-            )
+            extraction.read_tables('<?xml version="1.0"?><!DOCTYPE r [<!ENTITY a "b">]><r/>')
 
     def test_a_truncated_document_is_caught_by_closing_the_parser(self):
         # Feeding a half document raises nothing: it is well-formed as far as it

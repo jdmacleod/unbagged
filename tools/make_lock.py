@@ -31,7 +31,7 @@ PLATFORM = "linux/amd64"
 
 DEPENDENCIES_BLOCK = re.compile(r"^dependencies = \[(.*?)^\]", re.S | re.M)
 
-HEADER = '''#
+HEADER = """#
 # The runtime dependency lock for the shipped image. GENERATED — do not hand-edit.
 #
 #     make lock          regenerate from pyproject.toml's [project.dependencies]
@@ -65,7 +65,7 @@ HEADER = '''#
 # A pin nobody bumps decays into an unpatched dependency, which is a worse
 # posture than floors.
 #
-'''
+"""
 
 
 def runtime_requirements() -> list[str]:
@@ -95,9 +95,18 @@ def compile_in_container(workdir: Path) -> Path:
     print(f"make_lock: compiling inside {IMAGE} on {PLATFORM}")
     subprocess.run(
         [
-            "docker", "run", "--rm", "--platform", PLATFORM,
-            "-v", f"{workdir}:/w", "-w", "/w", IMAGE,
-            "sh", "-c",
+            "docker",
+            "run",
+            "--rm",
+            "--platform",
+            PLATFORM,
+            "-v",
+            f"{workdir}:/w",
+            "-w",
+            "/w",
+            IMAGE,
+            "sh",
+            "-c",
             "pip install -q --no-cache-dir pip-tools && "
             "pip-compile --quiet --generate-hashes --strip-extras "
             "--output-file /w/out.txt /w/requirements.in",
@@ -109,7 +118,8 @@ def compile_in_container(workdir: Path) -> Path:
 
 def write_lock(compiled: Path) -> int:
     body = [
-        line for line in compiled.read_text(encoding="utf-8").splitlines()
+        line
+        for line in compiled.read_text(encoding="utf-8").splitlines()
         if line.strip() and not line.lstrip().startswith("#")
     ]
     header = HEADER.format(image=IMAGE, platform=PLATFORM)
@@ -123,6 +133,7 @@ def main() -> int:
         count = write_lock(compiled)
     print(f"make_lock: wrote {LOCK.relative_to(REPO_ROOT)} — {count} packages")
     from tools.check_lock import main as check  # noqa: PLC0415
+
     return check()
 
 

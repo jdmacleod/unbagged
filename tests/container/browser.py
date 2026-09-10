@@ -18,18 +18,12 @@ import pytest
 
 from tests.container.conftest import REPO_ROOT
 
-playwright_expect = pytest.importorskip(
-    "playwright.sync_api", reason="needs a browser"
-).expect
+playwright_expect = pytest.importorskip("playwright.sync_api", reason="needs a browser").expect
 
 KROGER = (
-    REPO_ROOT / "src" / "unbagged" / "adapters" / "kroger"
-    / "fixtures" / "synthetic_report.txt"
+    REPO_ROOT / "src" / "unbagged" / "adapters" / "kroger" / "fixtures" / "synthetic_report.txt"
 )
-HMART = (
-    REPO_ROOT / "src" / "unbagged" / "adapters" / "hmart"
-    / "fixtures" / "synthetic_history.xls"
-)
+HMART = REPO_ROOT / "src" / "unbagged" / "adapters" / "hmart" / "fixtures" / "synthetic_history.xls"
 
 # Boilerplate belonging to no retailer, written here rather than committed
 # because that is exactly what it is for: nothing recognises it, so the fallback

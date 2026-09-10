@@ -18,7 +18,12 @@ from unbagged.models import AdapterError, SourceBundle, SourceDocument
 SS = "urn:schemas-microsoft-com:office:spreadsheet"
 FIXTURE = (
     Path(__file__).parent.parent
-    / "src" / "unbagged" / "adapters" / "hmart" / "fixtures" / "synthetic_history.xls"
+    / "src"
+    / "unbagged"
+    / "adapters"
+    / "hmart"
+    / "fixtures"
+    / "synthetic_history.xls"
 )
 
 
@@ -80,9 +85,7 @@ class TestTheFileIsWrongInSomeWay:
         # a DOCTYPE must precede the root element anyway, so anything past the
         # prolog cannot be one. Padded so the text really is beyond the window
         # rather than merely late in a short file.
-        padding = "".join(
-            row("c", "2024-01-01 00:00:00.0", "b", "1.00", "1") for _ in range(60)
-        )
+        padding = "".join(row("c", "2024-01-01 00:00:00.0", "b", "1.00", "1") for _ in range(60))
         late = sheet(HEADER + padding).replace(
             "</ss:Table>", "<!-- the text <!DOCTYPE x> appears here --></ss:Table>"
         )
@@ -94,25 +97,19 @@ class TestTheSheetIsWrongInSomeWay:
     def test_a_header_with_no_rows_under_it_is_a_finding_not_an_error(self, tmp_path):
         # An export with nothing in it says something about the response. It
         # must not arrive as an exception.
-        parsed = HMartAdapter().parse(
-            SourceBundle(documents=(doc(tmp_path, sheet(HEADER)),))
-        )
+        parsed = HMartAdapter().parse(SourceBundle(documents=(doc(tmp_path, sheet(HEADER)),)))
         assert parsed.transactions == ()
         assert any("no readable purchases" in w.message for w in parsed.warnings)
         assert parsed.missing_categories() == ()
 
     def test_a_renamed_column_is_refused_rather_than_read_positionally(self, tmp_path):
-        renamed = sheet(
-            row("Smartcard", "Date of Purchase", "Store", "Amount", "Point")
-        )
+        renamed = sheet(row("Smartcard", "Date of Purchase", "Store", "Amount", "Point"))
         with pytest.raises(AdapterError, match="does not carry the columns"):
             HMartAdapter().parse(SourceBundle(documents=(doc(tmp_path, renamed),)))
 
     def test_a_row_with_no_date_is_skipped_and_said_so(self, tmp_path):
         body = sheet(HEADER + row("c", "not a date", "b", "1.00", "1"))
-        parsed = HMartAdapter().parse(
-            SourceBundle(documents=(doc(tmp_path, body),))
-        )
+        parsed = HMartAdapter().parse(SourceBundle(documents=(doc(tmp_path, body),)))
         assert parsed.transactions == ()
         assert any("no readable date" in w.message for w in parsed.warnings)
 
@@ -120,9 +117,7 @@ class TestTheSheetIsWrongInSomeWay:
         # The visit happened. Dropping it because one cell is unreadable would
         # lose a fact the response did give.
         body = sheet(HEADER + row("c", "2024-01-01 09:00:00.0", "b", "junk", "1"))
-        parsed = HMartAdapter().parse(
-            SourceBundle(documents=(doc(tmp_path, body),))
-        )
+        parsed = HMartAdapter().parse(SourceBundle(documents=(doc(tmp_path, body),)))
         assert len(parsed.transactions) == 1
         assert parsed.transactions[0].total_pre_discount is None
         assert any("no readable amount" in w.message for w in parsed.warnings)
@@ -134,17 +129,15 @@ class TestTheSheetIsWrongInSomeWay:
             + row("c", "not a date", "b", "2.00", "2")
             + row("c", "2024-01-03 09:00:00.0", "b", "3.00", "3")
         )
-        parsed = HMartAdapter().parse(
-            SourceBundle(documents=(doc(tmp_path, body),))
-        )
+        parsed = HMartAdapter().parse(SourceBundle(documents=(doc(tmp_path, body),)))
         assert len(parsed.transactions) == 2
 
     def test_a_sheet_declaring_more_rows_than_it_has_is_noted(self, tmp_path):
-        body = sheet(HEADER + row("c", "2024-01-01 09:00:00.0", "b", "1.00", "1"),
-                     attrs='ss:ExpandedRowCount="99"')
-        parsed = HMartAdapter().parse(
-            SourceBundle(documents=(doc(tmp_path, body),))
+        body = sheet(
+            HEADER + row("c", "2024-01-01 09:00:00.0", "b", "1.00", "1"),
+            attrs='ss:ExpandedRowCount="99"',
         )
+        parsed = HMartAdapter().parse(SourceBundle(documents=(doc(tmp_path, body),)))
         # The sheet's own declaration is the only free check on whether the
         # reader lost rows, and losing rows silently is the failure that matters.
         assert any("declares 99 rows" in w.message for w in parsed.warnings)
@@ -157,9 +150,7 @@ class TestTheAmountColumn:
     )
     def test_amounts_arrive_as_strings_and_are_coerced(self, tmp_path, text, expected):
         body = sheet(HEADER + row("c", "2024-01-01 09:00:00.0", "b", text, "1"))
-        parsed = HMartAdapter().parse(
-            SourceBundle(documents=(doc(tmp_path, body),))
-        )
+        parsed = HMartAdapter().parse(SourceBundle(documents=(doc(tmp_path, body),)))
         assert parsed.transactions[0].total_pre_discount == expected
 
 
@@ -168,9 +159,7 @@ class TestABundleWithMoreThanOneSheet:
     read all of them. Reading only the first made an accepted response fail, and
     silently dropped a response split across files or worksheets."""
 
-    def test_a_non_matching_spreadsheet_alongside_does_not_lose_the_response(
-        self, tmp_path
-    ):
+    def test_a_non_matching_spreadsheet_alongside_does_not_lose_the_response(self, tmp_path):
         other = doc(tmp_path, sheet(row("Something", "Else")), "other.xls")
         theirs = doc(
             tmp_path,
@@ -204,18 +193,14 @@ class TestABundleWithMoreThanOneSheet:
         )
 
     def test_two_matching_worksheets_in_one_file_are_both_read(self, tmp_path):
-        both = sheet(
-            HEADER + row("c", "2024-01-01 09:00:00.0", "b", "10.00", "10")
-        ).replace(
+        both = sheet(HEADER + row("c", "2024-01-01 09:00:00.0", "b", "10.00", "10")).replace(
             "</ss:Worksheet>",
             '</ss:Worksheet><ss:Worksheet ss:Name="Second"><ss:Table>'
             + HEADER
             + row("c", "2024-03-01 09:00:00.0", "b", "30.00", "30")
             + "</ss:Table></ss:Worksheet>",
         )
-        parsed = HMartAdapter().parse(
-            SourceBundle(documents=(doc(tmp_path, both),))
-        )
+        parsed = HMartAdapter().parse(SourceBundle(documents=(doc(tmp_path, both),)))
         assert len(parsed.transactions) == 2
         # Each row still cites the sheet it actually came from.
         assert {t.provenance.locator.split("!")[0] for t in parsed.transactions} == {
@@ -236,9 +221,7 @@ class TestABundleWithMoreThanOneSheet:
         )
         parsed = HMartAdapter().parse(SourceBundle(documents=(broken, theirs)))
         assert len(parsed.transactions) == 1
-        assert any(
-            "half.xls could not be read at all" in w.message for w in parsed.warnings
-        )
+        assert any("half.xls could not be read at all" in w.message for w in parsed.warnings)
 
     def test_a_companion_file_with_no_spreadsheet_in_it_is_named(self, tmp_path):
         notes = doc(tmp_path, "Dear customer, thank you for writing.\n", "notes.txt")

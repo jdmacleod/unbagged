@@ -55,16 +55,20 @@ class TestNeverPrintsValues:
         monkeypatch.setattr(build_denylist, "is_gitignored", lambda _p: True)
 
         result = subprocess.run(
-            [sys.executable, "-c",
-             "import sys; sys.path.insert(0, 'tools');"
-             " import build_denylist as b; b.is_gitignored = lambda p: True;"
-             f" raise SystemExit(b.main([{str(report)!r}, '-o', {str(output)!r}]))"],
-            capture_output=True, text=True, cwd=Path(__file__).parent.parent,
+            [
+                sys.executable,
+                "-c",
+                "import sys; sys.path.insert(0, 'tools');"
+                " import build_denylist as b; b.is_gitignored = lambda p: True;"
+                f" raise SystemExit(b.main([{str(report)!r}, '-o', {str(output)!r}]))",
+            ],
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).parent.parent,
         )
         assert result.returncode == 0
         printed = result.stdout + result.stderr
-        for secret in (FAKE_NAME, FAKE_LOYALTY, FAKE_EMAIL, FAKE_PHONE,
-                       FAKE_STREET, FAKE_ZIP):
+        for secret in (FAKE_NAME, FAKE_LOYALTY, FAKE_EMAIL, FAKE_PHONE, FAKE_STREET, FAKE_ZIP):
             assert secret not in printed, f"{secret!r} was printed"
         # It did find them; it just did not say what they were.
         assert output.read_text(encoding="utf-8").count("\n") > 4
@@ -147,9 +151,7 @@ class TestAlreadyCommitted:
         # pii-scan: allow known placeholder UPC, not an identifier
         constant = "00010000080000"
         corpus = f"the placeholder upc is {constant} and amount is a word"
-        keep, dropped = split_known_values(
-            {constant, "amount", FAKE_LOYALTY}, corpus
-        )
+        keep, dropped = split_known_values({constant, "amount", FAKE_LOYALTY}, corpus)
         assert keep == {FAKE_LOYALTY}
         assert dropped == {constant, "amount"}
 
@@ -177,7 +179,7 @@ class TestNameValuePairs:
         that reads those fields. Found by exactly that happening.
         """
         report = (
-            'Email Information\n'
+            "Email Information\n"
             '{"emailData": [{"Name": "SubscriberKey", "Value": "' + FAKE_LOYALTY + '"},'
             ' {"Name": "EmailAddress", "Value": "' + FAKE_EMAIL + '"}]}\n'
         )
