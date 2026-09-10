@@ -1,17 +1,18 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { useAsync } from "../components/useAsync";
 import { Aside, Cite, Empty, ErrorBox, Spine, Spinner } from "../components/ui";
 import { useShowMore } from "../components/ShowMore";
 import {
+  assignStoreHues,
   barAxisLabel,
-  categoryVar,
   day,
   dayAndTime,
   money,
   number,
   paidLabel,
   saving,
+  storeVar,
 } from "../format";
 import type { Basket, BasketDetail, Stats } from "../types";
 
@@ -120,6 +121,20 @@ function TimelineBody({
   onClearArrival: () => void;
 }) {
   const { store, setStore, from, setFrom, to, setTo, q, setQ } = controls;
+  // Resolved once from the response's FULL store set, not from what is on
+  // screen. `views.py` builds `stats.stores` with no filter clause, so
+  // filtering the roll by store or by date cannot repaint the legend — which is
+  // the property the hash was chosen for and the one a naive per-render
+  // de-collision would have thrown away.
+  //
+  // The memo is about this render, not about caching across interactions: every
+  // filter change refetches the whole payload and `stats.stores` arrives as a
+  // new array. What it buys is one derivation instead of one per basket row,
+  // and Kroger draws over a hundred of them.
+  const hues = useMemo(
+    () => assignStoreHues(stats.stores.map((s) => s.store_code)),
+    [stats.stores],
+  );
   const { visible, control, revealThrough } = useShowMore(baskets, 25);
   const months = monthIndex(baskets);
   const currentMonth = useCurrentMonth(months, visible.length);
@@ -159,7 +174,7 @@ function TimelineBody({
 
   return (
     <div className="space-y-8">
-      <Spine margin={<StoreKey stats={stats} />}>
+      <Spine margin={<StoreKey stats={stats} hues={hues} />}>
         <Header stats={stats} />
         <FootingNote baskets={baskets} />
       </Spine>
@@ -259,6 +274,7 @@ function TimelineBody({
                   onToggle={() =>
                     setOpen(open === basket.id ? null : basket.id)
                   }
+                  hues={hues}
                 />
               );
             })}
@@ -320,7 +336,13 @@ function Arrival({
 }
 
 /** The stores, in the margin, each with the hue its rows carry below. */
-function StoreKey({ stats }: { stats: Stats }) {
+function StoreKey({
+  stats,
+  hues,
+}: {
+  stats: Stats;
+  hues: Map<string, number>;
+}) {
   if (stats.stores.length === 0) return <Aside>no store recorded</Aside>;
   return (
     <div className="num pt-2 text-[11.5px] text-faint">
@@ -329,7 +351,7 @@ function StoreKey({ stats }: { stats: Stats }) {
           <span
             aria-hidden
             className="h-2 w-2 shrink-0 rounded-full"
-            style={{ background: categoryVar(s.store_code) }}
+            style={{ background: storeVar(hues, s.store_code) }}
           />
           <span>
             {s.store_code} · {s.visits}
@@ -1015,6 +1037,7 @@ function BasketRow({
   monthKey,
   open,
   onToggle,
+  hues,
 }: {
   basket: Basket;
   month: string;
@@ -1022,6 +1045,8 @@ function BasketRow({
   monthKey: string | null;
   open: boolean;
   onToggle: () => void;
+  /** Resolved once for the response; a row does a map read, not a derivation. */
+  hues: Map<string, number>;
 }) {
   // Nothing was disclosed to reveal, so the row is a row rather than a
   // control, and no request is made for contents that do not exist.
@@ -1087,7 +1112,7 @@ function BasketRow({
               <span
                 aria-hidden
                 className="h-2 w-2 shrink-0 rounded-full"
-                style={{ background: categoryVar(basket.store_code) }}
+                style={{ background: storeVar(hues, basket.store_code) }}
                 title={`store ${basket.store_code}`}
               />
             )}

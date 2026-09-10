@@ -83,12 +83,18 @@ export const barAxisLabel = (anyItemised: boolean) =>
 /** Stable categorical colour for a key.
  *
  *  Identity, not severity: which store, which series, which product group. The
- *  same key always gets the same hue across views and across reloads, because
+ *  same key gets the same hue across views and across reloads, because
  *  recognition is the whole point — you should be able to learn that your
  *  Tuesday store is the green one. See DESIGN.md on what colour may mean.
  *
  *  Hashed rather than index-assigned so a store keeps its colour when the list
  *  it sits in is filtered or reordered.
+ *
+ *  **One exception, and only one.** `assignStoreHues` below breaks a tie when
+ *  two keys in the same response land on the same hue. Everything that does not
+ *  collide still comes from this hash, which is why the guarantee above is
+ *  written as "the same key gets the same hue" rather than "always". A colliding
+ *  store can change colour when a different response is loaded.
  */
 export const CATEGORY_COUNT = 6;
 
@@ -103,4 +109,77 @@ export function categoryIndex(key: string): number {
 /** The raw CSS variable, for SVG stroke and fill where a class will not do. */
 export function categoryVar(key: string): string {
   return `var(--cat-${categoryIndex(key) + 1})`;
+}
+
+/** Hue indices ordered by how far apart they stay, worst pair first.
+ *
+ *  Measured on the palette in `index.css` as CIEDE2000 distance, taking the
+ *  worst of normal, deuteranopic and protanopic vision (Viénot 1999). The order
+ *  comes out identical in light and dark.
+ *
+ *  It matters because "pick any free index" is not the same as "pick a
+ *  different colour". `--cat-2` and `--cat-4` are ΔE 1.1 apart under
+ *  deuteranopia — indistinguishable at the 8px dot the timeline draws — so a
+ *  de-collision that only avoids reusing an index can change nothing at all for
+ *  roughly 1 in 12 men, while its test passes because the numbers differ.
+ *
+ *  What the order buys, worst pair across the three vision models:
+ *  2 keys ΔE 43.7 · 3 keys 14.4 · 4 keys 6.0 · 5 keys 4.8 · 6 keys 1.1.
+ *  So colour separates confidently at two and three, is normal-vision-only from
+ *  four to six, and past six there is nothing left to give. The label carries
+ *  the meaning at every count — see DESIGN.md — which is why this degrades
+ *  rather than breaks.
+ */
+const SPREAD_ORDER = [2, 3, 0, 5, 4, 1];
+
+/** Hue index per key, hash-assigned, with collisions broken by separation.
+ *
+ *  The hash still assigns. Only a key that lands on a hue already taken moves,
+ *  and it moves to the first free index in `SPREAD_ORDER` rather than to
+ *  whatever happened to be next. A set with no collisions returns exactly what
+ *  `categoryIndex` alone would have returned.
+ *
+ *  Keys are processed in sorted order so the outcome does not depend on the
+ *  order they arrive in — the caller passes `stats.stores`, which is sorted by
+ *  visit count, and a store that gains a visit must not repaint the legend.
+ *
+ *  Past `CATEGORY_COUNT` keys there is no free index to move to and collisions
+ *  are unavoidable; the hash's answer stands, which is the same behaviour this
+ *  had before.
+ */
+export function assignStoreHues(keys: string[]): Map<string, number> {
+  const assigned = new Map<string, number>();
+  const taken = new Set<number>();
+  const collided: string[] = [];
+
+  for (const key of [...new Set(keys)].sort()) {
+    const wanted = categoryIndex(key);
+    if (taken.has(wanted)) {
+      collided.push(key);
+    } else {
+      taken.add(wanted);
+      assigned.set(key, wanted);
+    }
+  }
+
+  for (const key of collided) {
+    const free = SPREAD_ORDER.find((i) => !taken.has(i));
+    // Undefined once every hue is spoken for. Keeping the hash's answer means
+    // the collision is visible rather than the store being unpainted.
+    const index = free ?? categoryIndex(key);
+    taken.add(index);
+    assigned.set(key, index);
+  }
+
+  return assigned;
+}
+
+/** The CSS variable for an assigned index, or for a key with no assignment.
+ *
+ *  A basket can carry a store code that is not in `stats.stores` — that query
+ *  excludes nulls — so this falls back to the plain hash rather than returning
+ *  undefined and painting a transparent dot.
+ */
+export function storeVar(hues: Map<string, number>, key: string): string {
+  return `var(--cat-${(hues.get(key) ?? categoryIndex(key)) + 1})`;
 }
