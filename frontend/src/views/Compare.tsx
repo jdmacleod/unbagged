@@ -1,6 +1,6 @@
 import { api } from "../api";
 import { useAsync } from "../components/useAsync";
-import { Aside, ErrorBox, Spine, Spinner } from "../components/ui";
+import { Aside, Caveat, ErrorBox, Spine, Spinner } from "../components/ui";
 import { day, money, number } from "../format";
 import type { CompareRow } from "../types";
 
@@ -63,7 +63,14 @@ export function Compare() {
   if (!compare.data) return <Spinner label="Comparing" />;
 
   const { requests, comparable } = compare.data;
-  const undisclosed = requests.some((r) => !r.disclosed);
+  // Asked of the marks, not of the columns. This read `requests.some(r =>
+  // !r.disclosed)`, which is a question about whether a whole column disclosed
+  // nothing — and a column can be disclosed and still carry a dash, which is
+  // exactly what a response graded `partial` now produces. The sentence
+  // explaining the mark was therefore hidden on the one case that needed it.
+  const anyDash = ROWS.some((row) =>
+    requests.some((r) => r[row.key] === null || r[row.key] === undefined),
+  );
 
   return (
     <div className="space-y-6">
@@ -86,15 +93,23 @@ export function Compare() {
       </Spine>
 
       <Spine margin={<Aside>per retailer</Aside>}>
+        {/* The key goes before the marks it describes. It used to sit below the
+            whole sheet, which put the nearest explanation of a dash in the
+            "Categories not addressed" row — a different fact, and the wrong
+            inference to hand someone. Caveat is the app's existing apparatus
+            for "what you are looking at is still true, here is what you should
+            know". */}
+        {anyDash && (
+          <Caveat>
+            An em dash means the response did not disclose that, which is not
+            the same as a zero. A figure is only written as zero where the
+            retailer answered the category in full.
+          </Caveat>
+        )}
+
         <Sheet requests={requests} pending={!comparable} />
 
         <p className="mt-4 max-w-[62ch] text-[11.5px] text-muted">
-          {undisclosed && (
-            <>
-              An em dash means the retailer disclosed nothing of that kind,
-              which is not the same as a zero.{" "}
-            </>
-          )}
           {!comparable && (
             <>A blank rule means no response has arrived to fill it in yet. </>
           )}
@@ -176,19 +191,34 @@ function Sheet({
             <span className={row.foreign ? "text-foreign" : "text-muted"}>
               {row.label}
             </span>
-            {requests.map((r) => (
-              <span
-                key={r.id}
-                className={`num text-right ${row.foreign ? "text-foreign" : ""}`}
-                title={
-                  r.disclosed
-                    ? undefined
-                    : `${r.display_name} did not disclose this. A dash means not disclosed, not zero.`
-                }
-              >
-                {row.format(r[row.key] as number | null)}
-              </span>
-            ))}
+            {requests.map((r) => {
+              const value = r[row.key] as number | null;
+              const dash = value === null || value === undefined;
+              return (
+                <span
+                  key={r.id}
+                  className={`num text-right ${row.foreign ? "text-foreign" : ""}`}
+                  // Keyed on the cell, not the column: a disclosed column can
+                  // still carry a dash, and that cell used to get no title at
+                  // all. The wording splits the two reasons, because they are
+                  // different findings about the retailer.
+                  title={
+                    dash
+                      ? r.disclosed
+                        ? `${r.display_name} did not address this. A dash means not disclosed, not zero.`
+                        : `${r.display_name} disclosed no data. A dash means not disclosed, not zero.`
+                      : undefined
+                  }
+                >
+                  {row.format(value)}
+                  {/* A cell holding only an em dash is announced as "em dash"
+                      or skipped outright, so the mark says nothing to a screen
+                      reader. Short here; the sentence is in the Caveat above.
+                      Same pattern as the pending column below. */}
+                  {dash && <span className="sr-only">not disclosed</span>}
+                </span>
+              );
+            })}
             {pending && (
               <span className="flex justify-end">
                 {/* The blank waiting to be filled in. Same mark as an unanswered

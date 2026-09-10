@@ -27,6 +27,25 @@ from a specific response. See `CONTRIBUTING.md`.
 
 ### Fixed
 
+- **Compare stated that a retailer holds no inferred attributes, for a response
+  that never mentioned inferences.** The three inventory figures — identifiers
+  held, inferred attributes, and how many of those came from elsewhere — were
+  gated on a predicate that asks whether the response disclosed *purchases*.
+  That is a different question. A response can disclose every visit's date,
+  store and total while saying nothing about what it infers, and the adapter for
+  that shape grades the disclosure "partial" on purpose; the purchase predicate
+  answered yes and the cell rendered `0`, which reads as a fact about the
+  company. It reads as an em dash now, and a zero appears only where the
+  category was answered in full. A count that is not zero always renders,
+  whatever the grade, so a disclosed identifier is not hidden alongside it. The
+  sentence explaining the mark has moved above the table and now appears
+  whenever a dash is on the page rather than only when a whole column disclosed
+  nothing, which was the one case it was hidden for. Each dash also carries a
+  short label for screen readers, which announce a lone em dash as "em dash" or
+  skip it. Narrows the problem rather than closing it: the statute does not
+  enumerate inferences separately, so a retailer that answered in full and has
+  no inference section still shows a zero.
+
 - **The upload moved you back to where you had been ten seconds earlier.** A
   long report takes tens of seconds to read, and there is nothing to do while it
   does. Wander off to another view and the finished upload put you back on the

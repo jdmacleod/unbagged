@@ -404,3 +404,59 @@ class TestTheUploadsAfterTheFirst:
         # The empty state is correct; the panel above it must not survive.
         assert "Drop it here" in body
         assert "Read as" not in body
+
+
+class TestWhatCompareAsserts:
+    """The em dash reaches the rendered page, and says what it means there.
+
+    Everything below is asserted at the API and unit tiers too, and faster. This
+    class exists for the one thing those tiers structurally cannot reach: that
+    the null `views.py` computes survives serialisation, `format.number`, and
+    the row renderer, and arrives on screen as a mark next to its own key.
+
+    Kept to one module deliberately. `tests/container/conftest.py` launches the
+    browser per test because this module opens its own sync context; a second
+    module opening another one fails the whole tier.
+    """
+
+    def test_a_partial_response_shows_a_dash_rather_than_a_zero(self, page, empty_app):
+        """Regression: issue #43, at the only tier that sees pixels.
+
+        H Mart's response discloses its visits and never addresses inferences.
+        The row read "Inferred attributes 0", which states that the company
+        holds none — a claim the file does not support.
+        """
+        upload(page, HMART)
+        hmart = selected(page)
+        page.goto(f"{empty_app}/?tab=compare&r={hmart}", wait_until="networkidle")
+        page.wait_for_selector("text=Inferred attributes", timeout=30_000)
+
+        body = page.inner_text("body")
+        assert "Inferred attributes" in body
+        # The key renders with the mark. This half only works because the legend
+        # asks whether a dash is present rather than whether a whole column
+        # disclosed nothing: H Mart's column IS disclosed, so the old condition
+        # hid the sentence on exactly the case that needed it.
+        assert "not the same as a zero" in body
+
+    def test_the_two_cells_disagree_on_screen(self, page, empty_app):
+        """The dash and the number must both be there, in the right rows.
+
+        A fix that hid the whole column would look correct in a screenshot of
+        the inference row alone. H Mart discloses a card number, so the
+        identifier row has to keep rendering it.
+        """
+        upload(page, HMART)
+        hmart = selected(page)
+        page.goto(f"{empty_app}/?tab=compare&r={hmart}", wait_until="networkidle")
+        page.wait_for_selector("text=Identifiers held for you", timeout=30_000)
+
+        def row_text(label: str) -> str:
+            return page.get_by_text(label, exact=True).locator("..").inner_text()
+
+        assert re.search(r"[1-9]", row_text("Identifiers held for you")), (
+            "H Mart discloses a card number; it must not render as an em dash"
+        )
+        assert "\u2014" in row_text("Inferred attributes"), (
+            "the response never addressed inferences; this must not read as a zero"
+        )
