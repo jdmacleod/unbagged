@@ -50,6 +50,36 @@ export const humanise = (label: string) => {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 };
 
+/** What to call the money, given whether line items were disclosed.
+ *
+ *  "Paid" means a summed line amount everywhere in this app. A response that
+ *  disclosed basket totals and no lines carries the retailer's own stated
+ *  totals instead, which is a different quantity — so the word changes with the
+ *  figure rather than one word covering two things.
+ *
+ *  One definition because three surfaces need the same answer and had been
+ *  making it separately: the Timeline header, the month bar axis, and the
+ *  Compare row. Two of them agreed and the third did not, which is what issue
+ *  #57 was: one figure under two names depending on which tab you were on.
+ *
+ *  The SCOPE of the question stays with the caller and is deliberately not
+ *  shared. The Timeline header asks about the whole response; the bar axis asks
+ *  about the months actually drawn, because the bars really are drawn from what
+ *  is in view; Compare asks about the columns present. Those are three
+ *  different predicates over the same vocabulary, and collapsing them would
+ *  make the axis lie about what it is measuring.
+ */
+export const paidWord = (linesDisclosed: boolean) =>
+  linesDisclosed ? "paid" : "spent";
+
+/** The headline figure and the Compare row: "Total paid" / "Total spent". */
+export const paidLabel = (linesDisclosed: boolean) =>
+  `Total ${paidWord(linesDisclosed)}`;
+
+/** The month bar axis, which is lower case and says what it is per: "spent, by month". */
+export const barAxisLabel = (anyItemised: boolean) =>
+  `${paidWord(anyItemised)}, by month`;
+
 /** Stable categorical colour for a key.
  *
  *  Identity, not severity: which store, which series, which product group. The

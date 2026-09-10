@@ -27,6 +27,18 @@ from a specific response. See `CONTRIBUTING.md`.
 
 ### Fixed
 
+- **The same figure was called two different things depending on which tab you
+  were on.** For a response that discloses basket totals and no line items, the
+  Timeline header read "Total spent" and the Compare row read "Total paid" over
+  the same number. Both were deliberate and both had written reasons, and
+  neither had been reconciled with the other. Compare's row label now follows
+  the columns beside it, so the two views never disagree; the column head keeps
+  saying which column holds which quantity. The rule that picks the word lives
+  in one place now, shared by three surfaces that were each deciding it
+  separately — the header, the month bar axis, and this row. The axis keeps
+  asking its own question about the months on screen, because that is genuinely
+  what its bars are drawn from; only the vocabulary is shared.
+
 - **Compare stated that a retailer holds no inferred attributes, for a response
   that never mentioned inferences.** The three inventory figures — identifiers
   held, inferred attributes, and how many of those came from elsewhere — were

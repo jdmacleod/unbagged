@@ -3,7 +3,16 @@ import { api } from "../api";
 import { useAsync } from "../components/useAsync";
 import { Aside, Cite, Empty, ErrorBox, Spine, Spinner } from "../components/ui";
 import { useShowMore } from "../components/ShowMore";
-import { categoryVar, day, dayAndTime, money, number, saving } from "../format";
+import {
+  barAxisLabel,
+  categoryVar,
+  day,
+  dayAndTime,
+  money,
+  number,
+  paidLabel,
+  saving,
+} from "../format";
 import type { Basket, BasketDetail, Stats } from "../types";
 
 /**
@@ -386,8 +395,11 @@ export type MonthEntry = {
  *  keeping one word for two things.
  */
 function barLabel(months: MonthEntry[]): string {
-  const anyItemised = months.some((m) => m.itemised > 0);
-  return anyItemised ? "paid, by month" : "spent, by month";
+  // The predicate is local on purpose and the word is not. What the bars are
+  // drawn from is a question about the months on screen; what that quantity is
+  // CALLED has to match the header above it and the Compare row on the next
+  // tab, or the app names one figure two ways depending on where you look.
+  return barAxisLabel(months.some((m) => m.itemised > 0));
 }
 
 /** Every month from the first to the last, including the ones with no visit.
@@ -499,8 +511,9 @@ function Header({ stats }: { stats: Stats }) {
         <div className="text-[11.5px] tracking-[0.07em] text-muted uppercase">
           {/* "Paid" means summed line amounts everywhere else. With no lines
               disclosed this carries the retailer's own stated totals, which is
-              a different quantity and says so rather than reusing the word. */}
-          {stats.lines_disclosed ? "Total paid" : "Total spent"}
+              a different quantity and says so rather than reusing the word.
+              The rule lives in format.ts so Compare says the same thing. */}
+          {paidLabel(stats.lines_disclosed)}
         </div>
         <div className="font-serif text-[34px] leading-none font-semibold tabular-nums">
           {money(stats.total_paid)}
