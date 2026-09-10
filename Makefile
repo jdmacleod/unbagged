@@ -88,41 +88,41 @@ lint:  ## Lint and check formatting with ruff
 
 denylist:  ## Build tools/denylist.txt from your own report (REPORT=path)
 	@test -n "$(REPORT)" || { echo "Usage: make denylist REPORT=data/incoming/your-report.pdf"; exit 1; }
-	$(PY) tools/build_denylist.py "$(REPORT)"
+	$(PY) -m tools.build_denylist "$(REPORT)"
 
 check-pii:  ## Scan the working tree for personal data
-	$(PY) tools/scan_pii.py
+	$(PY) -m tools.scan_pii
 
 check-pii-history:  ## Scan commit messages and diffs across all history
-	$(PY) tools/scan_pii.py --history
+	$(PY) -m tools.scan_pii --history
 
 fixtures:  ## Regenerate synthetic fixtures
-	$(PY) tools/make_fixtures.py
+	$(PY) -m tools.make_fixtures
 
 fixtures-check:  ## Fail if a committed fixture is not generator output
-	$(PY) tools/make_fixtures.py --check
+	$(PY) -m tools.make_fixtures --check
 
 lock:  ## Regenerate docker/requirements.txt (needs Docker; runs on linux/amd64)
-	$(PY) tools/make_lock.py
+	$(PY) -m tools.make_lock
 
 lock-check:  ## Fail if the lock no longer covers pyproject's dependencies
-	$(PY) tools/check_lock.py
+	$(PY) -m tools.check_lock
 
 brand:  ## Regenerate frontend/public/ from resources/ (strips C2PA manifests)
-	$(PY) tools/build_brand.py
+	$(PY) -m tools.build_brand
 
 brand-check:  ## Fail if a served brand asset is not what its source produces
-	$(PY) tools/build_brand.py --check
+	$(PY) -m tools.build_brand --check
 
 # The gate CI runs on every pull request, available locally against whatever you
 # would open the PR against. Override for a stacked branch: make icons-check BASE=origin/other
 BASE ?= origin/main
 
 icons-check:  ## Fail if a source SVG changed without the icons it produces
-	$(PY) tools/check_icon_sync.py $(BASE)
+	$(PY) -m tools.check_icon_sync $(BASE)
 
 screenshots:  ## Regenerate docs/screenshots from the synthetic fixture (needs Docker + browser)
-	$(PY) tools/make_screenshots.py
+	$(PY) -m tools.make_screenshots
 
 clean:  ## Remove build and cache artifacts (never touches data/)
 	rm -rf .pytest_cache .ruff_cache build dist src/*.egg-info

@@ -5,6 +5,7 @@ consequence line in this repository is a port binding in a YAML file, and a
 review will not catch it going missing during an unrelated edit.
 """
 
+import importlib
 import re
 from pathlib import Path
 
@@ -306,3 +307,49 @@ class TestVersionIsOneNumber:
         assert re.fullmatch(r"\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", declared), (
             f"VERSION is {declared!r}; expected a bare semver like 0.10.0"
         )
+
+
+class TestToolsAreInvokedAsModules:
+    """Issue #29: `tools/` resolves as a package only when the repo root is on
+    the path, and running a script by path puts the script's OWN directory there
+    instead.
+
+    `pyproject.toml` sets `pythonpath = ["src", "."]` for pytest, so
+    `from tools import X` works under test and nowhere else. `make_lock.py` had
+    a hand-rolled `sys.path.insert(ROOT)` in its `__main__` block to work
+    around exactly this, for one script.
+
+    `python -m tools.X` puts the working directory on the path, so every caller
+    uses that form now. Asserted here rather than left to habit: the failure is
+    silent under pytest and only appears when someone runs the real command.
+    """
+
+    CALLERS = (
+        "Makefile",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml",
+        ".pre-commit-config.yaml",
+    )
+
+    def test_nothing_invokes_a_tool_by_path(self):
+        offenders = []
+        for name in self.CALLERS:
+            path = ROOT / name
+            if not path.exists():
+                continue
+            for number, line in enumerate(path.read_text().splitlines(), 1):
+                if re.search(r"(python[0-9.]*|\$\(PY\))\s+tools/[a-z_]+\.py", line):
+                    offenders.append(f"{name}:{number}: {line.strip()}")
+        assert not offenders, "invoke these as `python -m tools.X`:\n" + "\n".join(offenders)
+
+    def test_every_tool_imports_as_a_module(self):
+        """The other half. A caller using `-m` is no good if the module does not
+        import — and one that imports only under pytest is the bug itself."""
+        failures = []
+        for script in sorted((ROOT / "tools").glob("*.py")):
+            module = f"tools.{script.stem}"
+            try:
+                importlib.import_module(module)
+            except Exception as exc:  # noqa: BLE001 - reporting, not handling
+                failures.append(f"{module}: {exc}")
+        assert not failures, "\n".join(failures)

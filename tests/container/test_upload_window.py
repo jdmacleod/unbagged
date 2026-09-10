@@ -42,6 +42,7 @@ from tests.container.browser import (
     KROGER,
     LETTER,
     announced,
+    drop,
     panel,
     return_to_tab,
     selected,
@@ -52,9 +53,9 @@ from tests.container.browser import (
 from tests.container.browser import (
     playwright_expect as expect,
 )
-from tests.container.conftest import requires_docker
+from tests.container.conftest import requires_browser, requires_docker
 
-pytestmark = [pytest.mark.container, requires_docker]
+pytestmark = [pytest.mark.container, requires_docker, requires_browser]
 
 # One Pattern object, reused for every route/unroute.
 #
@@ -149,7 +150,7 @@ class TestTheViewTheUploadLandsOn:
                 route.continue_() if request.method == "GET" else held.append(route)
             ),
         )
-        page.set_input_files("input[type=file]", [str(KROGER)])
+        drop(page, KROGER)
         page.wait_for_selector("text=Reading the response", timeout=30_000)
         assert held, "the POST was never actually held, so nothing was in flight"
 
@@ -214,7 +215,7 @@ class TestTheViewTheUploadLandsOn:
         # files fires no change event at all.
         letter = tmp_path / "third-response.txt"
         letter.write_text(LETTER, encoding="utf-8")
-        page.set_input_files("input[type=file]", [str(letter)])
+        drop(page, letter)
         page.wait_for_function(
             "n => document.querySelectorAll('select[aria-label] option').length >= n",
             arg=3,
@@ -423,7 +424,7 @@ class TestTheReaderIsToldTheUploadFinished:
         assert "Read as Kroger" in announced(page)[-1]
         said_before = len(announced(page))
 
-        page.set_input_files("input[type=file]", [str(KROGER)])
+        drop(page, KROGER)
         page.wait_for_selector("text=already loaded this response", timeout=120_000)
 
         assert "already loaded this response" in page.locator("[role=alert]").inner_text()
@@ -595,7 +596,7 @@ class TestAFailedReadNeverSpeaksForDataItCannotSee:
                 route.abort("failed") if request.method == "GET" else held.append(route)
             ),
         )
-        page.set_input_files("input[type=file]", [str(KROGER)])
+        drop(page, KROGER)
         page.wait_for_selector("text=Reading the response", timeout=30_000)
         assert held, "the POST was never held, so no upload was in flight"
 
@@ -646,7 +647,7 @@ class TestAFailedReadNeverSpeaksForDataItCannotSee:
         never fires and the URL correction stays frozen for the session.
         """
         _fail_list_reads(page)  # GET only; the POST still goes through
-        page.set_input_files("input[type=file]", [str(KROGER)])
+        drop(page, KROGER)
         page.wait_for_selector("text=Read as", timeout=120_000)
         page.wait_for_selector("text=could not be re-read", timeout=30_000)
 
@@ -730,7 +731,7 @@ class TestOneDropIsOneUpload:
         )
 
         # Arm the input, then fire twice with nothing in between.
-        page.set_input_files("input[type=file]", [str(KROGER)])
+        drop(page, KROGER)
         page.evaluate(
             """() => {
               const el = document.querySelector('input[type=file]');
@@ -759,7 +760,7 @@ class TestOneDropIsOneUpload:
         not go through the success return.
         """
         upload(page, KROGER)
-        page.set_input_files("input[type=file]", [str(KROGER)])
+        drop(page, KROGER)
         page.wait_for_selector("text=already loaded this response", timeout=120_000)
 
         # The other fixture, because an input already holding those exact files

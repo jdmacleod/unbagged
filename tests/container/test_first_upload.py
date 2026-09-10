@@ -40,6 +40,7 @@ from tests.container.browser import (
     HMART,
     KROGER,
     LETTER,
+    drop,
     panel,
     selected,
     upload,
@@ -48,9 +49,10 @@ from tests.container.browser import (
 from tests.container.browser import (
     playwright_expect as expect,
 )
-from tests.container.conftest import requires_docker
+from tests.container.conftest import requires_browser, requires_docker
+from unbagged.adapters.generic.adapter import FALLBACK_CONFIDENCE, NO_ADAPTER_WARNING
 
-pytestmark = [pytest.mark.container, requires_docker]
+pytestmark = [pytest.mark.container, requires_docker, requires_browser]
 
 
 class TestTheFirstUploadReportsOnItself:
@@ -62,6 +64,9 @@ class TestTheFirstUploadReportsOnItself:
         it, a person sees a complete-looking H Mart report and no indication
         that a whole second response went missing.
         """
+        # Which of the two wins is asserted in tests/test_registry.py, in the
+        # tier that can say "H Mart's sniff no longer outscores Kroger's" rather
+        # than failing here after two minutes with a DOM assertion (#52).
         upload(page, KROGER, HMART)
         body = page.inner_text("body")
         assert "Read as" in body
@@ -132,7 +137,10 @@ class TestTheFirstUploadReportsOnItself:
         upload(page, letter)
         body = page.inner_text("body")
         assert "uncertain match" in body
-        assert "10%" in body
+        # Derived, not restated. This read `"10%"`, so retuning the fallback's
+        # confidence broke a two-minute browser test that reported a DOM
+        # assertion rather than the adapter change that caused it (#52).
+        assert f"{round(FALLBACK_CONFIDENCE * 100)}%" in body
         assert "Low confidence." in body
 
     def test_a_warning_with_no_locator_renders_without_one(self, page, tmp_path):
@@ -146,13 +154,18 @@ class TestTheFirstUploadReportsOnItself:
         letter = tmp_path / "response-letter.txt"
         letter.write_text(LETTER, encoding="utf-8")
         upload(page, letter)
+        # Both the search and the assertion come from the adapter's own constant,
+        # so editing that sentence cannot break this test (#52). What is being
+        # checked is that the line ENDS where the warning ends — a null locator
+        # rendering as an empty span, or as the word "null", would append.
+        opening = NO_ADAPTER_WARNING.split(",")[0]
         lines = [
             text
             for text in page.eval_on_selector_all("li", "els => els.map(e => e.innerText)")
-            if "No adapter recognised this response" in text
+            if opening in text
         ]
         assert lines, "the fallback adapter's warning never reached the panel"
-        assert lines[0].strip().endswith("docs/writing-an-adapter.md.")
+        assert lines[0].strip().endswith(NO_ADAPTER_WARNING.rsplit(" ", 1)[-1])
 
 
 class TestTheUploadsAfterTheFirst:
@@ -301,7 +314,7 @@ class TestTheUploadsAfterTheFirst:
         # screen: the footer input still holds the Kroger file from the upload
         # above, and setting an input to the files it already has fires no
         # `change`, so the drop would never reach `send()` at all.
-        page.set_input_files("input[type=file]", [str(HMART)])
+        drop(page, HMART)
         page.wait_for_selector("text=already loaded this response", timeout=120_000)
         page.wait_for_load_state("networkidle")
 
@@ -358,7 +371,7 @@ class TestTheUploadsAfterTheFirst:
         upload(page, KROGER)
         assert "Read as" in page.inner_text("body")
 
-        page.set_input_files("input[type=file]", [str(KROGER)])
+        drop(page, KROGER)
         page.wait_for_selector("text=already loaded this response", timeout=120_000)
         body = page.inner_text("body")
         assert "remove the existing one" in body

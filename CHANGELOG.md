@@ -27,6 +27,20 @@ from a specific response. See `CONTRIBUTING.md`.
 
 ### Changed
 
+- **The test suite now fails as whatever it is actually doing.** A hung test ran
+  until something else gave up: no time cap existed, so the browser tier could
+  spend five minutes on one test and then report a timeout rather than a
+  diagnosis. Both tiers have a cap sized against their measured worst case, and a
+  stuck test now names the line it is stuck on. Tests that need a browser check
+  that one was actually downloaded rather than only that the library imports, so
+  a machine without one skips in milliseconds instead of building an image and
+  failing at launch. The browser tests no longer restate adapter constants they
+  do not own, so retuning a confidence score cannot break a two-minute test with
+  a DOM assertion. Repo tooling is invoked as `python -m tools.X` everywhere,
+  which removes a hand-rolled `sys.path` workaround and the class of failure that
+  hides from pytest. On Linux the container tier hands its scratch directories
+  back rather than leaving root-owned trees that later runs cannot clean up.
+
 - **The formatter the project said it used had never been run.** `CLAUDE.md` has
   claimed `ruff` for lint and format since the start, but `make lint` only ever
   ran the check half, so nothing applied or enforced the other one and 64 of 97

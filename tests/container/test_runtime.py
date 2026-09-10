@@ -6,11 +6,13 @@ Each test here corresponds to a guarantee that a text assertion cannot make.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import time
 
 import pytest
 
+from tests.container import conftest
 from tests.container.conftest import (
     REPO_ROOT,
     docker,
@@ -75,6 +77,33 @@ class TestDataDirectory:
         time.sleep(2)
         state = json.loads(docker("inspect", name).stdout)[0]["State"]
         assert state["Running"], "container should have taken ownership and started"
+
+    @requires_real_uids
+    def test_the_scratch_tree_is_handed_back_after_the_container_goes(
+        self, run_container, tmp_path
+    ):
+        """Issue #50, on the only platform where it can happen.
+
+        The entrypoint chowns /data to uid 10001 when it does not already own it,
+        and through a bind mount that rewrites ownership on the host. Left alone,
+        every run of this tier leaves a root-owned tree that pytest's own tmp_path
+        retention cannot delete on a later run — each holding a SQLite database
+        parsed from the fixture.
+
+        Skipped on Docker Desktop, where bind-mount ownership is remapped and
+        this cannot fail. That is the point of the marker: the bug is invisible
+        exactly where most of this is developed.
+        """
+        data = tmp_path / "handedback"
+        data.mkdir()
+        run_container(data=data)
+        # The fixture's teardown is what does the work, so reach it directly
+        # rather than asserting after the fixture has already been torn down.
+        conftest.return_ownership(conftest.IMAGE, data)
+        assert data.stat().st_uid == os.getuid(), (
+            "the scratch tree is still owned by the container's user; a later "
+            "pytest run will fail to clean it up"
+        )
 
     def test_an_unwritable_data_directory_stops_instead_of_looping(self, run_container, tmp_path):
         """The crash loop, from the other side.

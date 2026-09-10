@@ -185,6 +185,31 @@ Anything a human had to decide belongs in a different commit, so that ignoring t
 mechanical one cannot hide a real change. That is why the #66 sweep is two commits
 rather than one.
 
+## Running the repo tooling
+
+Invoke everything in `tools/` as a module, from the repo root:
+
+    python -m tools.scan_pii
+
+Not `python tools/scan_pii.py`. Running a script by path puts that script's own
+directory on `sys.path` instead of the repo root, so the `tools` package becomes
+invisible to itself and `from tools import X` fails — while passing under pytest,
+which sets `pythonpath = ["src", "."]`. That is the worst version of this to
+discover, and `tests/test_packaging.py` now asserts that no Makefile, CI workflow
+or pre-commit hook uses the path form.
+
+## Writing a test that needs a browser
+
+Mark it with `requires_browser` from `tests/container/conftest.py`, not
+`pytest.importorskip("playwright.sync_api")`. The import check proves the wheel
+is installed and nothing more; a runner with the package and no downloaded
+browser sails past it and dies at `chromium.launch()`, by which point the skip's
+advice is off screen.
+
+Every test in `tests/container/` gets a 180-second cap automatically, and
+everything else gets 60. Both are backstops sized against measured worst cases,
+not budgets — if a test approaches either, the test is wrong, not the cap.
+
 ## Citing where a test came from
 
 A regression test is worth more when it says what it was written for. Keep the

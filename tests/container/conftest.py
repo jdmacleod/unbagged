@@ -19,9 +19,11 @@ reports a guarantee it never checked.
 from __future__ import annotations
 
 import json
+import os
 import platform
 import shutil
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -61,6 +63,98 @@ def uid_semantics_are_real() -> bool:
     and therefore proves nothing.
     """
     return platform.system() == "Linux"
+
+
+#: What to tell someone whose machine cannot run these. `--with-deps` matches
+#: what ci.yml installs and is the part people miss: a downloaded Chromium still
+#: fails to launch without the system libraries beside it.
+NEEDS_A_BROWSER = (
+    'needs a browser: pip install -e ".[dev,browser]" && playwright install --with-deps chromium'
+)
+
+
+def browser_is_installed() -> bool:
+    """Is a Chromium actually downloaded — not merely `playwright` importable?
+
+    `pytest.importorskip("playwright.sync_api")` proves the wheel is present and
+    nothing more. A runner with the package and no downloaded browser sails past
+    that skip and then dies at `chromium.launch()`, at which point the skip's own
+    advice ("playwright install chromium") is no longer on screen. See #51.
+
+    Answered from the filesystem rather than by asking Playwright. The obvious
+    implementation opens a `sync_playwright()` context to read
+    `chromium.executable_path`, and that is the wrong thing to do here: it costs
+    most of a second at import, it leaves asyncio teardown noise behind, and this
+    tier already has a rule that two live sync contexts in one thread make
+    Playwright refuse the second. A check that runs before every session is a bad
+    place to take that risk.
+
+    Mirrors Playwright's own registry location. `PLAYWRIGHT_BROWSERS_PATH=0`
+    means "beside the package", which is the one case worth deferring on — an
+    install that deliberate is one we can assume completed.
+
+    **This answers "downloaded", not "launchable", and that is deliberate.** A
+    Chromium sitting there without the system libraries it needs will still fail
+    at `launch()`. Skipping the whole browser tier on that would hide a broken
+    image behind a green run, which is worse than the loud failure it replaces —
+    a missing optional dependency is a reason to skip, a broken environment is
+    not. Raised in review on #76; the advice above names `--with-deps` for it.
+    """
+    if "playwright" not in sys.modules:
+        try:
+            import playwright  # noqa: F401
+        except ImportError:
+            return False
+
+    override = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+    if override == "0":
+        return True
+    if override:
+        root = Path(override)
+    elif sys.platform == "darwin":
+        root = Path.home() / "Library" / "Caches" / "ms-playwright"
+    elif sys.platform == "win32":
+        root = Path(os.environ.get("LOCALAPPDATA", "")) / "ms-playwright"
+    else:
+        root = Path.home() / ".cache" / "ms-playwright"
+
+    return any(root.glob("chromium-*")) if root.is_dir() else False
+
+
+requires_browser = pytest.mark.skipif(
+    not browser_is_installed(),
+    reason=NEEDS_A_BROWSER,
+)
+
+
+#: This tier's own cap, raised from the 60s default in pyproject.toml.
+#:
+#: Measured over a full run: the slowest test is 17.6s of call plus 8.1s of
+#: setup, so 180s is about seven times the real worst case. It also has to clear
+#: the longest wait a test performs on itself — `wait_for_selector` is given
+#: 120s in a few places — or pytest would kill a test that was still legitimately
+#: waiting. A backstop above every internal deadline, not a competitor with them.
+CONTAINER_TIMEOUT_SECONDS = 180
+
+
+def pytest_collection_modifyitems(items):
+    """Give every test in this directory the tier's timeout.
+
+    Applied here rather than as a decorator on each test: a cap that has to be
+    remembered per test is a cap that is missing from the next one written, which
+    is the shape #51 is about.
+
+    **Scoped by path, and that is not a detail.** pytest hands this hook every
+    item in the session, not only the ones under the conftest that defines it —
+    and the default run collects `tests/container/` before deselecting it by
+    marker. Marking unconditionally therefore put 180s on every fast-tier test
+    too, overriding the 60s default with a cap three times too generous, in a
+    tier where the slowest test is 0.86s. Caught in review on #76.
+    """
+    here = Path(__file__).parent
+    for item in items:
+        if here in Path(item.path).parents:
+            item.add_marker(pytest.mark.timeout(CONTAINER_TIMEOUT_SECONDS))
 
 
 requires_docker = pytest.mark.skipif(not have_docker(), reason="Docker is not available")
@@ -117,6 +211,64 @@ def run_container(image, tmp_path):
 
     for name in started:
         docker("rm", "-f", name, check=False)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def hand_back_scratch_ownership(tmp_path_factory) -> Iterator[None]:
+    """Give the whole tier's scratch tree back, once, after the last test.
+
+    Session-scoped deliberately. The first version of this ran per fixture
+    teardown, which is per test — one extra container start each, and the tier
+    went from 4m38 locally to 7m26 on CI, where it then tipped two tests over
+    their own 120s selector waits. A tier whose documented failure mode is
+    load-dependent timeouts is the wrong place to add sixty container starts.
+
+    `tmp_path_factory.getbasetemp()` is the parent of every `tmp_path` this run
+    created, so one pass covers all of them.
+    """
+    yield
+    if not uid_semantics_are_real():
+        return
+    return_ownership(IMAGE, tmp_path_factory.getbasetemp())
+
+
+def return_ownership(image: str, path: Path) -> None:
+    """Give the scratch tree back to whoever pytest is running as.
+
+    `docker/entrypoint.sh` chowns `/data` to uid 10001 whenever it does not
+    already own it — which is always, for a fresh `tmp_path`. Through a bind
+    mount that rewrites ownership on the HOST, so the tree pytest created is no
+    longer pytest's. Nothing then cleans it up: `tmp_path` retention keeps the
+    last few sessions and deletes older ones, and those deletes fail with
+    PermissionError unless CI runs as root. Every run leaves more behind, each
+    holding a SQLite database parsed from a 413 KB fixture. See issue #50.
+
+    One throwaway root container per fixture teardown, not per container started.
+    It uses the image already built for the tier rather than pulling another, and
+    overrides the entrypoint so none of the app's own startup runs.
+
+    Invisible on macOS and Windows, where Docker Desktop remaps bind-mount
+    ownership and there is nothing to give back — which is exactly the
+    "passes here, fails on Linux" trap this module's docstring warns about, so
+    the guard is the same one `requires_real_uids` uses.
+    """
+    if not uid_semantics_are_real() or not path.exists():
+        return
+    docker(
+        "run",
+        "--rm",
+        "--user",
+        "0:0",
+        "--entrypoint",
+        "chown",
+        "-v",
+        f"{path}:/target",
+        image,
+        "-R",
+        f"{os.getuid()}:{os.getgid()}",
+        "/target",
+        check=False,
+    )
 
 
 def wait_for_exit(name: str, seconds: int = 30) -> dict:
@@ -212,7 +364,7 @@ def page(empty_app):
     """
     playwright_api = pytest.importorskip(
         "playwright.sync_api",
-        reason=('needs a browser: pip install -e ".[dev,browser]" && playwright install chromium'),
+        reason=NEEDS_A_BROWSER,
     )
     with playwright_api.sync_playwright() as p:
         instance = p.chromium.launch()

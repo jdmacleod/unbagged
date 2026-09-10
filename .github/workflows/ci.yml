@@ -35,17 +35,17 @@ jobs:
           python-version: "3.12"
 
       - name: Scan the checkout
-        run: python tools/scan_pii.py
+        run: python -m tools.scan_pii
 
       - name: Scan the history introduced by this PR
         if: github.event_name == 'pull_request'
         run: |
           git fetch --no-tags origin "${{ github.base_ref }}"
-          python tools/scan_pii.py --history "origin/${{ github.base_ref }}..HEAD"
+          python -m tools.scan_pii --history "origin/${{ github.base_ref }}..HEAD"
 
       - name: Scan the full history
         if: github.event_name == 'push'
-        run: python tools/scan_pii.py --history
+        run: python -m tools.scan_pii --history
 
       - name: Refuse tracked files under data/
         run: |
@@ -68,13 +68,13 @@ jobs:
       # one would break, permanently, since a signed tag can never be re-signed
       # under a ruleset that blocks deletion and non-fast-forward.
       - name: Verify every tag against the committed signers file
-        run: python tools/check_signers.py
+        run: python -m tools.check_signers
 
       - name: Refuse a source SVG that moved without its icons
         if: github.event_name == 'pull_request'
         run: |
           git fetch --no-tags origin "${{ github.base_ref }}"
-          python tools/check_icon_sync.py "origin/${{ github.base_ref }}"
+          python -m tools.check_icon_sync "origin/${{ github.base_ref }}"
 
       - name: Verify committed fixtures are generator output
         # Load-bearing: scan_pii.py stands a few address-shaped rules down inside
@@ -83,7 +83,7 @@ jobs:
         # directory does not reproduce from the seed.
         run: |
           pip install -e ".[dev]"
-          python tools/make_fixtures.py --check
+          python -m tools.make_fixtures --check
 
       - name: Verify fixture directories are the only re-inclusions
         run: |
@@ -133,11 +133,11 @@ jobs:
       # fails when it no longer covers what pyproject.toml declares. Regenerating
       # the lock to compare would need Docker and a network round trip, so the
       # thorough version is `make lock` and this is the fast half.
-      - run: python tools/check_lock.py
+      - run: python -m tools.check_lock
       # frontend/public/ is generated from resources/ with the C2PA manifests
       # stripped. Copying a source across by hand instead ships several KB of
       # provenance record on every page load and passes every other check.
-      - run: python tools/build_brand.py --check
+      - run: python -m tools.build_brand --check
 
   hooks:
     name: pre-commit
