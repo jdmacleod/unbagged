@@ -8,11 +8,13 @@ import {
 import { scale } from "./views/PriceHistory";
 import { gaugeWidth, scopeNote } from "./views/Profile";
 import { draftRows } from "./views/Compliance";
+import { rowsFor } from "./views/Compare";
 import { nothingWasItemised } from "./views/ProductIndex";
 import { announceUpload, isSameEntry, resolveCurrent } from "./App";
 import type { View } from "./App";
 import type {
   Basket,
+  CompareRow,
   Identity,
   Inference,
   PricePoint,
@@ -520,5 +522,54 @@ describe("announceUpload", () => {
 
   it("says nothing about warnings when there are none", () => {
     expect(announceUpload(uploaded())).not.toContain("warning");
+  });
+});
+
+describe("rowsFor", () => {
+  const column = (
+    disclosed: boolean,
+    lines_disclosed: boolean,
+  ): CompareRow =>
+    ({ id: 1, disclosed, lines_disclosed }) as CompareRow;
+
+  const moneyLabel = (requests: CompareRow[]) =>
+    rowsFor(requests).find((r) => r.key === "total_paid")!.label;
+
+  it("says paid when every disclosed column has line items", () => {
+    expect(moneyLabel([column(true, true), column(true, true)])).toBe(
+      "Total paid",
+    );
+  });
+
+  it("says spent when any disclosed column has none", () => {
+    // The H Mart case beside a Kroger one. "Paid" would claim a summed line
+    // amount for a column that only ever carried stated basket totals.
+    expect(moneyLabel([column(true, true), column(true, false)])).toBe(
+      "Total spent",
+    );
+  });
+
+  it("ignores columns that disclosed nothing at all", () => {
+    // Every cell in an undisclosed column is an em dash, so it has no quantity
+    // to name and must not drag the word for the columns that do.
+    expect(moneyLabel([column(true, true), column(false, false)])).toBe(
+      "Total paid",
+    );
+  });
+
+  it("falls back to paid when no column is disclosed", () => {
+    // `every` over an empty list is true. Called out because it looks like a
+    // bug and is not: the row is all em dashes here, and "Total paid" is what
+    // this label said before any of it varied.
+    expect(moneyLabel([column(false, false)])).toBe("Total paid");
+    expect(moneyLabel([])).toBe("Total paid");
+  });
+
+  it("changes only the money label, never the row set or the keys", () => {
+    const paid = rowsFor([column(true, true)]);
+    const spent = rowsFor([column(true, false)]);
+    expect(paid.map((r) => r.key)).toEqual(spent.map((r) => r.key));
+    const differing = paid.filter((r, i) => r.label !== spent[i].label);
+    expect(differing.map((r) => r.key)).toEqual(["total_paid"]);
   });
 });

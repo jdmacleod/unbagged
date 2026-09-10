@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   CATEGORY_COUNT,
+  barAxisLabel,
   categoryIndex,
   day,
   humanise,
   money,
   number,
+  paidLabel,
+  paidWord,
   percent,
   saving,
 } from "./format";
@@ -98,5 +101,31 @@ describe("humanise", () => {
   });
   it("splits camelCase", () => {
     expect(humanise("householdComposition")).toBe("Household composition");
+  });
+});
+
+describe("paidWord and its two phrasings", () => {
+  it("says paid when lines were disclosed, spent when they were not", () => {
+    // "Paid" means a summed line amount everywhere in this app. A response
+    // carrying only stated basket totals holds a different quantity, and the
+    // word changes with the figure rather than covering both.
+    expect(paidWord(true)).toBe("paid");
+    expect(paidWord(false)).toBe("spent");
+  });
+
+  it("gives the headline and the axis the same word", () => {
+    // Issue #57 was one figure under two names depending on the tab. The two
+    // phrasings differ; the word they are built from must not.
+    expect(paidLabel(true)).toBe("Total paid");
+    expect(barAxisLabel(true)).toBe("paid, by month");
+    expect(paidLabel(false)).toBe("Total spent");
+    expect(barAxisLabel(false)).toBe("spent, by month");
+  });
+
+  it("derives both phrasings from the one word", () => {
+    for (const disclosed of [true, false]) {
+      expect(paidLabel(disclosed)).toContain(paidWord(disclosed));
+      expect(barAxisLabel(disclosed)).toContain(paidWord(disclosed));
+    }
   });
 });

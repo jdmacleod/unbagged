@@ -1,7 +1,7 @@
 import { api } from "../api";
 import { useAsync } from "../components/useAsync";
 import { Aside, Caveat, ErrorBox, Spine, Spinner } from "../components/ui";
-import { day, money, number } from "../format";
+import { day, money, number, paidLabel } from "../format";
 import type { CompareRow } from "../types";
 
 type Metric = {
@@ -12,11 +12,33 @@ type Metric = {
   foreign?: boolean;
 };
 
+/** The rows, given the columns that will sit beside them.
+ *
+ *  Only the money label varies, and only on the word. The invariant this view
+ *  protects is one label per ROW — not a refusal to qualify per column, which
+ *  the column head already does ("disclosed no data", "totals only, no items").
+ *  Deriving the word from the columns present keeps the row single-valued and
+ *  stops Timeline and Compare naming one figure two ways.
+ *
+ *  Undisclosed columns are excluded from the question: every cell in them is an
+ *  em dash, so they have no quantity to name. With no disclosed column at all
+ *  `every` is vacuously true and the label falls back to "Total paid", which is
+ *  what this row said before and sits over a row of dashes either way.
+ */
+export function rowsFor(requests: CompareRow[]): Metric[] {
+  const disclosed = requests.filter((r) => r.disclosed);
+  const label = paidLabel(disclosed.every((r) => r.lines_disclosed));
+  return ROWS.map((row) =>
+    row.key === "total_paid" ? { ...row, label } : row,
+  );
+}
+
 const ROWS: Metric[] = [
   { key: "visits", label: "Visits", format: number },
   // Paid, not shelf. This row read "Total spend" over the summed pre-discount
   // amounts, which ranks two retailers by whose shelf prices are higher rather
-  // than by which one actually cost more.
+  // than by which one actually cost more. The word now follows the columns —
+  // see rowsFor — but the KEY does not: it stays total_paid either way.
   { key: "total_paid", label: "Total paid", format: money },
   { key: "total_saved", label: "…after loyalty savings of", format: money },
   { key: "distinct_products", label: "Distinct products", format: number },
@@ -68,6 +90,8 @@ export function Compare() {
   // nothing — and a column can be disclosed and still carry a dash, which is
   // exactly what a response graded `partial` now produces. The sentence
   // explaining the mark was therefore hidden on the one case that needed it.
+  // ROWS, not rowsFor: this asks which cells are dashes, and only the money
+  // label varies between them.
   const anyDash = ROWS.some((row) =>
     requests.some((r) => r[row.key] === null || r[row.key] === undefined),
   );
@@ -182,7 +206,7 @@ function Sheet({
           )}
         </div>
 
-        {ROWS.map((row) => (
+        {rowsFor(requests).map((row) => (
           <div
             key={row.key}
             className="grid items-baseline gap-4 border-b border-rule py-2"
