@@ -120,14 +120,33 @@ class TestConfiguration:
 # Every table that cascades off `request`. Named rather than discovered, because
 # the point of the census below is to catch a rebuild that empties one of them,
 # and a discovery query would happily find nothing and report success.
+#
+# `follow_up` was missing from this tuple when it was first written, which is the
+# defect issue #32 names: a guard asserting something about a set the author typed
+# out, rather than about that set's relationship to the schema. The census would
+# have passed a rebuild that dropped every follow-up. Caught in review on #75.
+# `test_the_census_covers_every_cascading_table` below now asserts the
+# relationship, so the next table to gain a cascade cannot quietly go uncounted.
 CASCADING_TABLES = (
     "source_document",
     "identity",
     "txn",
     "inference",
     "disclosure",
+    "follow_up",
     "parse_warning",
 )
+
+
+def cascading_from_request(conn) -> set[str]:
+    """Tables the schema says cascade when a request is deleted."""
+    found = set()
+    for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'"):
+        table = row["name"]
+        for fk in conn.execute(f"PRAGMA foreign_key_list({table})"):  # noqa: S608
+            if fk["table"] == "request" and fk["on_delete"] == "CASCADE":
+                found.add(table)
+    return found
 
 
 def _populate(conn) -> dict[str, int]:
@@ -146,6 +165,10 @@ def _populate(conn) -> dict[str, int]:
     )
     conn.execute(
         "INSERT INTO disclosure (request_id, category, status) VALUES (1, 'SOURCES', 'absent')"
+    )
+    conn.execute(
+        "INSERT INTO follow_up (request_id, kind, description)"
+        " VALUES (1, 'supplemental_period', 'ask again for the earlier window')"
     )
     conn.execute(
         "INSERT INTO parse_warning (request_id, severity, message) VALUES (1, 'warning', 'msg')"
@@ -167,6 +190,16 @@ class TestRequestIdsAreNeverReused:
     not at all. Guarding surfaces one at a time is what produced two issues from
     one cause, so the id is monotonic now and no consumer has to check.
     """
+
+    def test_the_census_covers_every_cascading_table(self, conn):
+        """The list and the schema must agree, or the census proves nothing.
+
+        Written because the list did NOT agree: `follow_up` was missing, so a
+        rebuild that dropped every follow-up would have passed the preservation
+        test below. Asserting the relationship rather than the membership is the
+        difference issue #32 is about.
+        """
+        assert set(CASCADING_TABLES) == cascading_from_request(conn)
 
     def test_a_deleted_id_is_not_handed_out_again(self, conn):
         conn.execute("INSERT INTO request (retailer_id, display_name) VALUES ('kroger', 'Kroger')")
