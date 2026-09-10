@@ -73,7 +73,7 @@ test-frontend:  ## Run the UI unit tests (vitest)
 test-container:  ## Run the slow tests that build and run a real container
 	$(PY) -m pytest -q -m container
 
-setup-browser:  ## Install Chromium for the layout regression test
+setup-browser:  ## Install Chromium for the browser tests
 	$(PY) -m pip install -e ".[browser]"
 	$(PY) -m playwright install chromium -p no:cacheprovider
 

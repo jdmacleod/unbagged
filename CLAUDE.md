@@ -36,6 +36,10 @@ historical**: `DESIGN.md` is the authority for anything the user sees, and it de
   group, so nothing re-runs it. Edit an SVG, run `make brand` alone, and stale
   icons ship with CI green.
 - `data/` — gitignored, bind-mounted at runtime, off-limits (see above).
+- `docs/legal-basis.md` — where the eight disclosure categories come from and why
+  each is graded as it is, with the statutory citation for each. It is the authority
+  behind the Compliance view and behind any change to `DisclosureCategory`, and it is
+  cited from `models.py`, `letters.py`, `views.py` and the app's own footer.
 
 ## Conventions
 

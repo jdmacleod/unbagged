@@ -4,8 +4,7 @@ Regression: ISSUE-001 — a cell carrying ss:MergeAcross occupies the columns it
 spans, and those columns are not written. Reading the next element as the next
 column shifts every value after it one or more fields left, against a dense
 header row, with no error and no warning.
-Found by /qa on 2026-09-09
-Report: .gstack/qa-reports/qa-report-hmart-2026-09-09.md
+Found by /qa on 2026-09-09; fixed in 822c97b.
 
 The same class of bug as `ss:Index`, and the one `tests/test_extraction.py`
 already guards. This is the other half of it.

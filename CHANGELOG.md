@@ -25,6 +25,21 @@ from a specific response. See `CONTRIBUTING.md`.
 
 ## Unreleased
 
+### Changed
+
+- **Four places where the documentation described something the repository does
+  not do.** The architecture diagram in the handoff named four views when there
+  are six, and stops naming them at all now — it is about where the read path
+  goes, and enumerating views had gone stale twice. `make help` still called the
+  browser tests "the layout regression test", from when there was one of them.
+  Three committed test docstrings cited a QA report path under a gitignored
+  directory, so the pointer resolved for nobody who cloned; they cite the commit
+  that landed each fix instead, and `CONTRIBUTING.md` now says why. The document
+  the Compliance view names on screen — where the eight categories come from —
+  was reachable from nine files but not from the README, and now is. Also caught
+  while linking it: the README said Kroger was the only full adapter, two lines
+  below a table listing H Mart as one too.
+
 ### Fixed
 
 - **Two stores could be given the same colour, and the legend exists to tell

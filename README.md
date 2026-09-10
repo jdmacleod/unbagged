@@ -91,7 +91,9 @@ signed up for anything.
 **Compliance** — the eight CCPA/CPRA categories per retailer, with the answer quoted
 where there is one and a blank rule where there is not. A "draft a follow-up" action
 writes a supplemental request naming what went unanswered; you read it and send it
-yourself.
+yourself. Where the eight categories come from, and why each is graded the way it is,
+is set out in [`docs/legal-basis.md`](docs/legal-basis.md) — with the citation for
+each one.
 
 ![The compliance view](docs/screenshots/compliance.png)
 
@@ -120,10 +122,10 @@ and scales to a wall print. It exports what is on screen, filters included.
 | H Mart | Full adapter — a spreadsheet export of basket totals with no line items |
 | Anything else | Fallback: read as text, disclosures recorded, no data extracted |
 
-Kroger is the only full adapter, because it is the only format anyone has had a real
-response for. A retailer with no adapter still works: the fallback reads the response
-as text and records what it did and did not address, since a letter with no data in it
-is itself the finding.
+Kroger and H Mart are the two full adapters, because they are the two formats anyone
+has had a real response for. A retailer with no adapter still works: the fallback reads
+the response as text and records what it did and did not address, since a letter with no
+data in it is itself the finding.
 
 Adding a retailer should not require touching code outside its own package. See
 `docs/writing-an-adapter.md`.
