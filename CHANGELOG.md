@@ -27,6 +27,84 @@ from a specific response. See `CONTRIBUTING.md`.
 
 ### Fixed
 
+- **The upload moved you back to where you had been ten seconds earlier.** A
+  long report takes tens of seconds to read, and there is nothing to do while it
+  does. Wander off to another view and the finished upload put you back on the
+  one you were on when you dropped the file — for a different response than the
+  one you had been reading. The view is now read as the upload lands rather than
+  as it starts.
+- **A beat of the wrong response between an upload and its report.** The list of
+  responses is re-read after every upload, and until it arrived the page fell
+  back to the oldest response you had loaded: the wrong retailer on screen, the
+  wrong name in the selector, and a round of queries for a response nobody asked
+  for — competing for the same capacity as the upload still finishing. The new
+  response is committed before any of that starts, so the page now shows it
+  straight away and the report no longer disappears and pops back.
+- **Back could not be used after an upload.** Adding or removing a response is
+  something you did, not somewhere you went, and both were recorded in browser
+  history as though they were places. Two consequences: after the first upload
+  of a session Back appeared to do nothing at all, and after removing a response
+  Back landed on a link naming the response that had just been deleted — a URL
+  worth nothing if it were bookmarked or sent to someone. Neither is recorded in
+  history now, and the address bar still names the response on screen, so a
+  bookmark and a page reload still work.
+- **Nothing told you the upload had finished.** The uploader sits at the foot of
+  a long document, so you are at the bottom of the page when you drop a file,
+  and the response that replaces the page can be a very different length. Where
+  you ended up was whatever the browser happened to do with the scroll position.
+  The report is now brought into view and given focus, and the outcome is
+  announced — which retailer matched, whether the match was confident, and the
+  counts. For anyone using a screen reader the entire page changed in silence
+  before this, with no way to tell the upload had done anything at all. A
+  refused upload now says so out loud too, rather than only drawing a box.
+- **A failed request for the list of responses deleted the report and the app.**
+  Any interruption — restarting the backend, a dropped connection — emptied the
+  page: the report you had just waited half a minute for was gone, and the app
+  returned to its first-run screen, offering to load a first response for an
+  archive that was not empty. Being unable to read the list is not the same fact
+  as there being nothing in it, and the two now read differently. What was
+  loaded stays on screen, with a line saying the list could not be re-read and a
+  way to try again; a failed first read says so plainly instead of claiming the
+  archive is empty.
+- **A second window never found out about a removal.** Removing a response in
+  one tab left every other tab still offering it, still pointed at it, and every
+  request for it failing — with no way back except reloading the page by hand.
+  The same happened to a single tab after `make reset`. A tab now re-reads the
+  list when you return to it, and moves off a response that is no longer there
+  rather than leaving the address bar naming it.
+- **A double drop sent two uploads.** Two clicks in quick succession, or a drop
+  landing on top of a click, both got through: the second was refused by the
+  server, so nothing was duplicated, but the refusal read like a bug and could
+  leave the report describing a different upload than the one on screen. A drop
+  refused because one is already running now says so, rather than being
+  swallowed in silence.
+- **Removing a response could remove a different one.** The confirmation names
+  the retailer you are about to delete, and the response behind an id can change
+  underneath it — the database reuses the number of a deleted row, and a tab
+  that refreshes in the background can pick up the new occupant. Nothing forced
+  the confirmation to notice, so the text could change from one retailer to
+  another between reading it and clicking it. The removal is now tied to the
+  retailer as well as the number, and it is withdrawn entirely while the list of
+  responses cannot be read, since it cannot be aimed reliably then.
+- **A failed refresh could put a deleted response back on screen.** Once the app
+  had successfully seen that a response was gone, a later failed refresh
+  resurrected the report describing it — counts, retailer and all, read out to
+  screen readers a second time. Being unable to look is not the same as looking
+  and finding it there, and only the second one is now allowed to bring anything
+  back.
+- **A failed refresh could throw away the response you asked for.** Opening a
+  saved link while the backend was restarting dropped the response from the
+  address bar, so recovering landed you somewhere else with no record of what
+  you had asked for. And a failed refresh immediately after an upload took the
+  new response with it — the report stayed on screen while the page moved to a
+  different one.
+- **Back onto a removed response left the address bar naming it.** Pressing Back
+  onto a link to a response that had since been deleted showed a different one
+  while the address bar went on naming the deleted one for the rest of the
+  session, so anything copied from there was wrong.
+- **A failed refresh could hide an upload that was still running.** Tabbing away
+  and back during a long parse could replace the running progress indicator with
+  an error about something else entirely.
 - **The first upload never showed what it had just read.** Every upload produces
   a short report — which retailer matched, how confident that match is, the
   counts, and any warning the adapter raised — and on the very first one it was
