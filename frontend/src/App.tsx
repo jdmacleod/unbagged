@@ -144,6 +144,39 @@ export default function App() {
   // handling them is part of the same change.
   const known = rows.some((r) => r.id === selected);
   const current = (known ? selected : null) ?? rows[0]?.id ?? null;
+  const currentRow = rows.find((r) => r.id === current) ?? null;
+
+  // What to do when an upload finishes. Shared by both uploaders rather than
+  // written twice: they already drifted once, and the half that matters here is
+  // easy to leave out of one of them.
+  //
+  // **Selecting the new response is the load-bearing line.** Without it the
+  // upload lands in the list and the app keeps showing whatever it showed
+  // before — `current` falls back to `rows[0]`, the OLDEST response. The first
+  // upload of a session hides this completely, because the row it just created
+  // IS `rows[0]`; from the second upload on, the reader is told "Read as
+  // Kroger" while looking at H Mart. Worse, "Remove this response" acts on
+  // what is being VIEWED, so the obvious next click deletes the response they
+  // did not just add.
+  //
+  // `r` is null when an upload starts or fails. Neither is a new response, so
+  // neither changes the selection — a failed upload must leave the reader
+  // where they were.
+  //
+  // The product filter is dropped for the same reason `onRemoved` drops it: it
+  // names a product in the response being left behind, and carrying it onto a
+  // different one silently filters a timeline nobody pointed it at.
+  function uploadFinished(r: UploadResult | null) {
+    setLastUpload(r);
+    // A null `r` means an upload just STARTED or failed. Nothing on the server
+    // changed either way, so re-reading the list buys nothing and costs a
+    // `loading: true` — which rendered "Looking for stored responses" over the
+    // document while the drop zone was already saying "Reading the response…".
+    // Two spinners for one action, one of them about the wrong thing.
+    if (!r) return;
+    go({ request: r.request_id, query: null, label: null });
+    requests.reload();
+  }
 
   // The upload report, but only while the response it describes still exists.
   //
@@ -272,10 +305,7 @@ export default function App() {
           <Upload
             prominent
             result={liveUpload}
-            onDone={(r) => {
-              setLastUpload(r);
-              requests.reload();
-            }}
+            onDone={uploadFinished}
           />
         )}
 
@@ -286,7 +316,19 @@ export default function App() {
                 // Back and forward change the URL's product filter while the
                 // view holds its own search state. Keying on it remounts rather
                 // than leaving the two disagreeing.
-                key={query ?? ""}
+                //
+                // `current` is in the key for the same reason, and the response
+                // it names is the half that bites. Timeline owns `store`,
+                // `from`, `to` and `q` locally; only `q` is ever mirrored in
+                // the URL. So switching response without remounting carried the
+                // hand-set filters onto a retailer that has never heard of
+                // them — and a store code from the previous response matches no
+                // option in the new one, so the control reads "every store"
+                // while `?store=<old code>` is still on every request. Measured
+                // switching a Kroger store filter onto an H Mart response: the
+                // header said 67 visits over an empty roll and "No visits match
+                // those filters", with nothing on screen to clear.
+                key={`${current}:${query ?? ""}`}
                 requestId={current}
                 arrival={query ? { query, label: label ?? query } : null}
                 onClearArrival={() => go({ query: null, label: null })}
@@ -318,20 +360,23 @@ export default function App() {
         <div className="mt-14">
           <Upload
             result={liveUpload}
-            onDone={(r) => {
-              setLastUpload(r);
-              requests.reload();
-            }}
+            onDone={uploadFinished}
           />
           {/* Removing one is a smaller footnote still, and it lives here rather
               than beside the retailer selector: the selector is used constantly
               and a destructive control does not belong under a hand that is
               only trying to switch views. */}
-          {current !== null && (
+          {currentRow && (
             <div className="mt-4">
               <RemoveRequest
                 key={current}
-                request={rows.find((r) => r.id === current)!}
+                // Found, not asserted. `current` is derived from `rows` in the
+                // same render, so this holds today — but it holds by argument
+                // rather than by construction, and the cost of being wrong is
+                // not a missing control: `request.display_name` on undefined
+                // throws during render, and there is no error boundary in the
+                // tree (issue #49), so the whole page goes blank.
+                request={currentRow}
                 onRemoved={() => {
                   // Drop the filter and the selection with it: `?r=` would
                   // otherwise name a response that no longer exists, and `?q=`
