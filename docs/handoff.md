@@ -257,7 +257,13 @@ SQLite. All tables carry `request_id`. Timestamps ISO-8601 UTC.
 
 ```sql
 CREATE TABLE request (
-    id INTEGER PRIMARY KEY,
+    -- AUTOINCREMENT, not a bare rowid alias: SQLite hands the highest rowid out
+    -- again after a delete, and both the upload report panel and the `?r=` in the
+    -- URL name a response by this id. Reuse made each of them point at a
+    -- different response than the one they meant (#54, #64). Added by migration
+    -- 003; every consumer is now free to treat the id as naming one response for
+    -- the life of the database.
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     retailer_id TEXT NOT NULL,
     display_name TEXT NOT NULL,
     report_reference TEXT,              -- retailer's own report ID

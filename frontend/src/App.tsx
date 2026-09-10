@@ -280,12 +280,16 @@ export default function App() {
   // first-run uploader to the footer one, and that is the point — but a report
   // is a claim about a stored response, so it has to die with one.
   //
-  // The retailer is compared as well as the id, and that is not belt-and-braces.
-  // `request.id` is `INTEGER PRIMARY KEY` with no `AUTOINCREMENT`, so it is a
-  // rowid alias and SQLite REUSES the highest id once its row is deleted. Delete
-  // the newest response in another tab, upload a different one, and it can be
-  // handed the same id — an id-only check would then pass and pin the old
-  // report to the new response, naming the wrong retailer with confident counts.
+  // The retailer is compared as well as the id. That WAS load-bearing: `request.id`
+  // was a rowid alias, so SQLite reused the highest id once its row was deleted,
+  // and an id-only check would pin an old report to a new response and name the
+  // wrong retailer with confident counts.
+  //
+  // Migration 003 made the id monotonic, which closed that at the source (#54,
+  // #64) — and the comparison stays anyway. It costs one field, it is the kind of
+  // check that is hard to reinstate once removed, and "the id cannot repeat" is a
+  // claim about the schema rather than about this component. A cheap assertion
+  // that the two agree is worth more here than the line it saves.
   //
   // Two arms beyond that, and both are narrower than they look:
   //

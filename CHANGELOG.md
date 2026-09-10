@@ -58,6 +58,18 @@ from a specific response. See `CONTRIBUTING.md`.
 
 ### Fixed
 
+- **A response could be handed the id of one you had just deleted.** The id is
+  what the upload report panel and the `?r=` in the address bar both use to name
+  a response, and SQLite hands the highest one out again after a delete. Remove
+  the newest response, upload another, and the new one could take the old one's
+  id: the report panel then showed one response's counts and warnings over
+  another's, and pressing Back onto an older history entry rendered a different
+  response than the entry meant. Ids are never reused now. Existing ones are
+  preserved by the migration, so a bookmarked link still opens what it always
+  did. Each surface had been patched separately before this — the panel learned
+  to compare the retailer as well as the id, which closed one case and left the
+  other — and the schema now removes the cause rather than the symptoms.
+
 - **Two stores could be given the same colour, and the legend exists to tell
   them apart.** Store colours are hashed into six hues, so three stores share
   one about 44% of the time — and the synthetic H Mart history hits it, with two
