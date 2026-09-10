@@ -45,6 +45,26 @@ The Privacy Team
 """
 
 
+def drop(page, *paths) -> None:
+    """Put files on the upload input and guarantee a change event.
+
+    `set_input_files` fires nothing when the input already holds exactly those
+    files, and several tests here deliberately re-drop the same report to reach
+    the duplicate-refusal path. Whether that fired at all depended on the
+    `<Upload>` component having remounted in between — it is mounted at one
+    position while there are no responses and another once there is one — so the
+    second drop worked most of the time and hung for 120 seconds when the DOM
+    query won the race.
+
+    Clearing first makes the next assignment a change whatever the input was
+    holding. Measured before this: five different tests in this tier failed that
+    way across a day's runs, each passing in isolation and on re-run, which is
+    the "fails opaquely" half of issue #51.
+    """
+    page.set_input_files("input[type=file]", [])
+    page.set_input_files("input[type=file]", [str(x) for x in paths])
+
+
 def upload(page, *paths) -> None:
     """Upload, then wait for the app to SETTLE — not for the panel to appear.
 
@@ -57,7 +77,7 @@ def upload(page, *paths) -> None:
     far side of exactly the transition this regression is about. Asserting after
     it is asserting that the result survived the swap.
     """
-    page.set_input_files("input[type=file]", [str(x) for x in paths])
+    drop(page, *paths)
     page.wait_for_selector("text=Add another response", timeout=120_000)
     page.wait_for_load_state("networkidle")
 
@@ -69,7 +89,7 @@ def upload_again(page, *paths) -> None:
     anything. The selector renders only once a second response exists, which
     puts the wait on the far side of the second reload the same way.
     """
-    page.set_input_files("input[type=file]", [str(x) for x in paths])
+    drop(page, *paths)
     page.wait_for_selector("select[aria-label]", timeout=120_000)
     page.wait_for_load_state("networkidle")
 

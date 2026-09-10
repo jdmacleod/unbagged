@@ -40,6 +40,7 @@ from tests.container.browser import (
     HMART,
     KROGER,
     LETTER,
+    drop,
     panel,
     selected,
     upload,
@@ -313,7 +314,7 @@ class TestTheUploadsAfterTheFirst:
         # screen: the footer input still holds the Kroger file from the upload
         # above, and setting an input to the files it already has fires no
         # `change`, so the drop would never reach `send()` at all.
-        page.set_input_files("input[type=file]", [str(HMART)])
+        drop(page, HMART)
         page.wait_for_selector("text=already loaded this response", timeout=120_000)
         page.wait_for_load_state("networkidle")
 
@@ -370,7 +371,7 @@ class TestTheUploadsAfterTheFirst:
         upload(page, KROGER)
         assert "Read as" in page.inner_text("body")
 
-        page.set_input_files("input[type=file]", [str(KROGER)])
+        drop(page, KROGER)
         page.wait_for_selector("text=already loaded this response", timeout=120_000)
         body = page.inner_text("body")
         assert "remove the existing one" in body

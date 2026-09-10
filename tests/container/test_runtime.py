@@ -99,7 +99,7 @@ class TestDataDirectory:
         run_container(data=data)
         # The fixture's teardown is what does the work, so reach it directly
         # rather than asserting after the fixture has already been torn down.
-        conftest.return_ownership("unbagged:pytest", data)
+        conftest.return_ownership(conftest.IMAGE, data)
         assert data.stat().st_uid == os.getuid(), (
             "the scratch tree is still owned by the container's user; a later "
             "pytest run will fail to clean it up"
