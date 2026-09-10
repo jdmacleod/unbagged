@@ -45,6 +45,23 @@ from a specific response. See `CONTRIBUTING.md`.
   Now held by the page rather than by the panel, so it survives the moment the
   screen changes under it. A browser-tier test drives a real first upload of two
   responses at once and fails against the previous build.
+- **Adding a response did not switch to it.** From the second upload onward the
+  new response joined the list and the page kept showing the previous one, so
+  the line saying what had just been read sat above a timeline belonging to
+  something else. The first upload of a session hid this, because the response
+  it created was the only one there.
+
+  The cost was not only confusion. **Remove acts on the response you are
+  looking at**, so the obvious next click after adding removed the wrong one.
+  Adding a response now selects it, and any product filter from the response
+  you were on is dropped rather than carried across.
+- **Filters followed you onto a response that had never heard of them.** The
+  timeline's store, date and search boxes belong to the view rather than to the
+  address bar, and switching response did not reset them. A store from the
+  response you left matches nothing in the one you arrive at, so the control
+  read "every store" while the store was still being asked for — and the new
+  response came up empty, under a heading counting every visit in it, with
+  nothing on screen to clear. Switching now starts the timeline fresh.
 - **The report outlived the thing it described.** Keeping it on the page is what
   makes the fix above work, and it also meant the report stopped dying when it
   should. Removing a response left its report standing; so did a failure to
