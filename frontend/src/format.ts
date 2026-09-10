@@ -91,10 +91,11 @@ export const barAxisLabel = (anyItemised: boolean) =>
  *  it sits in is filtered or reordered.
  *
  *  **One exception, and only one.** `assignStoreHues` below breaks a tie when
- *  two keys in the same response land on the same hue. Everything that does not
- *  collide still comes from this hash, which is why the guarantee above is
- *  written as "the same key gets the same hue" rather than "always". A colliding
- *  store can change colour when a different response is loaded.
+ *  two keys in the same response want hues a reader cannot tell apart — whether
+ *  that is the same index or two that merely look identical. Everything that
+ *  does not collide still comes from this hash, which is why the guarantee above
+ *  is written as "the same key gets the same hue" rather than "always". A
+ *  colliding store can change colour when a different response is loaded.
  */
 export const CATEGORY_COUNT = 6;
 
@@ -111,67 +112,112 @@ export function categoryVar(key: string): string {
   return `var(--cat-${categoryIndex(key) + 1})`;
 }
 
-/** Hue indices ordered by how far apart they stay, worst pair first.
+/** Worst-case perceived distance between two hues, as CIEDE2000.
  *
- *  Measured on the palette in `index.css` as CIEDE2000 distance, taking the
- *  worst of normal, deuteranopic and protanopic vision (Viénot 1999). The order
- *  comes out identical in light and dark.
+ *  Measured on the palette in `index.css`, taking the minimum across both
+ *  themes and normal, deuteranopic and protanopic vision (Viénot 1999). Below
+ *  about 10 two hues read as the same colour at the 8px dot the timeline draws.
  *
- *  It matters because "pick any free index" is not the same as "pick a
- *  different colour". `--cat-2` and `--cat-4` are ΔE 1.1 apart under
- *  deuteranopia — indistinguishable at the 8px dot the timeline draws — so a
- *  de-collision that only avoids reusing an index can change nothing at all for
- *  roughly 1 in 12 men, while its test passes because the numbers differ.
+ *  The table is the whole reason this file does anything cleverer than "pick a
+ *  free index". Six distinct indices are not six distinct colours: `--cat-2`
+ *  and `--cat-4` are 1.1 apart under deuteranopia, and `--cat-2`/`--cat-6` are
+ *  2.8 apart under protanopia. A reader with red-green colour blindness — about
+ *  1 in 12 men — sees this palette as roughly three hues, not six.
  *
- *  What the order buys, worst pair across the three vision models:
- *  2 keys ΔE 43.7 · 3 keys 14.4 · 4 keys 6.0 · 5 keys 4.8 · 6 keys 1.1.
- *  So colour separates confidently at two and three, is normal-vision-only from
- *  four to six, and past six there is nothing left to give. The label carries
- *  the meaning at every count — see DESIGN.md — which is why this degrades
- *  rather than breaks.
+ *  Regenerate rather than hand-edit if the palette ever changes; the numbers
+ *  are meaningless against different hex values.
+ */
+const HUE_DISTANCE: readonly (readonly number[])[] = [
+  [0.0, 20.6, 13.6, 23.8, 4.8, 15.6],
+  [20.6, 0.0, 36.1, 1.1, 24.4, 2.8],
+  [13.6, 36.1, 0.0, 43.7, 11.9, 38.5],
+  [23.8, 1.1, 43.7, 0.0, 25.2, 6.0],
+  [4.8, 24.4, 11.9, 25.2, 0.0, 17.1],
+  [15.6, 2.8, 38.5, 6.0, 17.1, 0.0],
+];
+
+/** Below this, two hues are the same colour as far as a reader is concerned. */
+const INDISTINGUISHABLE = 10;
+
+/** Tie-break order when two free hues are equally far from what is on screen.
+ *
+ *  The measured maximum-separation order, so a tie resolves toward the hues
+ *  that leave the most room for whatever is assigned next.
  */
 const SPREAD_ORDER = [2, 3, 0, 5, 4, 1];
 
-/** Hue index per key, hash-assigned, with collisions broken by separation.
+/** Hue index per key: hash-assigned, with indistinguishable hues pushed apart.
  *
- *  The hash still assigns. Only a key that lands on a hue already taken moves,
- *  and it moves to the first free index in `SPREAD_ORDER` rather than to
- *  whatever happened to be next. A set with no collisions returns exactly what
- *  `categoryIndex` alone would have returned.
+ *  The hash still assigns. A key only moves when the hue it wants cannot be
+ *  told apart from one already on screen — which is a wider test than "that
+ *  index is taken", and deliberately so. Two stores rendered `--cat-2` and
+ *  `--cat-4` have different indices and the same colour, and the reader this
+ *  exists for cannot use the difference. A set with nothing too close together
+ *  returns exactly what `categoryIndex` alone would have returned.
  *
- *  Keys are processed in sorted order so the outcome does not depend on the
- *  order they arrive in — the caller passes `stats.stores`, which is sorted by
- *  visit count, and a store that gains a visit must not repaint the legend.
+ *  A key that has to move takes the free hue that stays furthest from every
+ *  hue already assigned, rather than the next one in some fixed order: what
+ *  counts is the distance to what is actually on screen.
  *
- *  Past `CATEGORY_COUNT` keys there is no free index to move to and collisions
- *  are unavoidable; the hash's answer stands, which is the same behaviour this
- *  had before.
+ *  Keys are processed in sorted order so the result does not depend on the
+ *  order they arrive in — the caller passes `stats.stores`, sorted by visit
+ *  count, and a store gaining a visit must not repaint the legend.
+ *
+ *  **What this is worth, measured over random store sets.** At two and three
+ *  stores every pair clears the threshold, every time. At four and above it
+ *  converges on the palette's own ceiling — the best any assignment can do with
+ *  four of these six hues is 6.0, and five or six is worse — so colour stops
+ *  being a reliable channel there and the label beside it carries the meaning.
+ *  Past six there is no free hue at all and the hash's answer stands. See
+ *  DESIGN.md; the ladder is written down rather than the palette being claimed
+ *  to scale.
  */
 export function assignStoreHues(keys: string[]): Map<string, number> {
   const assigned = new Map<string, number>();
-  const taken = new Set<number>();
-  const collided: string[] = [];
+  const taken: number[] = [];
+  const moved: string[] = [];
+
+  const clears = (hue: number) =>
+    taken.every(
+      (t) => t !== hue && HUE_DISTANCE[hue][t] >= INDISTINGUISHABLE,
+    );
 
   for (const key of [...new Set(keys)].sort()) {
     const wanted = categoryIndex(key);
-    if (taken.has(wanted)) {
-      collided.push(key);
-    } else {
-      taken.add(wanted);
+    if (clears(wanted)) {
+      taken.push(wanted);
       assigned.set(key, wanted);
+    } else {
+      moved.push(key);
     }
   }
 
-  for (const key of collided) {
-    const free = SPREAD_ORDER.find((i) => !taken.has(i));
-    // Undefined once every hue is spoken for. Keeping the hash's answer means
-    // the collision is visible rather than the store being unpainted.
-    const index = free ?? categoryIndex(key);
-    taken.add(index);
-    assigned.set(key, index);
+  for (const key of moved) {
+    const free = SPREAD_ORDER.filter((i) => !taken.includes(i));
+    if (free.length === 0) {
+      // Every hue is spoken for. Keeping the hash's answer makes the collision
+      // visible rather than leaving the store unpainted.
+      assigned.set(key, categoryIndex(key));
+      continue;
+    }
+    // Furthest from everything already on screen. SPREAD_ORDER is the input
+    // order, so an exact tie resolves the same way every time.
+    const best = free.reduce((a, b) =>
+      nearest(taken, b) > nearest(taken, a) ? b : a,
+    );
+    taken.push(best);
+    assigned.set(key, best);
   }
 
   return assigned;
+}
+
+/** Distance from `hue` to the closest hue already assigned. */
+function nearest(taken: number[], hue: number): number {
+  return taken.reduce(
+    (min, t) => Math.min(min, HUE_DISTANCE[hue][t]),
+    Number.POSITIVE_INFINITY,
+  );
 }
 
 /** The CSS variable for an assigned index, or for a key with no assignment.

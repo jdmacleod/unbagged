@@ -31,15 +31,16 @@ from a specific response. See `CONTRIBUTING.md`.
   them apart.** Store colours are hashed into six hues, so three stores share
   one about 44% of the time — and the synthetic H Mart history hits it, with two
   branches rendering identically in the legend and on every row below it. The
-  hash still assigns every colour; only a store that lands on one already taken
-  moves, so a store that was not part of the problem keeps the colour it has
-  always had. Where it moves to is measured rather than arbitrary: two of the
-  six hues are effectively identical to a reader with red-green colour
-  blindness, so simply picking a different slot could have changed nothing for
-  roughly one person in twelve while looking fixed. Colour separates confidently
-  at two and three stores and is normal-vision-only above that; past six there
-  is nothing left to give and collisions return. The label sits beside every
-  colour at every count, which is why this degrades rather than breaks.
+  hash still assigns every colour; only a store whose colour cannot be told
+  apart from one already on screen moves, so a store that was not part of the
+  problem keeps the colour it has always had. "Cannot be told apart" is wider
+  than "the same slot", and that is the part that matters: several of the six
+  hues are effectively identical to a reader with red-green colour blindness, so
+  handing out a different slot can leave two dots looking the same to roughly
+  one person in twelve while appearing fixed. Two- and three-store responses are
+  now always separable; above that the assignment reaches the best the palette
+  can do, and past six there is nothing left to give. The label sits beside
+  every colour at every count, which is why this degrades rather than breaks.
 
 - **The same figure was called two different things depending on which tab you
   were on.** For a response that discloses basket totals and no line items, the

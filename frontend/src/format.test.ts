@@ -202,22 +202,51 @@ describe("assignStoreHues", () => {
     expect(used.size).toBeLessThanOrEqual(CATEGORY_COUNT);
   });
 
+  /** Pairs a reader cannot tell apart, from the measured table in format.ts.
+   *  Different indices, same colour. */
+  const INDISTINGUISHABLE_PAIRS = [
+    [1, 3], // cat-2 / cat-4, ΔE 1.1 under deuteranopia
+    [1, 5], // cat-2 / cat-6, ΔE 2.8 under protanopia
+    [0, 4], // cat-1 / cat-5, ΔE 4.8 under deuteranopia
+    [3, 5], // cat-4 / cat-6, ΔE 6.0 under protanopia
+  ];
+
+  const anyIndistinguishable = (hues: Map<string, number>) => {
+    const got = [...hues.values()];
+    return INDISTINGUISHABLE_PAIRS.some(([x, y]) =>
+      got.includes(x) && got.includes(y),
+    );
+  };
+
   it("resolves a colliding pair into hues that are far apart, not merely different", () => {
     // The finding that made this worth doing: --cat-2 and --cat-4 are ΔE 1.1
     // apart under deuteranopia, so "pick any free index" can change nothing at
-    // all for a colour-blind reader while this test passes on the numbers
-    // differing. Both resolved hues must come from the front of the measured
-    // spread order, which is where the separation is.
+    // all for a colour-blind reader while a test passes on the numbers
+    // differing.
     const [a, b] = collidingPair;
-    const hues = assignStoreHues([a, b]);
-    const indistinguishable = [
-      [1, 3], // cat-2 / cat-4
-      [0, 4], // cat-1 / cat-5
-      [1, 5], // cat-2 / cat-6
-    ];
-    const got = [hues.get(a)!, hues.get(b)!].sort();
-    for (const pair of indistinguishable) {
-      expect(got).not.toEqual(pair);
+    expect(anyIndistinguishable(assignStoreHues([a, b]))).toBe(false);
+  });
+
+  it("separates two keys whose hues merely LOOK the same", () => {
+    // Caught in review on #72. These two do not share an index, so an
+    // index-only collision test never sees them — and they render as the same
+    // colour to roughly 1 in 12 men. STORE-1 is cat-2 and STORE-3 is cat-6,
+    // ΔE 2.8 apart under protanopia.
+    const a = "STORE-1";
+    const b = "STORE-3";
+    expect(categoryIndex(a)).not.toBe(categoryIndex(b));
+    expect(anyIndistinguishable(assignStoreHues([a, b]))).toBe(false);
+  });
+
+  it("keeps two and three store sets distinguishable whatever the names", () => {
+    // The claim DESIGN.md makes, asserted rather than assumed. Sampling rather
+    // than exhausting: the hash makes the input space unbounded, and 500 sets
+    // is enough to catch a rule that only holds sometimes.
+    for (let seed = 0; seed < 500; seed++) {
+      for (const n of [2, 3]) {
+        const keys = Array.from({ length: n }, (_, i) => `BRANCH-${seed}-${i}`);
+        expect(anyIndistinguishable(assignStoreHues(keys))).toBe(false);
+      }
     }
   });
 
