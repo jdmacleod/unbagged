@@ -9,7 +9,15 @@ import { scale } from "./views/PriceHistory";
 import { gaugeWidth, scopeNote } from "./views/Profile";
 import { draftRows } from "./views/Compliance";
 import { nothingWasItemised } from "./views/ProductIndex";
-import type { Basket, Identity, Inference, PricePoint } from "./types";
+import { announceUpload, isSameEntry, resolveCurrent } from "./App";
+import type { View } from "./App";
+import type {
+  Basket,
+  Identity,
+  Inference,
+  PricePoint,
+  UploadResult,
+} from "./types";
 
 const basket = (delta: number | null): Basket =>
   ({ stated_pre_discount_delta: delta }) as Basket;
@@ -363,5 +371,154 @@ describe("nothingWasItemised", () => {
     // "This response disclosed no products" is true there; "they never said
     // what was in any basket" is not.
     expect(nothingWasItemised(index(0, true))).toBe(false);
+  });
+});
+
+describe("resolveCurrent", () => {
+  it("shows what the URL asked for when the list has it", () => {
+    expect(resolveCurrent([1, 2, 3], 2, null)).toBe(2);
+  });
+
+  it("falls back to the loaded list rather than to nothing", () => {
+    // A bookmarked ?r= outlives its response — `make reset` is the obvious
+    // way. Showing something beats "No request with id 999" beside a selector
+    // confidently displaying a different one.
+    expect(resolveCurrent([1, 2, 3], 999, null)).toBe(1);
+  });
+
+  it("trusts a response an upload just created, before the list catches up", () => {
+    // The whole point. `reload` retains the old rows, so for at least one
+    // render the new id is unrecognised — and the fallback is `rows[0]`, the
+    // OLDEST response, since list_requests is ORDER BY id. Without this the
+    // reader gets a flash of the wrong retailer and a round of view fetches
+    // against the wrong request id.
+    expect(resolveCurrent([1, 2], 3, 3)).toBe(3);
+  });
+
+  it("does not extend that trust to some other unknown id", () => {
+    // Only the row the 201 just returned gets the benefit of the doubt.
+    expect(resolveCurrent([1, 2], 9, 3)).toBe(1);
+  });
+
+  it("leaves the first run alone, where there is no wrong row to pick", () => {
+    // With an empty list the fallback cannot choose badly, and selecting the
+    // pending row would render an empty <main> above the first-run uploader
+    // for the length of the reload.
+    expect(resolveCurrent([], 1, 1)).toBe(null);
+  });
+
+  it("takes the first response when the URL names none", () => {
+    // A fresh session with no `?r=`. Reached in the browser tier only, so it is
+    // worth a line here where it is one.
+    expect(resolveCurrent([4, 7, 9], null, null)).toBe(4);
+  });
+
+  it("is null when there is nothing at all", () => {
+    expect(resolveCurrent([], null, null)).toBe(null);
+  });
+});
+
+const view = (v: Partial<View> = {}): View => ({
+  tab: "timeline",
+  request: 1,
+  query: null,
+  label: null,
+  ...v,
+});
+
+describe("isSameEntry", () => {
+  it("recognises a navigation that lands where it started", () => {
+    // Clicking the tab you are already on. Pushing here is a Back press that
+    // appears to do nothing, which teaches people the button is broken.
+    expect(isSameEntry(view(), view())).toBe(true);
+  });
+
+  it("separates entries by tab", () => {
+    expect(isSameEntry(view({ tab: "profile" }), view())).toBe(false);
+  });
+
+  it("separates entries by response", () => {
+    expect(isSameEntry(view({ request: 2 }), view())).toBe(false);
+  });
+
+  it("counts the product filter, which is a different reading of one tab", () => {
+    // ?q= silently filters the timeline. Arriving at a filtered view and
+    // leaving it are two things Back should walk between.
+    expect(isSameEntry(view({ query: "0001" }), view())).toBe(false);
+  });
+
+  it("counts the label, because it is what the arrival sentence says", () => {
+    expect(
+      isSameEntry(
+        view({ query: "0001", label: "BANANAS EA" }),
+        view({ query: "0001", label: "MILK 2%" }),
+      ),
+    ).toBe(false);
+  });
+});
+
+const uploaded = (over: Partial<UploadResult> = {}): UploadResult =>
+  ({
+    request_id: 1,
+    retailer_id: "kroger",
+    display_name: "Kroger",
+    confident: true,
+    confidence: 0.98,
+    warnings: [],
+    summary: { transactions: 54, items: 1203, identities: 7, inferences: 12 },
+    ...over,
+  }) as UploadResult;
+
+describe("announceUpload", () => {
+  it("says what was read and how much of it", () => {
+    // Nothing moved focus or announced anything when <main> was replaced, so
+    // the upload a screen reader user started produced silence.
+    const said = announceUpload(uploaded());
+    expect(said).toContain("Read as Kroger.");
+    // 54 has no group separator in any locale; 1203 does, and which one depends
+    // on the host — `toLocaleString()` takes no locale here, so this would be
+    // "1.203" under de-DE and "1 203" under fr-FR. Assert the shape, not the
+    // separator, or this fails on a machine whose LANG happens to differ.
+    expect(said).toContain("54 visits");
+    expect(said).toMatch(/[\d.,\u202f\u00a0]+ line items/);
+    expect(said).toContain("identifiers");
+  });
+
+  it("carries the uncertainty, which is the part worth hearing", () => {
+    // A low-confidence match is the one case where the retailer named may not
+    // be the retailer meant, and it is invisible to someone not looking at the
+    // panel.
+    expect(announceUpload(uploaded({ confident: false }))).toContain(
+      "uncertain match",
+    );
+  });
+
+  it("counts warnings rather than reading all of them out", () => {
+    const said = announceUpload(
+      uploaded({
+        warnings: [
+          { message: "a", locator: null },
+          { message: "b", locator: null },
+        ],
+      } as Partial<UploadResult>),
+    );
+    expect(said).toContain("2 warnings.");
+  });
+
+  it("says one warning in the singular", () => {
+    // The boundary the conditional exists for, and the commonest real case:
+    // the generic adapter's letter produces exactly one. Untested, "1 warnings."
+    // would have shipped green.
+    expect(
+      announceUpload(
+        uploaded({
+          warnings: [{ message: "a", locator: null }],
+        } as Partial<UploadResult>),
+      ),
+    ).toContain("1 warning.");
+  });
+
+  it("says nothing about warnings when there are none", () => {
+    expect(announceUpload(uploaded())).not.toContain("warning");
   });
 });
