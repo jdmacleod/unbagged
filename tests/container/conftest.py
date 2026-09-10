@@ -23,7 +23,10 @@ import platform
 import shutil
 import subprocess
 import time
+import urllib.error
+import urllib.request
 import uuid
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -126,3 +129,123 @@ def wait_for_exit(name: str, seconds: int = 30) -> dict:
             return state
         time.sleep(0.5)
     return json.loads(docker("inspect", name).stdout)[0]["State"]
+
+
+def _wait_for_health(base: str, timeout: float = 60.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(f"{base}/api/health", timeout=2) as response:
+                if json.load(response).get("status") == "ok":
+                    return
+        except (urllib.error.URLError, OSError, ValueError):
+            time.sleep(0.5)
+    raise AssertionError(f"the app never answered on {base}")
+
+
+# No fixed port. `test_layout.py` can pin one because it holds a single
+# module-scoped container; this fixture is function-scoped and starts a fresh
+# container per test, and a fixed port turns that into three failure modes: a
+# hard-killed pytest leaks a container still holding the port, so every later
+# run fails on bind with an opaque CalledProcessError (`docker()` captures
+# stderr); rm-to-release is not instantaneous, so back-to-back binds flake; and
+# any `-n auto` collides by construction. Docker picks the port, the fixture
+# reads it back. `run_container` above already avoids the same trap with uuid
+# names and no published port.
+@pytest.fixture()
+def empty_app(image, tmp_path) -> Iterator[str]:
+    """A container with nothing ingested.
+
+    Function-scoped and unseeded, which is the whole point: `seeded_app` in
+    `test_layout.py` ingests before yielding, so the first-run uploader it would
+    hand back has already been replaced by the footer one.
+
+    The `try` opens BEFORE the run so a container that starts and then reports
+    failure is still torn down; wrapping only the wait leaks it by name.
+    """
+    data = tmp_path / "data"
+    (data / "db").mkdir(parents=True, exist_ok=True)
+    (data / "incoming").mkdir(parents=True, exist_ok=True)
+    name = f"unbagged-browser-{uuid.uuid4().hex[:8]}"
+    try:
+        docker(
+            "run", "-d", "--name", name,
+            "-v", f"{data}:/data",
+            # Empty host port: Docker assigns a free one, read back below.
+            "-p", "127.0.0.1::8000",
+            image,
+        )
+        # `docker port` answers "<host>:<port>", and the host half varies by
+        # daemon. Only the port is wanted: the publish above already pinned the
+        # interface to loopback, so reusing the reported host would just be a
+        # second, less reliable source for something already decided.
+        published = docker("port", name, "8000/tcp").stdout.strip().splitlines()[0]
+        base = f"http://127.0.0.1:{published.rsplit(':', 1)[-1]}"
+        _wait_for_health(base)
+        yield base
+    finally:
+        docker("rm", "-f", name, check=False)
+
+
+@pytest.fixture()
+def page(empty_app):
+    """A browser on an empty app.
+
+    Function-scoped, including the browser launch — which costs a Chromium cold
+    start per test and is the slowest thing in this tier. It was hoisted to
+    session scope and reverted: `test_layout.py` opens its own
+    `sync_playwright()` (module-scoped, tied to its seeded app), and two sync
+    context managers cannot be alive in one thread. Playwright answers the
+    second with "It looks like you are using Playwright Sync API inside the
+    asyncio loop", which surfaces as 14 setup ERRORS in a module that passes
+    perfectly well on its own. Sharing one browser across the tier means both
+    modules sharing one context manager, which is a bigger change than the
+    minutes are worth; filed rather than forced.
+
+    The playwright import is inside the fixture rather than at module scope on
+    purpose: this conftest is loaded for the whole container tier, and a
+    top-level import would turn "no browser installed" into a collection error
+    for the container tests that never open one.
+    """
+    playwright_api = pytest.importorskip(
+        "playwright.sync_api",
+        reason=(
+            'needs a browser: pip install -e ".[dev,browser]" '
+            "&& playwright install chromium"
+        ),
+    )
+    with playwright_api.sync_playwright() as p:
+        instance = p.chromium.launch()
+        try:
+            context = instance.new_context()
+            tab = context.new_page()
+            tab.add_init_script(_RECORD_ANNOUNCEMENTS)
+            tab.goto(empty_app, wait_until="networkidle")
+            yield tab
+            context.close()
+        finally:
+            instance.close()
+
+
+# Every announcement the app has ever made, in order.
+#
+# The live region is cleared a second and a half after it is written, because a
+# live region is a message rather than a status display — so reading its current
+# text is a race, and a test that wins the race is asserting the wrong thing
+# anyway. What makes a screen reader speak is the CHANGE, and a region populated
+# once and never touched again announces nothing. This records the changes.
+#
+# An init script rather than a call after `goto`, so it survives `page.reload()`
+# and is installed before the app's first render either way.
+_RECORD_ANNOUNCEMENTS = """
+window.__announced = [];
+const attach = () => {
+  const live = document.querySelector('[role=status]');
+  if (!live) { requestAnimationFrame(attach); return; }
+  new MutationObserver(() => {
+    const said = live.innerText.trim();
+    if (said) window.__announced.push(said);
+  }).observe(live, { childList: true, characterData: true, subtree: true });
+};
+attach();
+"""

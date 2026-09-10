@@ -20,181 +20,34 @@ why nothing noticed: the broken path is the one every user takes exactly once.
 Why this tier. The bug is not in a function, it is in where state lives, so no
 unit test can reach it: `logic.test.ts` tests pure functions and there is no DOM
 renderer in the frontend suite. It needs a real browser, a real upload and a
-genuinely empty app, which is what this module builds.
+genuinely empty app, which is what the `page` fixture in `conftest.py` builds.
 
-Both fixtures are synthetic and committed. Uploading them together is the
-two-retailer bundle case exactly: the H Mart sniff scores 0.9 against Kroger's
-0.8, so H Mart wins the bundle and the Kroger file is named in a warning.
+Both fixtures — `KROGER` and `HMART` in `browser.py` — are synthetic and
+committed. Uploading them together is the two-retailer bundle case exactly: the
+H Mart sniff scores 0.9 against Kroger's 0.8, so H Mart wins the bundle and the
+Kroger file is named in a warning.
 """
 
 from __future__ import annotations
 
 import json
 import re
-import time
-import urllib.error
 import urllib.request
-import uuid
-from collections.abc import Iterator
-from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from tests.container.conftest import REPO_ROOT, docker, requires_docker
-
-playwright_api = pytest.importorskip(
-    "playwright.sync_api",
-    reason='needs a browser: pip install -e ".[dev,browser]" && playwright install chromium',
+from tests.container.browser import (
+    HMART,
+    KROGER,
+    LETTER,
+    panel,
+    selected,
+    upload,
+    upload_again,
 )
+from tests.container.conftest import requires_docker
 
 pytestmark = [pytest.mark.container, requires_docker]
-
-# No fixed port. `test_layout.py` can pin one because it holds a single
-# module-scoped container; this fixture is function-scoped and starts a fresh
-# container per test, and a fixed port turns that into three failure modes: a
-# hard-killed pytest leaks a container still holding the port, so every later
-# run fails on bind with an opaque CalledProcessError (`docker()` captures
-# stderr); rm-to-release is not instantaneous, so back-to-back binds flake; and
-# any `-n auto` collides by construction. Docker picks the port, the fixture
-# reads it back. `conftest.run_container` already avoids the same trap with
-# uuid names and no published port.
-
-KROGER = (
-    REPO_ROOT / "src" / "unbagged" / "adapters" / "kroger"
-    / "fixtures" / "synthetic_report.txt"
-)
-HMART = (
-    REPO_ROOT / "src" / "unbagged" / "adapters" / "hmart"
-    / "fixtures" / "synthetic_history.xls"
-)
-
-# Boilerplate belonging to no retailer, written here rather than committed
-# because that is exactly what it is for: nothing recognises it, so the fallback
-# adapter takes it at 0.1 and the panel has to say the match is a guess. It also
-# produces the one warning in the codebase that carries no locator, which is the
-# other half of the `w.locator` conditional the bundle case covers.
-# `tests/test_generic_adapter.py` builds its letter the same way at the unit tier.
-LETTER = """\
-Dear Customer,
-
-Thank you for your request under the California Consumer Privacy Act. We have
-reviewed our records and are responding within the statutory period.
-
-The categories of personal information we collect include identifiers and
-commercial information. We do not sell personal information to third parties.
-
-Sincerely,
-The Privacy Team
-"""
-
-
-def _wait_for_health(base: str, timeout: float = 60.0) -> None:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        try:
-            with urllib.request.urlopen(f"{base}/api/health", timeout=2) as response:
-                if json.load(response).get("status") == "ok":
-                    return
-        except (urllib.error.URLError, OSError, ValueError):
-            time.sleep(0.5)
-    raise AssertionError(f"the app never answered on {base}")
-
-
-@pytest.fixture()
-def empty_app(image, tmp_path) -> Iterator[str]:
-    """A container with nothing ingested.
-
-    Function-scoped and unseeded, which is the whole point: `seeded_app` in
-    `test_layout.py` ingests before yielding, so the first-run uploader it would
-    hand back has already been replaced by the footer one.
-
-    The `try` opens BEFORE the run so a container that starts and then reports
-    failure is still torn down; wrapping only the wait leaks it by name.
-    """
-    data = tmp_path / "data"
-    (data / "db").mkdir(parents=True, exist_ok=True)
-    (data / "incoming").mkdir(parents=True, exist_ok=True)
-    name = f"unbagged-first-upload-{uuid.uuid4().hex[:8]}"
-    try:
-        docker(
-            "run", "-d", "--name", name,
-            "-v", f"{data}:/data",
-            # Empty host port: Docker assigns a free one, read back below.
-            "-p", "127.0.0.1::8000",
-            image,
-        )
-        # `docker port` answers "<host>:<port>", and the host half varies by
-        # daemon. Only the port is wanted: the publish above already pinned the
-        # interface to loopback, so reusing the reported host would just be a
-        # second, less reliable source for something already decided.
-        published = docker("port", name, "8000/tcp").stdout.strip().splitlines()[0]
-        base = f"http://127.0.0.1:{published.rsplit(':', 1)[-1]}"
-        _wait_for_health(base)
-        yield base
-    finally:
-        docker("rm", "-f", name, check=False)
-
-
-@pytest.fixture()
-def page(empty_app):
-    with playwright_api.sync_playwright() as p:
-        instance = p.chromium.launch()
-        try:
-            tab = instance.new_page()
-            tab.goto(empty_app, wait_until="networkidle")
-            yield tab
-            tab.close()
-        finally:
-            instance.close()
-
-
-def _upload(page, *paths) -> None:
-    """Upload, then wait for the app to SETTLE — not for the panel to appear.
-
-    Waiting on the panel alone asserts the wrong instant. It appears as soon as
-    the parse returns, and the reload that follows swaps the whole first-run
-    branch out and the report in; during that the panel is legitimately absent
-    for a frame or two. The bug was that it never came back.
-
-    "Add another response" renders only once a request exists, so it marks the
-    far side of exactly the transition this regression is about. Asserting after
-    it is asserting that the result survived the swap.
-    """
-    page.set_input_files("input[type=file]", [str(x) for x in paths])
-    page.wait_for_selector("text=Add another response", timeout=120_000)
-    page.wait_for_load_state("networkidle")
-
-
-def _upload_again(page, *paths) -> None:
-    """A second upload, waited on by the retailer selector.
-
-    "Add another response" is already on screen by then, so it no longer marks
-    anything. The selector renders only once a second response exists, which
-    puts the wait on the far side of the second reload the same way.
-    """
-    page.set_input_files("input[type=file]", [str(x) for x in paths])
-    page.wait_for_selector("select[aria-label]", timeout=120_000)
-    page.wait_for_load_state("networkidle")
-
-
-def _selected(page) -> str:
-    """Which response the page is on, read from `?r=` rather than from the DOM.
-
-    The URL is what `go()` writes and what a reload or a shared link replays, so
-    it is the honest place to ask. It also answers at ONE response, where the
-    retailer selector does not exist yet — the selector can only be asked once
-    there are two, which is one upload too late for half of these.
-    """
-    return parse_qs(urlparse(page.url).query).get("r", [""])[0]
-
-
-def _panel(page) -> str:
-    """Just the "Read as …" line, not the whole page.
-
-    Every retailer already loaded is named in the selector above, so asserting
-    against `body` cannot tell "the panel says H Mart" from "H Mart exists".
-    """
-    return page.locator("p", has_text="Read as").first.inner_text()
 
 
 class TestTheFirstUploadReportsOnItself:
@@ -206,7 +59,7 @@ class TestTheFirstUploadReportsOnItself:
         it, a person sees a complete-looking H Mart report and no indication
         that a whole second response went missing.
         """
-        _upload(page, KROGER, HMART)
+        upload(page, KROGER, HMART)
         body = page.inner_text("body")
         assert "Read as" in body
         assert "H Mart" in body
@@ -221,7 +74,7 @@ class TestTheFirstUploadReportsOnItself:
         A first upload is the one most likely to be the wrong file, so losing
         "check this is the retailer you meant" is worse here than anywhere.
         """
-        _upload(page, HMART)
+        upload(page, HMART)
         body = page.inner_text("body")
         assert "Read as" in body
         assert "H Mart" in body
@@ -234,7 +87,7 @@ class TestTheFirstUploadReportsOnItself:
         it is the difference between a response that was read badly and one
         that never itemised anything.
         """
-        _upload(page, HMART)
+        upload(page, HMART)
         body = page.inner_text("body")
         # The joined form, not the bare words: "visits" and "line items" also
         # label the Timeline's own stats, so asserting them alone passes
@@ -245,7 +98,7 @@ class TestTheFirstUploadReportsOnItself:
 
     def test_a_single_clean_upload_reports_no_warnings(self, page):
         """The other side of it: nothing invented when nothing went wrong."""
-        _upload(page, KROGER)
+        upload(page, KROGER)
         body = page.inner_text("body")
         assert "Read as" in body
         assert "nothing from it is in this report" not in body
@@ -275,7 +128,7 @@ class TestTheFirstUploadReportsOnItself:
         """
         letter = tmp_path / "response-letter.txt"
         letter.write_text(LETTER, encoding="utf-8")
-        _upload(page, letter)
+        upload(page, letter)
         body = page.inner_text("body")
         assert "uncertain match" in body
         assert "10%" in body
@@ -291,7 +144,7 @@ class TestTheFirstUploadReportsOnItself:
         """
         letter = tmp_path / "response-letter.txt"
         letter.write_text(LETTER, encoding="utf-8")
-        _upload(page, letter)
+        upload(page, letter)
         lines = [
             text
             for text in page.eval_on_selector_all("li", "els => els.map(e => e.innerText)")
@@ -318,12 +171,12 @@ class TestTheUploadsAfterTheFirst:
         rest of the session, and the reader would be looking at a description of
         Kroger while reading H Mart.
         """
-        _upload(page, KROGER)
-        assert "Kroger" in _panel(page)
-        _upload_again(page, HMART)
-        panel = _panel(page)
-        assert "H Mart" in panel
-        assert "Kroger" not in panel
+        upload(page, KROGER)
+        assert "Kroger" in panel(page)
+        upload_again(page, HMART)
+        replaced = panel(page)
+        assert "H Mart" in replaced
+        assert "Kroger" not in replaced
 
     def test_the_second_upload_becomes_the_response_on_screen(self, page):
         """Adding a response selects it. The report and the view must agree.
@@ -343,13 +196,13 @@ class TestTheUploadsAfterTheFirst:
         `onDone={() => requests.reload()}` — but that work made the panel
         reliably visible, which is what made the disagreement visible too.
         """
-        _upload(page, HMART)
-        assert "H Mart" in _panel(page)
+        upload(page, HMART)
+        assert "H Mart" in panel(page)
 
-        _upload_again(page, KROGER)
+        upload_again(page, KROGER)
 
         # The panel names the new response...
-        assert "Kroger" in _panel(page)
+        assert "Kroger" in panel(page)
         # ...and so does the selector, which is what the views render from.
         selector = page.locator("select[aria-label]")
         chosen = selector.locator("option", has_text="Kroger").get_attribute("value")
@@ -370,14 +223,14 @@ class TestTheUploadsAfterTheFirst:
         a view they did not ask for — and no other test here ever leaves the
         default tab, so nothing else would notice.
         """
-        _upload(page, HMART)
+        upload(page, HMART)
 
         # `^Profile` because the accessible name carries the hint line under the
         # label ("Profile What they infer"), which is deliberate — see App.tsx.
         page.get_by_role("button", name=re.compile(r"^Profile")).click()
         assert "tab=profile" in page.url
 
-        _upload_again(page, KROGER)
+        upload_again(page, KROGER)
 
         assert "tab=profile" in page.url
         assert (
@@ -407,8 +260,8 @@ class TestTheUploadsAfterTheFirst:
         The query is deliberately one that matches nothing: what is asserted is
         that the filter is gone from the URL, not what it would have found.
         """
-        _upload(page, HMART)
-        hmart = _selected(page)
+        upload(page, HMART)
+        hmart = selected(page)
 
         page.goto(
             f"{empty_app}/?tab=timeline&r={hmart}&q=ZZZZZZ&label=Nothing+here",
@@ -416,9 +269,9 @@ class TestTheUploadsAfterTheFirst:
         )
         assert "q=ZZZZZZ" in page.url
 
-        _upload_again(page, KROGER)
+        upload_again(page, KROGER)
 
-        assert _selected(page) != hmart
+        assert selected(page) != hmart
         assert "tab=timeline" in page.url
         assert "q=" not in page.url
         assert "label=" not in page.url
@@ -436,17 +289,17 @@ class TestTheUploadsAfterTheFirst:
         Asserted from the OLDER response, because sitting on the newest one
         makes "the selection did not move" true by accident.
         """
-        _upload(page, HMART)
-        hmart = _selected(page)
-        _upload_again(page, KROGER)
-        assert _selected(page) != hmart
+        upload(page, HMART)
+        hmart = selected(page)
+        upload_again(page, KROGER)
+        assert selected(page) != hmart
 
         # Back to the older response by hand, the way a reader would.
         selector = page.locator("select[aria-label]")
         selector.select_option(
             selector.locator("option", has_text="H Mart").get_attribute("value")
         )
-        assert _selected(page) == hmart
+        assert selected(page) == hmart
 
         # A re-drop of something already stored: refused by the server, by name.
         # H Mart rather than Kroger, and not only because it is the response on
@@ -457,7 +310,7 @@ class TestTheUploadsAfterTheFirst:
         page.wait_for_selector("text=already loaded this response", timeout=120_000)
         page.wait_for_load_state("networkidle")
 
-        assert _selected(page) == hmart
+        assert selected(page) == hmart
         # And the destructive control still points at what is on screen.
         page.get_by_role("button", name="Remove this response").click()
         assert page.get_by_role("button", name="Remove H Mart").is_visible()
@@ -476,8 +329,8 @@ class TestTheUploadsAfterTheFirst:
         what the button TARGETS. This one presses it, which is the only way to
         reach the state after.
         """
-        _upload(page, HMART)
-        _upload_again(page, KROGER)
+        upload(page, HMART)
+        upload_again(page, KROGER)
 
         page.get_by_role("button", name="Remove this response").click()
         page.get_by_role("button", name="Remove Kroger").click()
@@ -494,7 +347,7 @@ class TestTheUploadsAfterTheFirst:
         assert "Drop it here" not in body
         assert "Add another response" in body
         # `?r=` no longer names the deleted row.
-        assert _selected(page) == ""
+        assert selected(page) == ""
 
         page.get_by_role("button", name="Remove this response").click()
         assert page.get_by_role("button", name="Remove H Mart").is_visible()
@@ -507,7 +360,7 @@ class TestTheUploadsAfterTheFirst:
         — and the server refuses it by name. The refusal has to be shown; a
         silent no-op reads as the second drop having worked.
         """
-        _upload(page, KROGER)
+        upload(page, KROGER)
         assert "Read as" in page.inner_text("body")
 
         page.set_input_files("input[type=file]", [str(KROGER)])
@@ -537,7 +390,7 @@ class TestTheUploadsAfterTheFirst:
         108 visits" describes something that was just deleted — a claim about
         a response that no longer exists, in an app built not to make them.
         """
-        _upload(page, HMART)
+        upload(page, HMART)
         assert "Read as" in page.inner_text("body")
 
         page.get_by_role("button", name="Remove this response").click()
