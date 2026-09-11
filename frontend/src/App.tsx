@@ -710,8 +710,8 @@ export default function App() {
       {currentRow && <StaleReading request={currentRow} />}
 
       {/* The list could not be re-read, but nothing was lost. Deliberately not
-          an ErrorBox: DESIGN.md retires red to two call sites and both mean
-          "this is not recoverable", which this is not — everything on screen is
+          an ErrorBox: DESIGN.md retires red to three meanings and all three
+          mean "this is not recoverable", which this is not — everything on screen is
           still true and the button beside it is the way back. Issue #63. */}
       {listStale && (
         <Caveat
