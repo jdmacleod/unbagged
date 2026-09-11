@@ -16,7 +16,13 @@ HMART_FIXTURE = (
     / "fixtures"
     / "synthetic_history.xls"
 )
-LETTER = "Dear customer,\n\nThank you for writing to us.\n"
+#: Enough bytes to make a text file exist. Not a response, and deliberately not
+#: from `tools/make_fixtures.py`: the tests below assert what a file IS — its
+#: media type and page count — not what it says, and routing that through a
+#: generated 400KB retailer report would make the assertion harder to read and
+#: no more true. `LETTER` in test_generic_adapter.py is the one to reuse when a
+#: test needs something that parses as a response.
+TEXT_BYTES = b"A response, as text.\n"
 
 
 class TestSafeFilename:
@@ -106,7 +112,7 @@ class TestWhatIsStoredAboutTheFileItself:
     """
 
     def test_a_text_response_records_what_it_is(self, conn, tmp_path):
-        stored = store_upload("response.txt", LETTER.encode("utf-8"), directory=tmp_path)
+        stored = store_upload("response.txt", TEXT_BYTES, directory=tmp_path)
         result = ingest.ingest(conn, [stored])
         documents = repository.get_documents(conn, result.request_id)
         assert documents, "no document was stored"
