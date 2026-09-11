@@ -41,6 +41,19 @@ from a specific response. See `CONTRIBUTING.md`.
   over a list of files: every line that starts the app has to rebuild it,
   wherever it is written down.
 
+- **Starting the dev stack edited a file in your checkout.** `./frontend` is
+  mounted into the dev stack rather than copied, so it is the real working tree,
+  and the Vite service runs `npm install` on every start. The image it runs
+  carries npm 10; a lockfile written by npm 11 records a `libc` field per
+  optional platform dependency that npm 10 does not know about and drops
+  silently — 54 lines of `frontend/package-lock.json`, deleted as a side effect
+  of starting the app. `git status` then reported a change nobody made, and the
+  change reversed itself the next time anyone ran npm on the host, so it
+  ping-ponged with whoever had run which. The file it rewrote is also the one
+  the shipped image is built from, with `npm ci`, which is strict about exactly
+  this file. The install no longer writes it. Contributors only; nothing about
+  the running app or any stored report changes.
+
 ## [0.14.0] - 2026-09-11
 
 **This release changes what already-ingested data displays, in three places.** A
