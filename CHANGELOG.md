@@ -23,7 +23,7 @@ from a specific response. See `CONTRIBUTING.md`.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/
 
-## Unreleased
+## [0.14.1] - 2026-09-11
 
 ### Fixed
 
