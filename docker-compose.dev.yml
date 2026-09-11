@@ -37,7 +37,15 @@ services:
     # buys nothing on a re-run and every start pays the full ~9s. npm install is
     # a no-op when the lockfile already matches what is on disk; --no-audit and
     # --no-fund drop two network round trips we do not need.
-    command: sh -c "npm install --no-audit --no-fund && npm run dev -- --host 0.0.0.0"
+    #
+    # --no-save because ./frontend is the real checkout, not a copy. This image
+    # carries npm 10, and a lockfile written by npm 11 records a `libc` field
+    # per optional platform dependency that npm 10 does not know about and
+    # silently drops — 54 lines of it here. Without --no-save, `make dev` edits
+    # a tracked file as a side effect of starting, the change reverses the next
+    # time anyone runs npm on the host, and the file it rewrites is the one
+    # `npm ci` builds the shipped image from.
+    command: sh -c "npm install --no-save --no-audit --no-fund && npm run dev -- --host 0.0.0.0"
     volumes:
       - ./frontend:/app/frontend
       # Keep the container's node_modules out of the host checkout, so a Linux

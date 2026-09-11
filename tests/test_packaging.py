@@ -245,6 +245,46 @@ class TestImageShape:
     def test_the_dev_overlay_adds_the_vite_server(self):
         assert "web" in services(DEV_COMPOSE)
 
+    def test_the_dev_stack_does_not_write_to_the_checkout_it_mounts(self):
+        """Starting the app must not edit a tracked file.
+
+        `./frontend` is bind-mounted into the dev stack, so it is the real
+        checkout rather than a copy, and anything the container writes there
+        lands in `git status`. The web service runs `npm install` on every
+        start: this image carries npm 10, a lockfile written by npm 11 records
+        a `libc` field per optional platform dependency that npm 10 does not
+        know about, and it drops all of them — 54 lines here. `make dev` then
+        edits `frontend/package-lock.json` as a side effect of starting, the
+        change reverses the next time anyone runs npm on the host, and the file
+        it rewrites is the one `npm ci` builds the shipped image from.
+
+        Asserted as the relationship rather than as a flag: the flag matters
+        only because the path is mounted. A dev stack that stopped mounting the
+        checkout, or stopped installing into it, would not need it.
+        """
+        web = services(DEV_COMPOSE)["web"]
+        command = " ".join(web["command"]) if isinstance(web["command"], list) else web["command"]
+        work = web["working_dir"]
+
+        # The lockfile lives at the working directory, so the question is
+        # whether THAT path sits inside a bind mount of the checkout — not
+        # whether some mount happens to sit under it.
+        inside_the_checkout = any(
+            work == target or work.startswith(target.rstrip("/") + "/")
+            for target in host_bind_targets(web)
+        )
+
+        offenders = [
+            sub
+            for sub in npm_subcommands(command)
+            if sub not in NPM_WRITES_NOTHING and "--no-save" not in command
+        ]
+        assert not (inside_the_checkout and offenders), (
+            f"the web service runs `npm {offenders[0] if offenders else ''}` with {work} "
+            f"inside a bind mount of the checkout, and nothing stops it writing there; "
+            f"`make dev` will rewrite the lockfile. command: {command}"
+        )
+
     def test_dev_mode_publishes_exactly_one_url(self):
         """Dev used to publish both 5173 and 8420, and 8420 served the UI bundle
         frozen into the image at build time. Nothing distinguished them in a
@@ -353,6 +393,38 @@ class TestToolsAreInvokedAsModules:
             except Exception as exc:  # noqa: BLE001 - reporting, not handling
                 failures.append(f"{module}: {exc}")
         assert not failures, "\n".join(failures)
+
+
+# Compose accepts a bind mount in two syntaxes and they mean the same thing, so
+# a guard that reads only one of them stops guarding the day someone converts
+# the file. `./x:/y` short form, and the `{type, source, target}` long form.
+def host_bind_targets(service: dict) -> set[str]:
+    """Container paths that are really the checkout on the host."""
+    targets = set()
+    for volume in service.get("volumes") or []:
+        if isinstance(volume, str):
+            parts = volume.split(":")
+            if len(parts) >= 2 and parts[0].startswith("."):
+                targets.add(parts[1])
+        elif isinstance(volume, dict) and volume.get("type", "bind") == "bind":
+            if str(volume.get("source", "")).startswith("."):
+                targets.add(str(volume.get("target", "")))
+    return targets
+
+
+# `npm install` has a dozen accepted spellings (`i`, `add`, `isntall`, …), so
+# naming the writing ones is the version that fails open. These are the
+# subcommands that provably do not rewrite package-lock.json; anything else,
+# including one npm has not shipped yet, has to prove it cannot.
+NPM_WRITES_NOTHING = frozenset(
+    {"ci", "run", "run-script", "start", "test", "exec", "ls", "list", "view", "why", "ping"}
+)
+
+NPM_CALL = re.compile(r"\bnpm\s+(?:-{1,2}\S+\s+)*([a-z][a-z-]*)")
+
+
+def npm_subcommands(command: str) -> list[str]:
+    return NPM_CALL.findall(command)
 
 
 # Markup that can sit in front of a command without changing what it is: a
