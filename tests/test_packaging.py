@@ -263,21 +263,26 @@ class TestImageShape:
         checkout, or stopped installing into it, would not need it.
         """
         web = services(DEV_COMPOSE)["web"]
-        mounted = {
-            v.split(":")[1]
-            for v in (web.get("volumes") or [])
-            if isinstance(v, str) and v.startswith("./") and v.count(":") >= 1
-        }
         command = " ".join(web["command"]) if isinstance(web["command"], list) else web["command"]
-        if "npm install" not in command:
-            return  # npm ci and friends write nothing; nothing to guard
-        writes_into_checkout = any(
-            m == web["working_dir"] or m.startswith(web["working_dir"] + "/") for m in mounted
+        work = web["working_dir"]
+
+        # The lockfile lives at the working directory, so the question is
+        # whether THAT path sits inside a bind mount of the checkout — not
+        # whether some mount happens to sit under it.
+        inside_the_checkout = any(
+            work == target or work.startswith(target.rstrip("/") + "/")
+            for target in host_bind_targets(web)
         )
-        assert not writes_into_checkout or "--no-save" in command, (
-            f"the web service installs into {web['working_dir']}, which is the mounted "
-            f"checkout, without --no-save; `make dev` will rewrite the lockfile. "
-            f"command: {command}"
+
+        offenders = [
+            sub
+            for sub in npm_subcommands(command)
+            if sub not in NPM_WRITES_NOTHING and "--no-save" not in command
+        ]
+        assert not (inside_the_checkout and offenders), (
+            f"the web service runs `npm {offenders[0] if offenders else ''}` with {work} "
+            f"inside a bind mount of the checkout, and nothing stops it writing there; "
+            f"`make dev` will rewrite the lockfile. command: {command}"
         )
 
     def test_dev_mode_publishes_exactly_one_url(self):
@@ -388,6 +393,38 @@ class TestToolsAreInvokedAsModules:
             except Exception as exc:  # noqa: BLE001 - reporting, not handling
                 failures.append(f"{module}: {exc}")
         assert not failures, "\n".join(failures)
+
+
+# Compose accepts a bind mount in two syntaxes and they mean the same thing, so
+# a guard that reads only one of them stops guarding the day someone converts
+# the file. `./x:/y` short form, and the `{type, source, target}` long form.
+def host_bind_targets(service: dict) -> set[str]:
+    """Container paths that are really the checkout on the host."""
+    targets = set()
+    for volume in service.get("volumes") or []:
+        if isinstance(volume, str):
+            parts = volume.split(":")
+            if len(parts) >= 2 and parts[0].startswith("."):
+                targets.add(parts[1])
+        elif isinstance(volume, dict) and volume.get("type", "bind") == "bind":
+            if str(volume.get("source", "")).startswith("."):
+                targets.add(str(volume.get("target", "")))
+    return targets
+
+
+# `npm install` has a dozen accepted spellings (`i`, `add`, `isntall`, …), so
+# naming the writing ones is the version that fails open. These are the
+# subcommands that provably do not rewrite package-lock.json; anything else,
+# including one npm has not shipped yet, has to prove it cannot.
+NPM_WRITES_NOTHING = frozenset(
+    {"ci", "run", "run-script", "start", "test", "exec", "ls", "list", "view", "why", "ping"}
+)
+
+NPM_CALL = re.compile(r"\bnpm\s+(?:-{1,2}\S+\s+)*([a-z][a-z-]*)")
+
+
+def npm_subcommands(command: str) -> list[str]:
+    return NPM_CALL.findall(command)
 
 
 # Markup that can sit in front of a command without changing what it is: a
