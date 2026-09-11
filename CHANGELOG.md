@@ -72,6 +72,16 @@ from a specific response. See `CONTRIBUTING.md`.
 
 ### Fixed
 
+- **Every stored document recorded nothing about what it was.** The media type
+  and page count of an uploaded file were written as empty for every response
+  ever loaded, even though the database had columns for them, the reader worked
+  them out, and the tests asserted them one layer up. They simply never
+  travelled the last step. Nothing displayed them, so nothing looked wrong — and
+  the test fixtures supplied a 48-page PDF, so anything built on them would have
+  worked in the tests and been blank in the app. Both are recorded now, worked
+  out without re-reading the file, and a spreadsheet records no page count
+  rather than a wrong one, because sheets are not pages.
+
 - **A response could be handed the id of one you had just deleted.** The id is
   what the upload report panel and the `?r=` in the address bar both use to name
   a response, and SQLite hands the highest one out again after a delete. Remove
