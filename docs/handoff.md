@@ -534,7 +534,7 @@ This project processes real personal data. Follow these rules without exception.
 ```bash
 git clone https://github.com/<owner>/unbagged
 cd unbagged
-docker compose up
+docker compose up --build
 # open http://localhost:8420
 # drag the PDF onto the upload area
 ```
@@ -571,7 +571,7 @@ non-root user, and serves everything from uvicorn. Final image should land under
 
 Overlay adding a `web` service running Vite with HMR, proxying `/api` to the backend, plus
 source bind mounts. Invoked as
-`docker compose -f docker-compose.yml -f docker-compose.dev.yml up`.
+`docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build`.
 
 ### Makefile
 

@@ -33,8 +33,14 @@ build-frontend:  ## Build the UI into the Python package
 serve:  ## Run the app locally without Docker (needs make build-frontend first)
 	$(PY) -m unbagged.cli serve
 
+# --build is load-bearing. Compose reuses an image already tagged
+# unbagged:local rather than noticing the checkout moved, so without it `make
+# up` serves whatever was built last: after a pull, yesterday's code under
+# today's source tree. The footer is the only tell, and it is not lying when it
+# says the old number — the container really is that version. Measured cost of
+# the rebuild when nothing changed: ~2s.
 up:  ## Start the app, then open http://localhost:8420
-	$(COMPOSE) up
+	$(COMPOSE) up --build
 
 down:  ## Stop the app and remove its container
 	$(COMPOSE) down
@@ -62,7 +68,7 @@ reset:  ## Move ./data aside and start empty (CONFIRM=yes required)
 
 dev:  ## Start the dev stack, then open http://localhost:5173
 	@echo "Dev mode serves one URL: http://localhost:5173 (API proxied at /api)."
-	$(DEV_COMPOSE) up
+	$(DEV_COMPOSE) up --build
 
 test:  ## Run the fast test suite
 	$(PY) -m pytest -q

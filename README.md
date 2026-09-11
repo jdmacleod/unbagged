@@ -32,7 +32,7 @@ Three commands, no Python install, no Node install, no database setup.
 ```bash
 git clone https://github.com/jdmacleod/unbagged
 cd unbagged
-docker compose up
+docker compose up --build
 ```
 
 Then open <http://localhost:8420> and drag the retailer's response onto the upload
@@ -41,7 +41,10 @@ area.
 The first run builds the app: it pulls two base images, compiles the UI, and
 installs the Python dependencies, which took about 75 seconds on a clean machine.
 There is no prebuilt image to download, deliberately — you run what you can read.
-Later starts are immediate. Reading a long report takes 10 to 30 seconds.
+Later starts re-check the build first and are immediate when nothing has changed,
+which measured at about two seconds. That check is why `--build` is on the
+command: without it Docker reuses the image it built last, and a pull would
+leave you running the previous version with nothing but the footer to say so. Reading a long report takes 10 to 30 seconds.
 
 Your database and uploads live in `./data`, on your disk. Back it up by copying
 that directory.
@@ -62,7 +65,7 @@ bugs. Every screenshot in this README comes from it.
 
 | | |
 |---|---|
-| `docker compose up` or `make up` | Start it, on <http://localhost:8420> |
+| `docker compose up --build` or `make up` | Start it, on <http://localhost:8420> |
 | `make down` | Stop it and remove the container |
 | `make logs` | Follow the logs |
 | `make reset CONFIRM=yes` | Move `./data` aside to `data.bak-<timestamp>` and start empty. Nothing is deleted; remove the backup yourself when you are sure. |

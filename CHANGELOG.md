@@ -23,6 +23,24 @@ from a specific response. See `CONTRIBUTING.md`.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/
 
+## Unreleased
+
+### Fixed
+
+- **Starting the app did not build it, so it served the version before last.**
+  `make up` ran `docker compose up` with no `--build`, and Compose reuses an
+  image already tagged `unbagged:local` rather than noticing the checkout has
+  moved. Pulling a release and starting it therefore ran the previous release:
+  its code, its migrations, its bugs. The footer was the only thing that showed
+  it, and the footer was right — the container really was the version it named,
+  which is why every version test passed. `make up`, `make dev`, and the
+  quickstart in the README now rebuild first; a rebuild with nothing to do
+  measured at about two seconds. The dev overlay also mounts `VERSION`, so
+  bumping it against a running stack no longer reloads onto the copy baked into
+  the image. A guard asserts the property over the whole repository rather than
+  over a list of files: every line that starts the app has to rebuild it,
+  wherever it is written down.
+
 ## [0.14.0] - 2026-09-11
 
 **This release changes what already-ingested data displays, in three places.** A

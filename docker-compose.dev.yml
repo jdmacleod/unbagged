@@ -1,7 +1,7 @@
 # Overlay for contributors. Adds a Vite dev server with hot reload and mounts
 # the source, so neither side needs rebuilding to see a change.
 #
-#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 #
 # or just `make dev`, which prints the URL.
 #
@@ -24,6 +24,11 @@ services:
     volumes:
       - ./data:/data
       - ./src:/app/src:ro
+      # VERSION as well as the source. The dev stage bakes /app/VERSION at build
+      # time and _read_version() prefers that file over install metadata, so
+      # bumping VERSION with the stack running would otherwise reload against
+      # the baked copy and go on reporting the old number.
+      - ./VERSION:/app/VERSION:ro
 
   web:
     image: node:22-slim
