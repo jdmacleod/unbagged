@@ -20,7 +20,10 @@ from collections import Counter
 
 import pytest
 
+from tests import factories
 from unbagged import views
+from unbagged.extraction import probe
+from unbagged.models import SourceDocument
 
 
 @pytest.fixture(scope="module")
@@ -159,3 +162,36 @@ class TestTheIndexViewSeesTheTail:
         assert result["product_count"] > 200
         share = result["bought_once"] / result["product_count"]
         assert 0.55 <= share <= 0.80
+
+
+class TestTheFactoryDescribesSomethingTheAppCanMake:
+    """A factory may be small. It may not describe a document ingest cannot produce.
+
+    `tests/factories.py::DOCUMENT` claimed `application/pdf` and 48 pages while
+    `ingest()` stored NULL for both (#46). Every test touching a stored document
+    got values the production path could not produce, and the trap was armed
+    rather than sprung only because nothing read them yet.
+
+    Checked against the same probe `ingest()` uses, over a real file of the type
+    the factory claims, so the two cannot drift apart again. This is the guard
+    #32 asks for: a relationship, not a restatement.
+    """
+
+    def test_the_factory_document_matches_what_ingest_would_store(self, tmp_path):
+        path = tmp_path / factories.DOCUMENT.original_filename
+        path.write_text("A response, as text.\n", encoding="utf-8")
+        facts = probe(SourceDocument(original_filename=path.name, sha256="a" * 64, path=str(path)))
+        assert facts is not None, "the factory claims a type the probe cannot read"
+        assert factories.DOCUMENT.media_type == facts.media_type
+        assert factories.DOCUMENT.page_count == facts.page_count
+
+    def test_it_would_have_caught_the_original(self, tmp_path):
+        """The bug this replaces, stated so the guard cannot be quietly loosened.
+
+        The old factory claimed a 48-page PDF. A real one-page text file cannot
+        produce that, and the assertion above is what says so.
+        """
+        path = tmp_path / "synthetic_report.txt"
+        path.write_text("A response, as text.\n", encoding="utf-8")
+        facts = probe(SourceDocument(original_filename=path.name, sha256="a" * 64, path=str(path)))
+        assert (facts.media_type, facts.page_count) != ("application/pdf", 48)

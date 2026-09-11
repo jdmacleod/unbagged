@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from tests.minipdf import build_pdf
@@ -8,6 +10,7 @@ from unbagged.extraction import (
     extract,
     extract_all,
     looks_like_pdf,
+    probe,
 )
 from unbagged.models import SourceDocument
 
@@ -214,3 +217,60 @@ class TestTextProjection:
     def test_the_projection_has_one_field_per_cell(self):
         rows = extraction.read_tables(_sheet(_row("a", "b", (4, "d")))).tables[0]
         assert rows.as_text().split("\t") == ["a", "b", "", "d"]
+
+
+class TestProbeAgreesWithExtract:
+    """The cheap read and the real one must describe the same file.
+
+    `probe()` exists so `ingest()` can store what a document is without paying
+    for its text. The moment the two disagree, a document is stored with one
+    media type and read with another, and provenance starts pointing at a file
+    that does not match its own record.
+
+    Asserted as a relationship rather than as two lists of expected values,
+    because expected values written from the same understanding as the code are
+    exactly what issue #32 is about. Both callers route through `classify()`, and
+    this is what proves it.
+    """
+
+    def _facts(self, path: Path):
+        doc = SourceDocument(original_filename=path.name, sha256="a" * 64, path=str(path))
+        return probe(doc), extract(doc)
+
+    def test_they_agree_on_a_pdf(self, tmp_path):
+        path = tmp_path / "report.pdf"
+        path.write_bytes(build_pdf([f"Page {i}." for i in range(7)]))
+        facts, extracted = self._facts(path)
+        assert facts.media_type == extracted.media_type == "application/pdf"
+        assert facts.page_count == extracted.page_count == 7
+
+    def test_they_agree_on_a_text_file(self, tmp_path):
+        path = tmp_path / "letter.txt"
+        path.write_text("Dear customer,\n\nNothing here.\n", encoding="utf-8")
+        facts, extracted = self._facts(path)
+        assert facts.media_type == extracted.media_type
+        assert facts.page_count == extracted.page_count
+
+    def test_they_agree_on_every_committed_fixture(self):
+        """The formats this project actually ships, rather than ones invented here."""
+        adapters = Path(__file__).resolve().parent.parent / "src" / "unbagged" / "adapters"
+        fixtures = [
+            p
+            for p in sorted(adapters.glob("*/fixtures/*"))
+            if p.is_file() and p.suffix not in {".py", ".md"}
+        ]
+        assert fixtures, "no committed fixtures found; this test would prove nothing"
+        for path in fixtures:
+            facts, extracted = self._facts(path)
+            assert facts is not None, f"probe could not read {path.name}"
+            assert facts.media_type == extracted.media_type, path.name
+            # A spreadsheet has no pages to count, and both say so their own way.
+            expected = extracted.page_count or None
+            assert facts.page_count == expected, path.name
+
+    def test_a_file_it_cannot_place_is_metadata_missing_not_an_error(self, tmp_path):
+        """Never raises: this is metadata, and the payload has its own error path."""
+        path = tmp_path / "mystery.bin"
+        path.write_bytes(b"\x00\x01\x02")
+        doc = SourceDocument(original_filename=path.name, sha256="a" * 64, path=str(path))
+        assert probe(doc) is None

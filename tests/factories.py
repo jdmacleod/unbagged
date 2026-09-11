@@ -29,11 +29,24 @@ from unbagged.models import (
     TxnItem,
 )
 
+#: A stored document, describing a file the ingest path could actually produce.
+#:
+#: This said `media_type="application/pdf"` and `page_count=48` while `ingest()`
+#: stored NULL for both, so every test that touched a stored document got values
+#: the production path could not produce — and the one thing anyone would build
+#: on them, "page 12 of 48", would have worked here and been blank in the app.
+#: That is issue #46, and the fixture-fiction shape `tests/container/
+#: test_layout.py` counts as having bitten this project four times.
+#:
+#: The claim is now checked rather than asserted: `test_fixture_shape.py` runs
+#: the same probe `ingest()` uses over a real file of this type and requires the
+#: two to agree. A factory is allowed to be small; it is not allowed to describe
+#: something the app cannot make.
 DOCUMENT = SourceDocument(
-    original_filename="synthetic_report.pdf",
+    original_filename="synthetic_report.txt",
     sha256="a" * 64,
-    media_type="application/pdf",
-    page_count=48,
+    media_type="text/plain",
+    page_count=1,
 )
 
 

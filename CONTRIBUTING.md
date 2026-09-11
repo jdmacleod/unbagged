@@ -210,6 +210,72 @@ Every test in `tests/container/` gets a 180-second cap automatically, and
 everything else gets 60. Both are backstops sized against measured worst cases,
 not budgets — if a test approaches either, the test is wrong, not the cap.
 
+## Writing a safeguard
+
+A safeguard is any check whose job is to fail: the PII scanner, the fixture
+generator's `--check`, the icon-sync gate, a regression test. Six of them in this
+repository have shipped with the same defect, so it is worth naming before you
+write the seventh.
+
+**The tell: the check asserts something about a set, when the invariant is a
+relationship between that set and something else.**
+
+    ∃x P(x)  ∧  ∃y Q(y)          what gets written
+    ∀x. P(x) → Q(produces(x))    what was meant
+
+The set-shaped version is always easier to write, always passes on the day it is
+written, and fails open in exactly the case the guard exists to catch.
+
+| Guard | Asserted | Should have asserted |
+|---|---|---|
+| `make_fixtures.py --check` | every name the generator produces reproduces from the seed | every committed file in `fixtures/` is one a generator produces |
+| `build_brand.py --check` | `produced == committed` | the produced bytes carry no manifest |
+| `check_icon_sync.py` | a source changed **and** a generated file changed | each changed source changed **with its own** outputs |
+| `check_icon_sync.py` | a reason exists somewhere in the range | a reason exists **for this source** |
+| `test_db.py::CASCADING_TABLES` | the six tables someone typed out are preserved | every table the schema says cascades is preserved |
+| `container/conftest.py` timeout hook | "these items are mine, cap them" | "these items are **under this directory**, cap them" |
+
+The last two were written by someone who had read this list the same week.
+Knowing about the pattern does not appear to prevent it, which is why this is a
+checklist rather than a paragraph.
+
+### Two questions before you commit a guard
+
+**1. Can you name a change that satisfies the check and still has the bug?** If
+you can, the check is set-shaped. For `build_brand --check` the answer was "the
+stripper stops stripping". For the cascade census it was "add a table that
+cascades and do not add it to the tuple". Nobody asked, because each check
+passed on the tree it was written against.
+
+**2. Does the test construct that change by name?** A test written from the same
+mental model as the check inherits the same blind spot — that is how two of
+these shipped with tests. The test has to build the satisfying-but-buggy case,
+not the obvious failure.
+
+### Prefer a relationship you can compute
+
+Where the invariant is "these two things agree", read one side from the source of
+truth rather than restating it:
+
+- the cascade census reads `PRAGMA foreign_key_list` and asserts the list matches
+- `probe()` and `extract()` route through one `classify()`, and a test asserts
+  they agree over every committed fixture
+- the browser tier imports `FALLBACK_CONFIDENCE` rather than writing `"10%"`
+
+A restated constant is a second copy that can drift. A computed relationship
+cannot.
+
+### The related failure: a fixture that describes something the app cannot make
+
+Four bugs here came from a generator or factory modelling a shape the real
+format never emits — a test factory claiming a 48-page PDF while `ingest()`
+stored NULL, a generator writing a banner as a plain cell so a merged-cell bug
+could not be caught. Same disease, other direction: the check and the code agree
+because both are wrong.
+
+If a fixture asserts a value, something should check that value is one the
+production path can produce.
+
 ## Citing where a test came from
 
 A regression test is worth more when it says what it was written for. Keep the
