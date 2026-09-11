@@ -353,3 +353,97 @@ class TestToolsAreInvokedAsModules:
             except Exception as exc:  # noqa: BLE001 - reporting, not handling
                 failures.append(f"{module}: {exc}")
         assert not failures, "\n".join(failures)
+
+
+# Markup that can sit in front of a command without changing what it is: a
+# Makefile recipe tab, a YAML comment marker, a markdown list bullet or table
+# cell, a backtick. Stripping it is what lets one scan read every file that
+# tells a person how to start the app, whatever it is written in.
+LAUNCH_MARKUP = re.compile(r"^[\s|>*+-]*(?:#+\s*)?`*")
+
+# The command, anchored to the start of the stripped line. Anchoring is the
+# whole classifier: a line that *begins* with the command is an instruction to
+# run it, while one that mentions it mid-sentence is prose about it. That
+# distinction is what keeps this guard off `CONTRIBUTING.md`'s description of
+# how the project is distributed, off the handoff's note on how many services
+# the default path starts, and off the docstring above that explains a bug the
+# command used to have.
+LAUNCH_COMMAND = re.compile(r"^(?:docker compose|\$\(COMPOSE\)|\$\(DEV_COMPOSE\))[^`\n]*?\bup\b")
+
+SKIP_DIRS = {".git", ".venv", "node_modules", "data", "__pycache__", "build", "dist"}
+
+
+def launch_commands() -> list[tuple[str, int, str]]:
+    """Every line in the repository that tells someone to start the app."""
+    found = []
+    for path in sorted(ROOT.rglob("*")):
+        if not path.is_file() or SKIP_DIRS & set(path.relative_to(ROOT).parts):
+            continue
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except (UnicodeDecodeError, OSError):
+            continue  # a binary or unreadable file cannot carry an instruction
+        for number, line in enumerate(lines, 1):
+            if LAUNCH_COMMAND.match(LAUNCH_MARKUP.sub("", line)):
+                found.append((str(path.relative_to(ROOT)), number, line.strip()))
+    return found
+
+
+class TestEveryStartCommandRebuilds:
+    """Starting the app has to build it first, everywhere that is written down.
+
+    Compose reuses an image already tagged `unbagged:local`. It does not notice
+    that the checkout moved, so a start command without `--build` serves
+    whatever was built last: after a pull, the previous release's code under the
+    current source tree, with its own migrations and its own bugs.
+
+    The footer is the only thing that shows it, and the footer is not wrong —
+    the container really is the version it names. That is what makes this
+    expensive to spot: every link in the version chain is correct, and
+    `TestVersionIsOneNumber` below passes, because the number is read at runtime
+    from the running package. It is the package that is old.
+
+    `tests/container/` never caught it either, and could not have: its `image`
+    fixture runs `docker build` itself, so the tier has only ever tested a
+    freshly built image. Building is exactly the step the user was missing.
+
+    Scoped to the relationship rather than to a list of files: every line that
+    *starts* a start command must carry `--build`, wherever it is written. A
+    new README, a new make target or a new doc is covered the day it is added,
+    which a named set of files would not be.
+    """
+
+    def test_every_start_command_carries_build(self):
+        missing = [
+            f"{path}:{number}  {line}"
+            for path, number, line in launch_commands()
+            if "--build" not in line
+        ]
+        assert not missing, (
+            "These start the app without rebuilding it, so they serve whatever "
+            "image was built last:\n" + "\n".join(missing)
+        )
+
+    def test_the_scan_still_finds_the_commands_it_is_guarding(self):
+        """A `for` loop over nothing passes.
+
+        This guard is a `∀`, so it reports success on an empty scan — and the
+        scan is a regex over file text, which stops matching the moment the
+        Makefile renames `$(COMPOSE)` or the README moves. `check_signers.py`
+        shipped that defect four times over (issue #32), verifying an empty set
+        of tags and calling it clean, so the floor is asserted here rather than
+        assumed.
+        """
+        found = launch_commands()
+        files = {path for path, _, _ in found}
+        assert "Makefile" in files, (
+            f"the scan no longer sees the Makefile's start targets; found {sorted(files)}"
+        )
+        assert "README.md" in files, (
+            f"the scan no longer sees the README's quickstart; found {sorted(files)}"
+        )
+        assert len(found) >= 7, (
+            f"the scan found only {len(found)} start commands, which is fewer than "
+            "the repository had when this guard was written — it has probably "
+            "stopped matching rather than the commands having gone"
+        )
