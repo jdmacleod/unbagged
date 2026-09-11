@@ -60,8 +60,9 @@ spacing, layout and motion are defined there, along with the reasoning.
 The rules most often broken by accident:
 
 - Colour means provenance, interaction or quantity. Never good/bad, never
-  severity, never sentiment. Red has two call sites and means "this is not
-  recoverable"; `DESIGN.md` holds the current count.
+  severity, never sentiment. Red has three meanings across two render sites and
+  means "this is not recoverable"; `DESIGN.md` holds both counts, and the
+  meanings are the ones to count.
 - No cards. Containers are hairline rules and whitespace, never a border on all
   four sides, never a shadow.
 - Every numeral in an aligned column is set in the vendored mono.

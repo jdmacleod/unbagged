@@ -13,10 +13,11 @@ import type { RequestMeta } from "../types";
  * entire data directory aside — a whole-archive operation offered as the remedy
  * for one bad row.
  *
- * **This is the one call site for red in the whole app.** See DESIGN.md: colour
- * means provenance, interaction, quantity or identity, never severity — with a
- * single exception reserved for exactly this confirmation. Until now that
- * exception described a control that did not exist, so the design system's one
+ * **This is one of the two places in the app that render red.** See DESIGN.md:
+ * colour means provenance, interaction, quantity or identity, never severity —
+ * with a narrow exception reserved for *this is not recoverable*, of which this
+ * confirmation is one of three meanings. When this control was built that
+ * exception described something that did not exist, so the design system's one
  * documented use of red was fiction.
  *
  * Two-step on purpose, and the second step names the retailer rather than

@@ -102,10 +102,11 @@
   --color-foreign: var(--foreign-ink);
   --color-foreign-paper: var(--foreign-paper);
   --color-foreign-rule: var(--foreign-rule);
-  /* Two call sites, both meaning "this is not recoverable": confirming
-     deletion of a report (RemoveRequest), and a request that failed with
-     nothing left to show for it (ErrorBox). See DESIGN.md — a failed re-read
-     that loses nothing is a Caveat, not this. */
+  /* Two render sites, three meanings, all of them "this is not recoverable":
+     confirming deletion of a report (RemoveRequest), a request that failed with
+     nothing left to show for it (ErrorBox), and a view that could not be drawn
+     (ErrorBoundary, which reuses ErrorBox and so adds no render site). See
+     DESIGN.md — a failed re-read that loses nothing is a Caveat, not this. */
   --color-danger: var(--ink-danger);
   --color-cat-1: var(--cat-1);
   --color-cat-2: var(--cat-2);

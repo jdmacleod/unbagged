@@ -16,11 +16,16 @@ export function Spinner({ label = "Loading" }: { label?: string }) {
 /**
  * A request failed and there is nothing to show in its place.
  *
- * One of the two call sites DESIGN.md reserves red for, and it means what the
- * other one means: this is not recoverable. `onRetry` does not soften that —
- * the box still states a failure whose content the app does not have — it just
- * stops the only way out being a browser reload. It renders inside the existing
- * red surface rather than beside it, so the count stays at two.
+ * One of the two places DESIGN.md lets red render, and it means what the other
+ * one means: this is not recoverable. `onRetry` does not soften that — the box
+ * still states a failure whose content the app does not have — it just stops the
+ * only way out being a browser reload. It renders inside the existing red
+ * surface rather than beside it, so the render count stays at two.
+ *
+ * **Reusing this box adds a meaning without adding a render site.**
+ * `ErrorBoundary` does exactly that for a render throw, and DESIGN.md counts it
+ * as red's third meaning. The token count does not move when you reach for this
+ * component, so check the meaning against DESIGN.md rather than trusting a grep.
  *
  * When a request fails but the previous data survives, this is the WRONG
  * component: nothing was lost, so nothing is unrecoverable, and red would be a
