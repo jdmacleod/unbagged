@@ -245,6 +245,41 @@ class TestImageShape:
     def test_the_dev_overlay_adds_the_vite_server(self):
         assert "web" in services(DEV_COMPOSE)
 
+    def test_the_dev_stack_does_not_write_to_the_checkout_it_mounts(self):
+        """Starting the app must not edit a tracked file.
+
+        `./frontend` is bind-mounted into the dev stack, so it is the real
+        checkout rather than a copy, and anything the container writes there
+        lands in `git status`. The web service runs `npm install` on every
+        start: this image carries npm 10, a lockfile written by npm 11 records
+        a `libc` field per optional platform dependency that npm 10 does not
+        know about, and it drops all of them — 54 lines here. `make dev` then
+        edits `frontend/package-lock.json` as a side effect of starting, the
+        change reverses the next time anyone runs npm on the host, and the file
+        it rewrites is the one `npm ci` builds the shipped image from.
+
+        Asserted as the relationship rather than as a flag: the flag matters
+        only because the path is mounted. A dev stack that stopped mounting the
+        checkout, or stopped installing into it, would not need it.
+        """
+        web = services(DEV_COMPOSE)["web"]
+        mounted = {
+            v.split(":")[1]
+            for v in (web.get("volumes") or [])
+            if isinstance(v, str) and v.startswith("./") and v.count(":") >= 1
+        }
+        command = " ".join(web["command"]) if isinstance(web["command"], list) else web["command"]
+        if "npm install" not in command:
+            return  # npm ci and friends write nothing; nothing to guard
+        writes_into_checkout = any(
+            m == web["working_dir"] or m.startswith(web["working_dir"] + "/") for m in mounted
+        )
+        assert not writes_into_checkout or "--no-save" in command, (
+            f"the web service installs into {web['working_dir']}, which is the mounted "
+            f"checkout, without --no-save; `make dev` will rewrite the lockfile. "
+            f"command: {command}"
+        )
+
     def test_dev_mode_publishes_exactly_one_url(self):
         """Dev used to publish both 5173 and 8420, and 8420 served the UI bundle
         frozen into the image at build time. Nothing distinguished them in a
