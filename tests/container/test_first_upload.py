@@ -465,3 +465,76 @@ class TestWhatCompareAsserts:
         assert "\u2014" in row_text("Inferred attributes"), (
             "the response never addressed inferences; this must not read as a zero"
         )
+
+
+class TestARenderThrowIsNotABlankPage:
+    """Issue #49, proved against the real app rather than a mounted component.
+
+    React unmounts the whole tree when a render throws, so before this the reader
+    got white. Everything the views draw is adapter-derived from a file this
+    project has usually never seen, and while adapters degrade rather than raise,
+    that contract ends at the parse: a shape nobody anticipated becomes a render
+    throw once it reaches a view.
+
+    Forced by serving a well-formed-but-wrong payload on one view's endpoint,
+    which is exactly the class of failure the boundary exists for and needs no
+    production code to be made throwable. The frontend tier here is pure-logic by
+    design and has no DOM, so this is also the only place the real React tree can
+    be made to fail on purpose.
+    """
+
+    def _break_the_timeline(self, page) -> None:
+        """Serve a timeline whose stats are the wrong shape entirely."""
+
+        def handler(route, request):
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                # `stats` is a string where the view expects an object, so the
+                # first property access throws during render.
+                body=json.dumps({"stats": "not an object", "baskets": [], "filtered_count": 0}),
+            )
+
+        page.route("**/api/requests/*/timeline*", handler)
+
+    def test_the_shell_survives_and_says_what_happened(self, page, empty_app):
+        upload(page, HMART)
+        hmart = selected(page)
+        self._break_the_timeline(page)
+        page.goto(f"{empty_app}/?tab=timeline&r={hmart}", wait_until="networkidle")
+
+        body = page.inner_text("body")
+        # Not a blank page.
+        assert "could not be drawn" in body, (
+            "a render throw produced no explanation; the boundary did not catch"
+        )
+        # The response is not lost, and the reader is told so.
+        assert "still stored" in body
+
+    def test_the_footer_version_survives_so_it_can_be_reported(self, page, empty_app):
+        """The shell is kept alive deliberately, and the version is why.
+
+        A boundary around the whole app would take the footer with it, leaving
+        someone looking at an error with no way to say which build produced it.
+        """
+        upload(page, HMART)
+        hmart = selected(page)
+        self._break_the_timeline(page)
+        page.goto(f"{empty_app}/?tab=timeline&r={hmart}", wait_until="networkidle")
+
+        body = page.inner_text("body")
+        assert re.search(r"v\d+\.\d+\.\d+", body), "the footer version did not survive"
+        # And the tabs, which are how a reader reaches a view that still works.
+        assert "Compliance" in body
+
+    def test_another_view_still_works(self, page, empty_app):
+        """Only the broken view is broken. The boundary resets when the tab moves."""
+        upload(page, HMART)
+        hmart = selected(page)
+        self._break_the_timeline(page)
+        page.goto(f"{empty_app}/?tab=timeline&r={hmart}", wait_until="networkidle")
+        assert "could not be drawn" in page.inner_text("body")
+
+        page.goto(f"{empty_app}/?tab=compliance&r={hmart}", wait_until="networkidle")
+        body = page.inner_text("body")
+        assert "could not be drawn" not in body, "the boundary stayed caught"

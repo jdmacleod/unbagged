@@ -3,6 +3,7 @@ import { api } from "./api";
 import { useAsync } from "./components/useAsync";
 import { RemoveRequest } from "./components/RemoveRequest";
 import { StaleReading } from "./components/StaleReading";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Upload } from "./components/Upload";
 import type { UploadResult } from "./types";
 import { Caveat, ErrorBox, Spine, Spinner } from "./components/ui";
@@ -730,89 +731,93 @@ export default function App() {
       )}
 
       <main>
-        {/* `firstLoad`, not `loading`. A reload has something on screen already,
-            and replacing it with "Looking for stored responses" says the app has
-            nothing — a claim the reload has not made. It also put two spinners
-            about two different things on screen for one action. */}
-        {firstLoad && (
-          <Spine>
-            <Spinner label="Looking for stored responses" />
-          </Spine>
-        )}
-        {listUnreadable && (
-          <Spine>
-            <ErrorBox error={requests.error!} onRetry={requests.reload} />
-          </Spine>
-        )}
 
-        {/* One box, not two. The empty state used to stack a dashed drop zone on
-            top of a dashed "nothing loaded yet" panel, which restated the box
-            directly above it in the same visual language. The drop zone is
-            already the empty state, and on a first run it is the whole screen,
-            so it is the one place in the app that gets to be large.
+        <ErrorBoundary resetKey={`${tab}:${current ?? ""}`}>
+          {/* `firstLoad`, not `loading`. A reload has something on screen already,
+              and replacing it with "Looking for stored responses" says the app has
+              nothing — a claim the reload has not made. It also put two spinners
+              about two different things on screen for one action. */}
+          {firstLoad && (
+            <Spine>
+              <Spinner label="Looking for stored responses" />
+            </Spine>
+          )}
+          {listUnreadable && (
+            <Spine>
+              <ErrorBox error={requests.error!} onRetry={requests.reload} />
+            </Spine>
+          )}
 
-            Not shown when the list is unreadable: "Start with a retailer's
-            response" is a claim that there are none, and a failed read is not
-            evidence of that. Issue #63. */}
-        {!firstLoad && !listUnreadable && rows.length === 0 && (
-          <Upload
-            // Prominent only when this really is a first run. A live report
-            // means a response was just committed and the list simply could not
-            // be re-read to confirm it — so "Start with a retailer's response"
-            // would be inviting the reader to do the thing they just did. The
-            // compact form says "Add another response", which is true, and
-            // carries the same report panel.
-            prominent={liveUpload === null}
-            result={liveUpload}
-            resultRef={reportRef}
-            onBusy={setUploading}
-            onDone={uploadFinished}
-          />
-        )}
+          {/* One box, not two. The empty state used to stack a dashed drop zone on
+              top of a dashed "nothing loaded yet" panel, which restated the box
+              directly above it in the same visual language. The drop zone is
+              already the empty state, and on a first run it is the whole screen,
+              so it is the one place in the app that gets to be large.
 
-        {current !== null && (
-          <>
-            {tab === "timeline" && (
-              <Timeline
-                // Back and forward change the URL's product filter while the
-                // view holds its own search state. Keying on it remounts rather
-                // than leaving the two disagreeing.
-                //
-                // `current` is in the key for the same reason, and the response
-                // it names is the half that bites. Timeline owns `store`,
-                // `from`, `to` and `q` locally; only `q` is ever mirrored in
-                // the URL. So switching response without remounting carried the
-                // hand-set filters onto a retailer that has never heard of
-                // them — and a store code from the previous response matches no
-                // option in the new one, so the control reads "every store"
-                // while `?store=<old code>` is still on every request. Measured
-                // switching a Kroger store filter onto an H Mart response: the
-                // header said 67 visits over an empty roll and "No visits match
-                // those filters", with nothing on screen to clear.
-                key={`${current}:${currentRow?.retailer_id ?? ""}:${query ?? ""}`}
-                requestId={current}
-                arrival={query ? { query, label: label ?? query } : null}
-                onClearArrival={() => go({ query: null, label: null })}
-              />
-            )}
-            {tab === "profile" && <Profile requestId={current} />}
-            {tab === "compliance" && <Compliance />}
-            {tab === "compare" && <Compare />}
-            {tab === "prices" && <PriceHistory requestId={current} />}
-            {tab === "products" && (
-              <ProductIndex
-                requestId={current}
-                onOpenProduct={(entry) =>
-                  href({
-                    tab: "timeline",
-                    query: entry.upc,
-                    label: entry.description,
-                  }).search
-                }
-              />
-            )}
-          </>
-        )}
+              Not shown when the list is unreadable: "Start with a retailer's
+              response" is a claim that there are none, and a failed read is not
+              evidence of that. Issue #63. */}
+          {!firstLoad && !listUnreadable && rows.length === 0 && (
+            <Upload
+              // Prominent only when this really is a first run. A live report
+              // means a response was just committed and the list simply could not
+              // be re-read to confirm it — so "Start with a retailer's response"
+              // would be inviting the reader to do the thing they just did. The
+              // compact form says "Add another response", which is true, and
+              // carries the same report panel.
+              prominent={liveUpload === null}
+              result={liveUpload}
+              resultRef={reportRef}
+              onBusy={setUploading}
+              onDone={uploadFinished}
+            />
+          )}
+
+          {current !== null && (
+            <>
+              {tab === "timeline" && (
+                <Timeline
+                  // Back and forward change the URL's product filter while the
+                  // view holds its own search state. Keying on it remounts rather
+                  // than leaving the two disagreeing.
+                  //
+                  // `current` is in the key for the same reason, and the response
+                  // it names is the half that bites. Timeline owns `store`,
+                  // `from`, `to` and `q` locally; only `q` is ever mirrored in
+                  // the URL. So switching response without remounting carried the
+                  // hand-set filters onto a retailer that has never heard of
+                  // them — and a store code from the previous response matches no
+                  // option in the new one, so the control reads "every store"
+                  // while `?store=<old code>` is still on every request. Measured
+                  // switching a Kroger store filter onto an H Mart response: the
+                  // header said 67 visits over an empty roll and "No visits match
+                  // those filters", with nothing on screen to clear.
+                  key={`${current}:${currentRow?.retailer_id ?? ""}:${query ?? ""}`}
+                  requestId={current}
+                  arrival={query ? { query, label: label ?? query } : null}
+                  onClearArrival={() => go({ query: null, label: null })}
+                />
+              )}
+              {tab === "profile" && <Profile requestId={current} />}
+              {tab === "compliance" && <Compliance />}
+              {tab === "compare" && <Compare />}
+              {tab === "prices" && <PriceHistory requestId={current} />}
+              {tab === "products" && (
+                <ProductIndex
+                  requestId={current}
+                  onOpenProduct={(entry) =>
+                    href({
+                      tab: "timeline",
+                      query: entry.upc,
+                      label: entry.description,
+                    }).search
+                  }
+                />
+              )}
+            </>
+          )}
+
+        </ErrorBoundary>
       </main>
 
       {/* Adding another response is a footnote once you have one, not a panel
