@@ -60,7 +60,7 @@ spacing, layout and motion are defined there, along with the reasoning.
 The rules most often broken by accident:
 
 - Colour means provenance, interaction or quantity. Never good/bad, never
-  severity, never sentiment. Red has two call sites and means "this is not
+  severity, never sentiment. Red has three call sites and means "this is not
   recoverable"; `DESIGN.md` holds the current count.
 - No cards. Containers are hairline rules and whitespace, never a border on all
   four sides, never a shadow.
