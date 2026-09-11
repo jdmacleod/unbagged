@@ -23,7 +23,23 @@ from a specific response. See `CONTRIBUTING.md`.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/
 
-## Unreleased
+## [0.14.0] - 2026-09-11
+
+**This release changes what already-ingested data displays, in three places.** A
+migration runs and nothing needs re-reading: every response keeps the id it had,
+so a bookmark or a saved link still opens what it always did. What reads
+differently on a report you already loaded — Compare's three inventory figures,
+identifiers held, inferred attributes and how many of those came from elsewhere,
+render an em dash rather than **0** wherever the category was not answered in
+full, because a zero there read as a fact about the retailer rather than as an
+absence of disclosure; Compare's row for the headline figure reads **Total
+spent** rather than "Total paid" when the responses being compared disclose
+totals without line items, which is what the Timeline header already said over
+the same number; and a store whose colour could not be told apart from one
+already on screen is given a different hue, so two branches of one retailer no
+longer render identically in the legend and on every row below it. The first two
+are figures and words you may have written down. Nothing else about a stored
+report reads differently.
 
 ### Changed
 
