@@ -324,15 +324,15 @@ therefore decided some other way, and the decisions are worth keeping:
   `#0000FF`. The page itself never uses that colour, so it is masked back to
   white before the engine sees it. Unmasked, one capture read 14 lines summing
   to 85.28 against a stated 100.23; masked, 16 summing to 100.23 exactly.
-- **`Transaction_030419` is clipped at the source.** The capture cut the last
+- **One capture is clipped at the source.** It cut the last
   digit off every amount in the column, so `$ 7.49` is rendered as `$ 7.4`. It
   is legible, every figure on it is plausible, and it cannot be read. It is the
   one receipt of the 44 that is permanently quarantined, and it is the reason
   the arithmetic gate is not optional.
-- **Two captures sharing a date may be two visits.** `Transaction_030419` and
-  `Transaction_030419_02` are two different times on the same day, at different
-  lanes, for different amounts. The filenames look exactly like a continuation
-  pair; only reading them tells the two apart.
+- **Two captures sharing a date may be two visits.** One pair in the corpus is
+  two separate trips on one day, at different lanes, for different amounts.
+  Their filenames are indistinguishable from a continuation pair; only reading
+  them tells the two apart.
 - **The stamp's first field is a lane, not a store.** Values 1-8 appear against
   both Thistlewick and Bramblemere. The branch comes from the statement.
 

@@ -194,7 +194,7 @@ class TestTheLayoutOfAPage:
         assert found.customer_id == "40100200300"
         assert found.stamp is not None
         assert found.stamp.occurred_at == "2019-03-04T11:07:00"
-        assert found.stamp.lane == "3"
+        assert found.stamp.lane == "2"
 
     def test_a_page_that_reconciles_end_to_end(self):
         assert rc.foots(read(BASKET)) is None

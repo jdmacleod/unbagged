@@ -543,6 +543,11 @@ def _clean(text: str) -> str:
 #: `Transaction_030419.png`, and `Transaction_030419_01.png` for the first of
 #: two captures of one receipt. The six digits are the date as MMDDYY.
 #:
+#: The examples here and in NOTES.md are shaped like the real names and are
+#: not any of them: a capture's filename encodes a date somebody shopped, and
+#: CONTRIBUTING.md counts naming a trip as identifying whether or not the
+#: basket comes with it.
+#:
 #: Matched loosely on the stem before it and anchored on the six digits,
 #: because the name is whatever the store's software produced and whatever
 #: travelled through mail on the way here, and nothing here should fail over a
