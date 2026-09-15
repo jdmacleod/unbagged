@@ -42,7 +42,7 @@ from unbagged.adapters.base import (
 from unbagged.adapters.hmart import receipt as rc
 from unbagged.extraction import Table, classify, extract, extract_all
 from unbagged.models import TxnItem
-from unbagged.transcription import OcrUnavailable, ollama, transcribe
+from unbagged.transcription import OcrUnavailable, UnreadableImage, ollama, transcribe
 
 RETAILER_ID = "hmart"
 DISPLAY_NAME = "H Mart"
@@ -278,11 +278,23 @@ class HMartAdapter:
         transactions.sort(key=lambda t: t.occurred_at)
         transactions = _itemise(bundle, transactions, warnings)
 
-        if not transactions:
+        if not transactions and matched:
+            # Guarded on `matched`, which is the sheets that carried the H Mart
+            # columns. Without it this fired on an upload of captures alone and
+            # described a spreadsheet that was not in it — a sentence about the
+            # response that is simply untrue, in the one place this tool asks to
+            # be read as a record of what a response contained.
             warnings.add(
                 "The spreadsheet carried a header row and no readable purchases. "
                 "An export with nothing in it is a finding about the response, "
                 "not an error in reading it.",
+                severity=Severity.WARNING,
+            )
+        elif not transactions:
+            warnings.add(
+                "None of the receipt captures in this upload could be read into "
+                "a basket that adds up, so there is nothing in this report. Each "
+                "one is accounted for above.",
                 severity=Severity.WARNING,
             )
 
@@ -400,12 +412,27 @@ def _itemise(
             # informative than one.
             engine = engine or str(exc)
             continue
+        except UnreadableImage as exc:
+            # The opposite scope: one file, one warning, and the rest of the
+            # upload is untouched. A truncated capture used to escape as an
+            # OSError, be rewrapped by `ingest` as an adapter bug, and lose the
+            # whole response over one damaged file.
+            warnings.add(
+                f"{' and '.join(names)} could not be opened as an image ({exc}). "
+                "It may have been truncated in transit. Nothing from it is in "
+                "this report; every other file in this upload was read.",
+                locator=names[0],
+            )
+            continue
         for receipt in receipts:
             short = rc.foots(receipt)
             if short is not None:
                 second = _adjudicate(receipt, by_name, vision)
                 if second is None:
-                    warnings.add(_unreconciled(receipt, short, vision), locator=receipt.captures[0])
+                    warnings.add(
+                        _unreconciled(receipt, short, vision, statement=statement),
+                        locator=receipt.captures[0],
+                    )
                     continue
                 warnings.info(
                     f"{' and '.join(receipt.captures)} would not add up as read, "
@@ -691,17 +718,34 @@ def _with_items(txn: Transaction, receipt: rc.Receipt, by_name: dict) -> Transac
     )
 
 
-def _unreconciled(receipt: rc.Receipt, short: Decimal, vision) -> str:
+def _unreconciled(receipt: rc.Receipt, short: Decimal, vision, *, statement: bool) -> str:
     where = " and ".join(receipt.captures)
+    # "The visit still carries the total the points statement gave for it" is a
+    # comfort that is only true when a statement came with the captures. On an
+    # upload of captures alone it names a document that is not in the bundle.
+    kept = (
+        " The visit still carries the total the points statement gave for it." if statement else ""
+    )
     tried = (
         f" {vision.model} was asked about it as well and could not either." if vision.usable else ""
     )
+    if receipt.balance is None:
+        # A different finding, and it was being reported as the first one. A
+        # page with no total on it produced "its lines come to +0.00 against
+        # the total printed on the receipt", quoting a figure that is not on it
+        # and a total that does not exist. One of these sends a reader to look
+        # for a misread digit; the other tells them the file is not what they
+        # thought it was.
+        return (
+            f"{where} has no receipt on it that this could read — no lines, no "
+            "total, nothing with the shape of one. Nothing from it is in this "
+            f"report.{tried}"
+        )
     return (
         f"{where} could not be read into a basket that adds up: its lines come "
         f"to {short:+} against the total printed on the receipt. Nothing from "
         "it has been stored, because a basket read wrongly is worse than one "
-        "not read at all. The visit still carries the total the points "
-        f"statement gave for it.{tried}"
+        f"not read at all.{kept}{tried}"
     )
 
 

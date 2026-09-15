@@ -36,11 +36,26 @@ __all__ = [
     "Line",
     "OcrUnavailable",
     "Transcript",
+    "UnreadableImage",
     "Word",
     "available",
     "transcribe",
     "version",
 ]
+
+
+class UnreadableImage(ValueError):
+    """These bytes are not an image this can read.
+
+    Kept apart from `OcrUnavailable`, which is a fact about the MACHINE — no
+    engine installed — and applies to every capture in the upload at once. This
+    is a fact about ONE file, and the difference decides how far the damage
+    spreads: a truncated capture must cost that capture and nothing else.
+
+    Before this existed, Pillow's `OSError: image file is truncated` escaped
+    `parse()`, `ingest` rewrapped it as an adapter bug, and one damaged file
+    among forty-six lost the entire response.
+    """
 
 
 @dataclass(frozen=True)
@@ -69,7 +84,16 @@ def transcribe(data: bytes) -> Transcript:
     """Read one capture. Raises `OcrUnavailable` if the engine will not run."""
     from unbagged.transcription.image import UPSCALE
 
-    image = load(data)
+    try:
+        image = load(data)
+    except OcrUnavailable:
+        raise
+    except Exception as exc:
+        # Pillow raises OSError, ValueError, and its own DecompressionBombError
+        # across the shapes a damaged or hostile file takes, and the list grows
+        # with the library. What matters to the caller is the same either way:
+        # this one file cannot be read.
+        raise UnreadableImage(str(exc)) from exc
     page = to_png(image)
     lines = assemble(read(page))
     if not lines:

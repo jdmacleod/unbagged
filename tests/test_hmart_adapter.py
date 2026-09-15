@@ -454,3 +454,95 @@ class TestCapturesWithNoStatementBesideThem:
         )
         assert parsed.transactions == ()
         assert any("no hour to file it under" in w.message for w in parsed.warnings)
+
+
+class TestAFileThatIsNotWhatItLooksLike:
+    """A capture can be damaged, or simply not be a receipt.
+
+    Found by /qa on 2026-09-15.
+    Report: .gstack/qa-reports/qa-report-unbagged-2026-09-15.md
+
+    Both arrive named like a receipt and typed like an image, so both reach the
+    reader. What each one costs is the point: a damaged file must cost itself
+    and nothing else, and a file with no receipt on it must not be described as
+    a receipt that failed to add up.
+    """
+
+    def photo(self, tmp_path, *, truncate=0):
+        """A PNG that is an image and is not a receipt."""
+        import io
+
+        from PIL import Image, ImageDraw
+
+        image = Image.new("RGB", (540, 400), (120, 160, 90))
+        ImageDraw.Draw(image).ellipse((80, 80, 400, 320), fill=(200, 80, 60))
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        data = buffer.getvalue()
+        path = tmp_path / "Transaction_030419.png"
+        path.write_bytes(data[:truncate] if truncate else data)
+        return SourceDocument(original_filename=path.name, sha256="0" * 64, path=str(path), id=0)
+
+    def test_a_truncated_capture_costs_one_file_and_not_the_upload(self, tmp_path):
+        """Regression: ISSUE-003 — Pillow's OSError escaped the adapter.
+
+        `ingest` rewraps anything that is not an `AdapterError` as an adapter
+        bug and fails the whole request, so one file damaged in transit lost
+        every other capture in the upload with it. Handoff §4 rule 4: a
+        malformed record costs one warning and one record.
+        """
+        parsed = HMartAdapter().parse(SourceBundle(documents=(self.photo(tmp_path, truncate=200),)))
+        named = [w for w in parsed.warnings if "Transaction_030419.png" in w.message]
+        assert named, "the damaged file was not named"
+        assert "could not be opened as an image" in named[0].message
+
+    def test_a_truncated_capture_does_not_stop_the_ones_beside_it(self, tmp_path, source):
+        """The claim the test above cannot make on its own.
+
+        With one file in the bundle, "costs one file" and "costs the upload"
+        look identical. This is the bundle where they differ.
+        """
+        history = tmp_path / "history.xls"
+        history.write_text(source, encoding="utf-8")
+        parsed = HMartAdapter().parse(
+            SourceBundle(
+                documents=(
+                    SourceDocument(
+                        original_filename="history.xls",
+                        sha256="1" * 64,
+                        path=str(history),
+                        id=0,
+                    ),
+                    self.photo(tmp_path, truncate=200),
+                )
+            )
+        )
+        assert len(parsed.transactions) > 1, "the spreadsheet was lost with the damaged capture"
+
+    @needs_engine
+    def test_a_page_with_no_receipt_on_it_is_not_a_receipt_that_failed_to_add_up(self, tmp_path):
+        """Regression: ISSUE-004 — two findings were reported as one.
+
+        A photograph produced "its lines come to +0.00 against the total
+        printed on the receipt", quoting a figure that is not on the page and a
+        total that does not exist. One of those messages sends a reader looking
+        for a misread digit; the other tells them the file is not what they
+        thought it was.
+        """
+        parsed = HMartAdapter().parse(SourceBundle(documents=(self.photo(tmp_path),)))
+        message = next(w.message for w in parsed.warnings if "Transaction_030419.png" in w.message)
+        assert "no receipt on it" in message
+        assert "+0.00" not in message
+
+    @needs_engine
+    def test_no_spreadsheet_is_described_when_none_was_uploaded(self, tmp_path):
+        """Regression: ISSUE-005 — a sentence about a document that was not there.
+
+        "The spreadsheet carried a header row and no readable purchases" fired
+        on an upload of captures alone. This tool asks to be read as a record of
+        what a response contained; a false sentence in that record is the whole
+        failure.
+        """
+        parsed = HMartAdapter().parse(SourceBundle(documents=(self.photo(tmp_path),)))
+        assert not any("spreadsheet carried a header row" in w.message for w in parsed.warnings)
+        assert any("receipt captures in this upload" in w.message for w in parsed.warnings)
