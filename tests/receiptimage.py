@@ -31,7 +31,7 @@ BLACK = (0, 0, 0)
 SCRAWL = (0, 0, 255)
 
 
-def build_receipt(rows, *, width=PAGE_WIDTH, scrawl=False, clip_digits=0) -> bytes:
+def build_receipt(rows, *, width=PAGE_WIDTH, scrawl=False, clip_digits=0, cut_off=False) -> bytes:
     """A page of `(left, description, amount)` rows, as PNG bytes.
 
     `left` is the flag column — `WT`, `CL`, `***`, or a qualifier like
@@ -51,7 +51,12 @@ def build_receipt(rows, *, width=PAGE_WIDTH, scrawl=False, clip_digits=0) -> byt
     # which would make every test here a test of the amount column only.
     font = ImageFont.load_default(size=14)
 
-    height = TOP_MARGIN * 2 + LINE_PITCH * len(rows)
+    # `cut_off` ends the page flush against its last row, which is what the
+    # screen does to a receipt too tall to fit: the capture stops mid-list with
+    # no margin under it. That edge is the only thing telling the top half of a
+    # receipt apart from a whole one, so a builder without it cannot produce
+    # the input the reader has to handle.
+    height = LINE_PITCH * len(rows) + (TOP_MARGIN if cut_off else TOP_MARGIN * 2)
     image = Image.new("RGB", (width, height), (255, 255, 255))
     draw = ImageDraw.Draw(image)
 
