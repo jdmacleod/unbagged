@@ -219,7 +219,8 @@ class HMartAdapter:
                     locator=document.filename,
                 )
 
-        if not documents:
+        captures = _captures(bundle)
+        if not documents and not captures:
             raise AdapterError(
                 "None of the uploaded files could be read as a spreadsheet. The "
                 "export this reads is the XML kind: in Excel choose Save As and "
@@ -238,7 +239,7 @@ class HMartAdapter:
                     continue
                 matched.append((table, columns, document.document_id))
 
-        if not matched:
+        if not matched and not captures:
             raise AdapterError(
                 "This spreadsheet does not carry the columns an H Mart export "
                 "has. If the format has changed, the response is still worth "
@@ -285,15 +286,8 @@ class HMartAdapter:
                 severity=Severity.WARNING,
             )
 
-        table, _, document_id = matched[0]
-        header_row = next(
-            row.number
-            for row in table.rows[:SNIFF_ROWS]
-            if all(h in {_normalise(c) for c in row.cells} for h in EXPECTED)
-        )
-
         first = min((t.occurred_at for t in transactions), default=None)
-        provenance = _provenance(table, header_row, 1, document_id)
+        provenance = _statement_provenance(matched)
 
         return ParseResult(
             request=RequestMeta(
@@ -324,6 +318,25 @@ class HMartAdapter:
             follow_ups=_follow_ups(),
             warnings=warnings.as_tuple(),
         )
+
+
+def _statement_provenance(matched: list) -> Provenance:
+    """Where a finding about the response as a whole is cited from.
+
+    The header row of the first sheet that carried the H Mart columns — or
+    nothing at all, when the response arrived as captures with no statement
+    beside them. A citation pointing at a sheet that is not in the bundle is
+    worse than no citation, and `Provenance` is all-optional for exactly this.
+    """
+    if not matched:
+        return Provenance()
+    table, _, document_id = matched[0]
+    header_row = next(
+        row.number
+        for row in table.rows[:SNIFF_ROWS]
+        if all(h in {_normalise(c) for c in row.cells} for h in EXPECTED)
+    )
+    return _provenance(table, header_row, 1, document_id)
 
 
 def _itemise(
@@ -367,6 +380,16 @@ def _itemise(
     by_name = {document.original_filename: document for document in captures}
     itemised: dict[int, Transaction] = {}
     unmatched: list[rc.Receipt] = []
+    added: list[rc.Receipt] = []
+    #: Whether a points statement came with the captures.
+    #:
+    #: It decides what to do with a receipt that matches no visit, and the two
+    #: answers are opposite. WITH a statement, an unmatched receipt means the
+    #: join failed on a visit the statement does list, so adding it would count
+    #: one trip to the shop twice — and a doubled total is invisible on screen.
+    #: WITHOUT one there is nothing to double, and refusing the receipt would
+    #: throw away the only record of the visit there is.
+    statement = bool(transactions)
 
     for names in rc.group_by_visit(list(by_name)):
         try:
@@ -392,7 +415,10 @@ def _itemise(
                 receipt = second
             index = _match(receipt, transactions, itemised)
             if index is None:
-                unmatched.append(receipt)
+                if statement:
+                    unmatched.append(receipt)
+                else:
+                    added.append(receipt)
                 continue
             disagreement = _disagrees(transactions[index], receipt)
             if disagreement is not None:
@@ -409,7 +435,89 @@ def _itemise(
     for receipt in unmatched:
         warnings.add(_unmatched(receipt), locator=receipt.captures[0])
 
-    return [itemised.get(index, txn) for index, txn in enumerate(transactions)]
+    joined = [itemised.get(index, txn) for index, txn in enumerate(transactions)]
+    for receipt in added:
+        visit = _as_transaction(receipt, by_name, warnings)
+        if visit is not None:
+            joined.append(visit)
+    joined.sort(key=lambda txn: txn.occurred_at)
+    return joined
+
+
+def _as_transaction(
+    receipt: rc.Receipt, by_name: dict, warnings: WarningCollector
+) -> Transaction | None:
+    """A visit built from the receipt alone, with no statement behind it.
+
+    Only reached when the response carried no points statement at all. The
+    store is left null: the statement names the branch and a capture does not,
+    and the lane number printed on the receipt is not a store — it takes the
+    same values at both branches.
+
+    A receipt whose timestamp could not be read is skipped rather than placed
+    at midnight on the date in its filename. The date is solid and the time is
+    not, and `occurred_at` renders as a time of day on every row of the
+    timeline: a visit at 00:00 reads as a fact about when someone shopped. The
+    spreadsheet path skips a row with no readable date for the same reason.
+    """
+    named = rc.capture_date(receipt.captures[0])
+    if receipt.stamp is not None and named is not None and receipt.stamp.date != named:
+        # Two records of the same date, from different parts of the response:
+        # the timestamp the till printed and the date the store's own export
+        # put in the filename. On the statement path a misread timestamp is
+        # caught by the amount not matching the visit it lands on; here there
+        # is no statement, so this is the only check there is. It costs one
+        # visit and keeps the rest honest.
+        warnings.add(
+            f"{' and '.join(receipt.captures)} is filed under {named} and the "
+            f"timestamp printed on it reads {receipt.stamp.date}. One of the two "
+            "was misread, and nothing here can say which, so the visit is not in "
+            "this report.",
+            locator=receipt.captures[0],
+        )
+        return None
+    if receipt.stamp is None:
+        warnings.add(
+            f"{' and '.join(receipt.captures)} reads as a basket that adds up, "
+            "and the timestamp printed on it could not be read. With no points "
+            "statement to place the visit against, there is no hour to file it "
+            "under, so it is not in this report. Uploading the statement "
+            "alongside the captures would recover it.",
+            locator=receipt.captures[0],
+        )
+        return None
+    document = by_name.get(receipt.captures[0])
+    return Transaction(
+        occurred_at=receipt.stamp.occurred_at,
+        items=_items(receipt),
+        external_order_id=receipt.stamp.number,
+        store_code=None,
+        division_code=receipt.stamp.lane,
+        channel=None,
+        tender_type=receipt.tender,
+        total_pre_discount=float(receipt.subtotal),
+        provenance=Provenance(
+            source_document_id=document.id if document else None,
+            page=1,
+            locator=" + ".join(receipt.captures),
+        ),
+    )
+
+
+def _items(receipt: rc.Receipt) -> tuple[TxnItem, ...]:
+    return tuple(
+        TxnItem(
+            description_raw=line.description,
+            quantity=float(line.quantity) if line.quantity is not None else None,
+            retail_amt=float(line.amount),
+            # Left None throughout. A weight discount and a cancellation are
+            # their own negative lines on this receipt, the way a return is in
+            # a Kroger export — folding either into a loyalty price is the
+            # failure `models.py` spends thirty lines warning about.
+            loyalty_amt=None,
+        )
+        for line in receipt.lines
+    )
 
 
 def _adjudicate(
@@ -758,9 +866,15 @@ def _disclosures(
     """
     total = len(transactions)
     with_items = sum(1 for txn in transactions if txn.items)
+    # Named rather than assumed. A response of captures alone has no branch in
+    # it anywhere — the statement is what names the store, and the lane number
+    # printed on a receipt is not one — so the sentence a compliance reader
+    # weighs has to stop claiming a store was disclosed when none was.
+    with_store = sum(1 for txn in transactions if txn.store_code)
+    fields = "a date, a store and a total" if with_store else "a date and a total"
     if with_items:
         evidence = (
-            f"{total} visits, each with a date, a store and a total. "
+            f"{total} visits, each with {fields}. "
             f"{with_items} of them itemised, from {len(captures or ())} screen "
             "captures of the receipts."
         )
@@ -771,7 +885,7 @@ def _disclosures(
             "was in them."
         )
     else:
-        evidence = f"{total} visits, each with a date, a store and a total. No line items."
+        evidence = f"{total} visits, each with {fields}. No line items."
         notes = (
             "The response says what each visit cost and never what was in "
             "it. Both halves are specific pieces of personal information; "

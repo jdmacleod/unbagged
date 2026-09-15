@@ -316,3 +316,141 @@ class TestWhenTheCapturesArrive:
         """
         parsed = self.parse(tmp_path, source, self.capture(tmp_path, visit))
         assert not any("could not be read at all" in w.message for w in parsed.warnings)
+
+
+class TestCapturesWithNoStatementBesideThem:
+    """Regression: ISSUE-001 — captures alone were claimed, then refused.
+
+    Found by /qa on 2026-09-15.
+    Report: .gstack/qa-reports/qa-report-unbagged-2026-09-15.md
+
+    `sniff` scores a bundle of captures 0.4 so it beats the generic fallback,
+    which an image scores nothing on. `parse` then raised "None of the uploaded
+    files could be read as a spreadsheet… in Excel choose Save As and pick XML
+    Spreadsheet 2003" — told to a reader who had just uploaded screenshots.
+    The comment on CAPTURE_CONFIDENCE claimed the score existed so a bundle of
+    captures would be read rather than refused; it was refused, with a worse
+    message.
+
+    A receipt is a record of a visit on its own. Without a statement there is
+    nothing to join it to and nothing it could double, so it becomes its own.
+    """
+
+    STAMP = "2019-03-04 11:07:00"
+
+    def capture(self, tmp_path, *, name, stamp=None, lines=None, balance=None):
+        from tests.receiptimage import build_receipt
+
+        amounts = lines if lines is not None else [Decimal("6.99")]
+        total = balance if balance is not None else sum(amounts)
+        rows = [("", "Customer ID: 40100200300", None)]
+        rows += [("", f"ITEM {n}", str(a)) for n, a in enumerate(amounts, start=1)]
+        rows += [
+            ("", "TAX", "0.00"),
+            ("***", "BALANCE", str(total)),
+            ("", "CREDIT CARD", str(total)),
+            ("", f"{stamp or self.STAMP}  2  118  0042", None),
+        ]
+        path = tmp_path / name
+        path.write_bytes(build_receipt(rows))
+        return SourceDocument(
+            original_filename=name, sha256=name.ljust(64, "0"), path=str(path), id=0
+        )
+
+    @needs_engine
+    def test_a_bundle_of_captures_is_read_rather_than_refused(self, tmp_path):
+        parsed = HMartAdapter().parse(
+            SourceBundle(documents=(self.capture(tmp_path, name="Transaction_030419.png"),))
+        )
+        assert len(parsed.transactions) == 1
+        assert parsed.transactions[0].occurred_at == "2019-03-04T11:07:00"
+        assert parsed.item_count() == 1
+
+    @needs_engine
+    def test_the_store_is_left_null_because_a_capture_does_not_name_one(self, tmp_path):
+        """The statement names the branch. The lane on the receipt is not a store.
+
+        Lane numbers 1-8 appear against both branches in the real response, so
+        recording one as the store would put a number where a place belongs.
+        """
+        parsed = HMartAdapter().parse(
+            SourceBundle(documents=(self.capture(tmp_path, name="Transaction_030419.png"),))
+        )
+        assert parsed.transactions[0].store_code is None
+        assert parsed.transactions[0].division_code == "3"
+
+    @needs_engine
+    def test_the_evidence_stops_claiming_a_store_was_disclosed(self, tmp_path):
+        """What the Compliance view quotes has to describe the response.
+
+        The sentence was inherited from the statement path and said every visit
+        came "with a date, a store and a total" over visits that carry no store
+        at all.
+        """
+        parsed = HMartAdapter().parse(
+            SourceBundle(documents=(self.capture(tmp_path, name="Transaction_030419.png"),))
+        )
+        specific = next(
+            d for d in parsed.disclosures if d.category is DisclosureCategory.SPECIFIC_PIECES
+        )
+        assert "a date and a total" in specific.evidence
+        assert "a store" not in specific.evidence
+
+    @needs_engine
+    def test_a_timestamp_disagreeing_with_the_filename_is_not_stored(self, tmp_path):
+        """Regression: ISSUE-002 — the only cross-check this path has.
+
+        Found by /qa on 2026-09-15.
+
+        Two records of one date, from different parts of the response: the
+        timestamp the till printed and the date the store's export put in the
+        filename. On the statement path a misread timestamp is caught by the
+        amount not matching the visit it lands on. Here there is no statement,
+        so without this a misread digit files a visit under the wrong day and
+        nothing on screen ever says so.
+        """
+        parsed = HMartAdapter().parse(
+            SourceBundle(
+                documents=(
+                    self.capture(
+                        tmp_path, name="Transaction_030419.png", stamp="2019-08-21 11:07:00"
+                    ),
+                )
+            )
+        )
+        assert parsed.transactions == ()
+        assert any("misread" in w.message for w in parsed.warnings)
+
+    @needs_engine
+    def test_a_receipt_with_no_readable_timestamp_is_not_placed_at_midnight(self, tmp_path):
+        """The date is solid and the hour is not, and the timeline shows hours.
+
+        A visit at 00:00 reads as a fact about when someone shopped. The
+        spreadsheet path skips a row with no readable date for the same reason.
+        """
+        from tests.receiptimage import build_receipt
+
+        path = tmp_path / "Transaction_030419.png"
+        path.write_bytes(
+            build_receipt(
+                [
+                    ("", "Customer ID: 40100200300", None),
+                    ("", "ITEM 1", "6.99"),
+                    ("", "TAX", "0.00"),
+                    ("***", "BALANCE", "6.99"),
+                    ("", "CREDIT CARD", "6.99"),
+                    ("", "Card Number : *********0000", None),
+                ]
+            )
+        )
+        parsed = HMartAdapter().parse(
+            SourceBundle(
+                documents=(
+                    SourceDocument(
+                        original_filename=path.name, sha256="0" * 64, path=str(path), id=0
+                    ),
+                )
+            )
+        )
+        assert parsed.transactions == ()
+        assert any("no hour to file it under" in w.message for w in parsed.warnings)
