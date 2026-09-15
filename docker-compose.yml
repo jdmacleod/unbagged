@@ -20,6 +20,18 @@ services:
       # Your reports and your database, on your disk. Back the whole thing up by
       # copying this directory.
       - ./data:/data
+    # Only a name, not a connection. Nothing is sent anywhere until
+    # UNBAGGED_OLLAMA_HOST is set, and a non-loopback host — which this is, from
+    # inside the container — is refused until UNBAGGED_ALLOW_REMOTE_OLLAMA says
+    # otherwise. Present because the alternative is a reader discovering that
+    # "localhost" inside a container is the container, with no hint as to why
+    # the model on their own machine cannot be reached.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      UNBAGGED_OLLAMA_HOST: "${UNBAGGED_OLLAMA_HOST:-}"
+      UNBAGGED_OLLAMA_VISION_MODEL: "${UNBAGGED_OLLAMA_VISION_MODEL:-}"
+      UNBAGGED_ALLOW_REMOTE_OLLAMA: "${UNBAGGED_ALLOW_REMOTE_OLLAMA:-}"
     # UNBAGGED_DB and UNBAGGED_INCOMING are not set here on purpose. They are
     # declared once, in the Dockerfile, so there is one source of truth. Setting
     # them again here and in the dev overlay meant three copies, and the overlay

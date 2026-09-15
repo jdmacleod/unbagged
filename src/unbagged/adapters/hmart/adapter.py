@@ -42,7 +42,7 @@ from unbagged.adapters.base import (
 from unbagged.adapters.hmart import receipt as rc
 from unbagged.extraction import Table, classify, extract, extract_all
 from unbagged.models import TxnItem
-from unbagged.transcription import OcrUnavailable, transcribe
+from unbagged.transcription import OcrUnavailable, ollama, transcribe
 
 RETAILER_ID = "hmart"
 DISPLAY_NAME = "H Mart"
@@ -355,6 +355,14 @@ def _itemise(
     if not captures:
         return transactions
 
+    # Asked once for the whole upload, not once per receipt: whether a model is
+    # reachable is a fact about the machine, and it is checked before any
+    # reading so that "there is no model" and "the model could not help" stay
+    # different answers.
+    vision = ollama.availability()
+    if vision.message:
+        warnings.info(vision.message)
+
     engine = None
     by_name = {document.original_filename: document for document in captures}
     itemised: dict[int, Transaction] = {}
@@ -372,8 +380,16 @@ def _itemise(
         for receipt in receipts:
             short = rc.foots(receipt)
             if short is not None:
-                warnings.add(_unreconciled(receipt, short), locator=receipt.captures[0])
-                continue
+                second = _adjudicate(receipt, by_name, vision)
+                if second is None:
+                    warnings.add(_unreconciled(receipt, short, vision), locator=receipt.captures[0])
+                    continue
+                warnings.info(
+                    f"{' and '.join(receipt.captures)} would not add up as read, "
+                    f"and {vision.model} read it into a basket that does. Only "
+                    "an answer that reconciles is kept, so this one has been."
+                )
+                receipt = second
             index = _match(receipt, transactions, itemised)
             if index is None:
                 unmatched.append(receipt)
@@ -394,6 +410,42 @@ def _itemise(
         warnings.add(_unmatched(receipt), locator=receipt.captures[0])
 
     return [itemised.get(index, txn) for index, txn in enumerate(transactions)]
+
+
+def _adjudicate(
+    receipt: rc.Receipt, by_name: dict, vision: ollama.Availability
+) -> rc.Receipt | None:
+    """Ask a local model about a page the engine could not read into a basket.
+
+    Only about those pages. On the real response the deterministic engine reads
+    43 of the 44 receipts into baskets that reconcile, so this runs on a handful
+    of captures rather than all of them — which is what makes a call costing
+    tens of seconds affordable inside a request someone is waiting on.
+
+    **The answer is kept only if it makes the receipt add up**, which is the
+    same gate the engine's own reading passes through and the entire reason a
+    model is allowed near this data. It is not a second opinion to be weighed
+    against the first; it is a second attempt at a check neither of them
+    administers.
+    """
+    if not vision.usable:
+        return None
+    from pathlib import Path
+
+    pages = [
+        Path(by_name[name].path).read_bytes()
+        for name in receipt.captures
+        if name in by_name and by_name[name].path
+    ]
+    if not pages:
+        return None
+    reply = ollama.read_receipt(pages, vision)
+    if reply is None:
+        return None
+    candidate = rc.from_reply(reply, receipt)
+    if candidate is None or rc.foots(candidate) is not None:
+        return None
+    return candidate
 
 
 def _read_visit(documents: list) -> list[rc.Receipt]:
@@ -531,14 +583,17 @@ def _with_items(txn: Transaction, receipt: rc.Receipt, by_name: dict) -> Transac
     )
 
 
-def _unreconciled(receipt: rc.Receipt, short: Decimal) -> str:
+def _unreconciled(receipt: rc.Receipt, short: Decimal, vision) -> str:
     where = " and ".join(receipt.captures)
+    tried = (
+        f" {vision.model} was asked about it as well and could not either." if vision.usable else ""
+    )
     return (
         f"{where} could not be read into a basket that adds up: its lines come "
         f"to {short:+} against the total printed on the receipt. Nothing from "
         "it has been stored, because a basket read wrongly is worse than one "
         "not read at all. The visit still carries the total the points "
-        "statement gave for it."
+        f"statement gave for it.{tried}"
     )
 
 

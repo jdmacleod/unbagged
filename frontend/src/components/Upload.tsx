@@ -225,11 +225,19 @@ export function Upload({
           ref={input}
           type="file"
           multiple
-          // Mirrors extraction.py's TEXT_SUFFIXES plus PDF. Only filters the
-          // picker — a drop still accepts anything and the server still
-          // explains what it could not read — but it stops the file dialog
-          // offering the zip the reader was told not to use.
-          accept=".pdf,.txt,.text,.json,.csv,.md,.xls,application/pdf,text/plain"
+          // Mirrors extraction.py's TEXT_SUFFIXES plus PDF and the image
+          // formats `classify()` routes. Only filters the picker — a drop still
+          // accepts anything and the server still explains what it could not
+          // read — but it stops the file dialog offering the zip the reader was
+          // told not to use.
+          //
+          // Images are here because a response can arrive as screen captures of
+          // a receipt viewer, which is what one store could supply. Unzip the
+          // folder first and select all of them.
+          accept={
+            ".pdf,.txt,.text,.json,.csv,.md,.xls,.png,.jpg,.jpeg,.webp,.gif," +
+            "application/pdf,text/plain,image/*"
+          }
           disabled={busy}
           className="hidden"
           onChange={(e) => void send(Array.from(e.target.files ?? []))}

@@ -67,3 +67,21 @@ def fixture_conn_module(tmp_path_factory) -> Iterator[tuple]:
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = value
+
+
+@pytest.fixture(autouse=True)
+def _never_a_real_model(monkeypatch):
+    """No test may reach a model running on the machine it is running on.
+
+    The H Mart adapter asks whether a local vision model is available whenever a
+    bundle carries receipt captures, so this is not confined to the tests that
+    are about that model — it is the whole suite. A contributor with `ollama
+    serve` up would otherwise get different results from CI, and slower ones,
+    from tests that never meant to ask anything.
+
+    Pointed at a port nothing listens on rather than unset, so the code path
+    that talks to a host is still the one exercised. The tests that are about
+    the model inject their own transport and never reach this.
+    """
+    monkeypatch.setenv("UNBAGGED_OLLAMA_HOST", "http://127.0.0.1:1")
+    monkeypatch.delenv("UNBAGGED_ALLOW_REMOTE_OLLAMA", raising=False)

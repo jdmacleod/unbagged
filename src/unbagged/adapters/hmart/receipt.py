@@ -57,6 +57,7 @@ __all__ = [
     "Stamp",
     "capture_date",
     "foots",
+    "from_reply",
     "group_by_visit",
     "read_capture",
     "stitch",
@@ -574,3 +575,62 @@ def group_by_visit(filenames: list[str]) -> list[list[str]]:
 
 def _stem(filename: str) -> str:
     return filename.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+
+
+def from_reply(reply: dict, like: Receipt) -> Receipt | None:
+    """A receipt built from a model's answer, keeping what was read off the page.
+
+    A candidate, and nothing more. The caller puts it through `foots` exactly as
+    it does the engine's reading, and throws it away unless it holds — which is
+    the whole basis for asking a model anything here. A model asked to read a
+    number always returns one, confidently, and nothing in its reply separates a
+    reading from an invention. The receipt's own printed total is the one fact in
+    the room the model had no hand in.
+
+    The timestamp, the customer number and the captures come from `like` rather
+    than from the reply. They were read off the page by something deterministic
+    and they are what the visit is joined on; a model is asked about the part
+    that was genuinely unreadable, not invited to restate the rest.
+    """
+    lines = []
+    for index, row in enumerate(reply.get("lines") or [], start=1):
+        if not isinstance(row, dict):
+            return None
+        amount = _decimal(row.get("amount"))
+        if amount is None:
+            # One unreadable amount voids the answer rather than costing one
+            # line. A basket missing a line still adds up if the model also
+            # adjusted the total, and skipping quietly is how that gets stored.
+            return None
+        lines.append(
+            ReceiptLine(
+                description=_clean(str(row.get("description") or "")),
+                amount=amount,
+                row=index,
+            )
+        )
+    tax = _decimal(reply.get("tax"))
+    balance = _decimal(reply.get("balance"))
+    if not lines or balance is None:
+        return None
+    return Receipt(
+        captures=like.captures,
+        lines=tuple(lines),
+        customer_id=like.customer_id,
+        tax=tax if tax is not None else Decimal("0.00"),
+        balance=balance,
+        tender=like.tender,
+        stamp=like.stamp,
+        complete=True,
+    )
+
+
+def _decimal(value: object) -> Decimal | None:
+    if value is None:
+        return None
+    try:
+        return Decimal(str(value).replace("$", "").replace(",", "").strip()).quantize(
+            Decimal("0.01")
+        )
+    except (InvalidOperation, ValueError):
+        return None

@@ -196,6 +196,26 @@ should read before putting a real report anywhere near this repository.
 Security issues go through GitHub's private vulnerability reporting; see
 `SECURITY.md`.
 
+## Responses that arrive as pictures
+
+One store could only supply screen captures of its receipt viewer, one or two
+per visit. Those are read, and they are read carefully:
+
+- Drop the images in alongside the rest of the response. Unzip the folder first
+  and select all of them; they belong to one upload, not one each.
+- **Nothing is stored unless the basket adds up.** A receipt prints its own
+  total, so a transcription can be checked against something that did not come
+  out of the same reader. One that does not reconcile is named in a warning and
+  its visit keeps the total it already had. On the response this was built for,
+  43 of 44 receipts reconciled; the one that did not was clipped when it was
+  captured, and no reader can recover a pixel that was never taken.
+- Nothing from the card block at the foot of a receipt is transcribed or stored.
+
+Reading is done by tesseract, which ships in the image. A local vision model can
+be asked about the pages tesseract could not read, and is **off unless you turn
+it on** — see `.env.example`. Its answer is kept only if it makes the receipt
+add up, the same gate everything else passes.
+
 ## What this is not
 
 - **Not a request generator.** Use [Datenanfragen](https://www.datarequests.org/) to file.

@@ -23,6 +23,69 @@ from a specific response. See `CONTRIBUTING.md`.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/
 
+## [Unreleased]
+
+### Added
+
+- **A response can arrive as screen captures of a receipt, and be read.** One
+  retailer could supply only images of its receipt viewer, a page or two per
+  visit. Those pages are now transcribed and the baskets on them stored, so a
+  response that previously said what every visit cost can also say what was in
+  them.
+
+  **Nothing is stored unless the basket adds up.** A receipt prints its own
+  total, so a transcription can be checked against a figure that did not come
+  out of the same reader — and where the retailer also sent a statement of what
+  each visit cost, against that too. A receipt that fails either check is named
+  in a warning and its visit keeps the total it already had. On the response
+  this was built against, 43 of 44 receipts reconciled to the cent; the one that
+  did not was clipped when it was captured, so every amount on it lost its last
+  digit. Nothing can recover that, and nothing pretends to.
+
+  Reading whole pages at once is not safe for this: the engine drops a minus
+  sign often enough to matter, turning a discount into a charge and, once, a
+  decimal point into a factor of a hundred. The column holding money is read
+  separately, under a character set restricted to what a number can be made of.
+
+  Nothing from the card details at the foot of a receipt is transcribed or
+  stored.
+
+- **A local vision model may be asked about the pages the engine could not
+  read** — and only those, which on a real response is a handful rather than all
+  of them. Its answer is kept only if it makes the receipt add up, which is the
+  same gate every other reading passes and the whole basis for asking. Off
+  unless `UNBAGGED_OLLAMA_HOST` is set; a host that is not this machine is
+  refused until you acknowledge that it would receive pictures of your
+  shopping. See `.env.example`.
+
+- **Products and Prices work for a retailer that names what you bought without
+  coding it.** Both views identified a product by its barcode, so a response
+  disclosing descriptions and amounts and no codes rendered two empty pages over
+  hundreds of disclosed lines — the app answering "nothing" to the one question
+  that response had answered. A product is now identified by the code where one
+  was disclosed and by the name where none was.
+
+### Changed
+
+- **The timeline explains a response that itemised only some of its visits.**
+  There are three states, not two, and the third had no sentence: a retailer
+  that says what every visit cost and what was in two thirds of them. The rows
+  with nothing to show simply would not open, with nothing on screen saying why.
+
+- `distinct_products` is now counted the way the Products page counts, so the
+  figure at the top matches the list underneath it. It had been admitting lines
+  that are only ever negative, which let a refund create an entry for something
+  you gave back.
+
+### Fixed
+
+- **A record now cites the document it was actually read from.** Every row in a
+  response was credited to the first file uploaded, regardless of which one it
+  came from. Every response so far arrived as a single file, where that is the
+  right answer by coincidence, so nothing looked wrong — but a response split
+  across a spreadsheet and a folder of images would have cited the spreadsheet
+  for every line item in it.
+
 ## [0.14.1] - 2026-09-11
 
 ### Fixed
