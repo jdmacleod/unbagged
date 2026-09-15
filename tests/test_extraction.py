@@ -345,3 +345,8 @@ class TestImages:
         message = str(excinfo.value)
         assert "image" in message
         assert "unzip" not in message
+        # Regression: ISSUE-006 — this described a design that was replaced
+        # before it shipped ("an image reaches an adapter as a transcript, not
+        # as pixels"), naming an internal shape and nothing a reader can act
+        # on. Found by /qa on 2026-09-15.
+        assert "transcript" not in message.lower()

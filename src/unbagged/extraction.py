@@ -615,10 +615,18 @@ def extract(document: SourceDocument, max_pages: int | None = None) -> Extracted
         pages = extract_text_file(path)
         media_type = document.media_type or "text/plain"
     elif kind == "image":
+        # Reached only when no adapter claimed the image, because the adapter
+        # that reads captures reads them as pixels through `transcription` and
+        # never comes here. So the useful thing to say is which responses
+        # arrive as images at all — not, as this used to, that "an image
+        # reaches an adapter as a transcript", which described a design that
+        # was replaced before it shipped and names nothing a reader can act on.
         raise ExtractionError(
-            f"{document.original_filename} is an image, and nothing has "
-            "transcribed it yet. An image reaches an adapter as a transcript, "
-            "not as pixels."
+            f"{document.original_filename} is an image, and no retailer this "
+            "knows about answers with one of this shape. Screen captures of a "
+            "receipt are read when their filenames are the ones the store's "
+            "own export produced; a photograph or a screenshot taken by hand "
+            "is not something this can identify."
         )
     elif kind == "binary_workbook":
         # Reached only when the content check above said no, so this is a real
