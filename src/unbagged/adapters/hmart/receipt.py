@@ -55,7 +55,9 @@ __all__ = [
     "Receipt",
     "ReceiptLine",
     "Stamp",
+    "capture_date",
     "foots",
+    "group_by_visit",
     "read_capture",
     "stitch",
 ]
@@ -518,3 +520,57 @@ def _clean(text: str) -> str:
     the other way.
     """
     return text.strip().lstrip("'`‘’\"").strip()
+
+
+#: `Transaction_030419.png`, and `Transaction_030419_01.png` for the first of
+#: two captures of one receipt. The six digits are the date as MMDDYY.
+#:
+#: Matched loosely on the stem before it and anchored on the six digits,
+#: because the name is whatever the store's software produced and whatever
+#: travelled through mail on the way here, and nothing here should fail over a
+#: prefix.
+CAPTURE_NAME = re.compile(r"^(?P<visit>.*?_(?P<date>\d{6}))(?:_(?P<part>\d{1,2}))?$")
+
+
+def capture_date(filename: str) -> str | None:
+    """The date in a capture's filename, as `YYYY-MM-DD`, or None.
+
+    The receipt prints its own timestamp, and that is the better source — but
+    it is the least legible line on the page, and a digit of it comes back
+    wrong on about a ninth of the real captures (`2022-62-21`, `2821-07-18`).
+    The filename carries the same date in a form that cannot be misread, so the
+    two corroborate each other.
+
+    A two-digit year, which cannot be helped: it is what the name contains.
+    Read as 20YY, which will be wrong in 2100 and is right for every response
+    this will see.
+    """
+    found = CAPTURE_NAME.match(_stem(filename))
+    if not found:
+        return None
+    month, day, year = (found.group("date")[i : i + 2] for i in (0, 2, 4))
+    try:
+        datetime.strptime(f"20{year}-{month}-{day}", "%Y-%m-%d")  # noqa: DTZ007
+    except ValueError:
+        return None
+    return f"20{year}-{month}-{day}"
+
+
+def group_by_visit(filenames: list[str]) -> list[list[str]]:
+    """Captures grouped into the visits they are of, each in capture order.
+
+    A grouping to TRY, not a conclusion. Two captures sharing a date are the
+    two halves of one tall receipt about as often as they are two trips to the
+    shop on one day — the real corpus has both, and their filenames look the
+    same. Whether a group is really one receipt is settled by reading them:
+    a capture that reached the end of a page is a receipt on its own.
+    """
+    visits: dict[str, list[str]] = {}
+    for filename in sorted(filenames):
+        found = CAPTURE_NAME.match(_stem(filename))
+        visits.setdefault(found.group("visit") if found else _stem(filename), []).append(filename)
+    return list(visits.values())
+
+
+def _stem(filename: str) -> str:
+    return filename.rsplit("/", 1)[-1].rsplit(".", 1)[0]

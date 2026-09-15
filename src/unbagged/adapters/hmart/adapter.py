@@ -16,7 +16,9 @@ and to say so plainly rather than rendering it as a smaller Kroger.
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from datetime import datetime
+from decimal import Decimal
 
 from unbagged.adapters.base import (
     AdapterError,
@@ -37,11 +39,31 @@ from unbagged.adapters.base import (
     WarningCollector,
     absent_disclosures,
 )
-from unbagged.extraction import Table, extract, extract_all
+from unbagged.adapters.hmart import receipt as rc
+from unbagged.extraction import Table, classify, extract, extract_all
+from unbagged.models import TxnItem
+from unbagged.transcription import OcrUnavailable, transcribe
 
 RETAILER_ID = "hmart"
 DISPLAY_NAME = "H Mart"
-SCHEMA_VERSION = 1
+
+#: 2: the response grew a second half.
+#:
+#: The first was a points statement and nothing else, so every visit had a
+#: total and no contents. A later reply added screen captures of the receipt
+#: viewer, one or two per visit, which itemise 44 of the 67. Transactions
+#: parsed under version 1 carry no line items and cannot acquire any; the bump
+#: records that a basket read by this adapter now means something different.
+SCHEMA_VERSION = 2
+
+#: Confidence for a bundle of captures with no spreadsheet beside them.
+#:
+#: Well under the 0.9 a matching header row earns, and deliberately so: that is
+#: a positive identification and this is a filename convention. It is enough to
+#: beat the generic fallback, which is the decision that actually matters —
+#: an image yields no text, so the fallback scores nothing on one and a bundle
+#: of captures would otherwise be refused outright rather than read.
+CAPTURE_CONFIDENCE = 0.4
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +84,32 @@ STAMP = "%Y-%m-%d %H:%M:%S.%f"
 
 def _normalise(value: str | None) -> str:
     return " ".join((value or "").split()).lower()
+
+
+def _captures(bundle: SourceBundle) -> list:
+    """The documents in this bundle that are captures of a receipt.
+
+    Identified by being an image AND by carrying a date in the filename the
+    store's viewer puts there. Both, not either: "it is a PNG" says nothing
+    about which retailer sent it, and a name alone says nothing about what is
+    in the file.
+
+    Cheap enough for `sniff` on purpose — it reads the first sixteen bytes of
+    each file and no more. Transcribing one costs the better part of a second,
+    and `sniff` is called on every adapter for every upload.
+    """
+    from pathlib import Path
+
+    found = []
+    for document in bundle.documents:
+        if not document.path or rc.capture_date(document.original_filename) is None:
+            continue
+        try:
+            if classify(document, Path(document.path)) == "image":
+                found.append(document)
+        except OSError:
+            continue
+    return found
 
 
 def _columns(table: Table) -> dict[str, int] | None:
@@ -123,7 +171,7 @@ class HMartAdapter:
             for table in extracted.tables:
                 if _columns(table):
                     return 0.9
-        return 0.0
+        return CAPTURE_CONFIDENCE if _captures(bundle) else 0.0
 
     def parse(self, bundle: SourceBundle) -> ParseResult:
         """Read every sheet that carries the columns, in every document.
@@ -148,7 +196,14 @@ class HMartAdapter:
         # complete while part of the upload is missing from it. Which file, and
         # why, is the reader's business — they are the only person who can say
         # whether the missing one mattered.
+        # A capture is excluded from this accounting, not exempted from it: it
+        # is read by `_itemise` further down, which raises its own warning when
+        # it cannot be. Without the exclusion every capture in the bundle was
+        # reported as unreadable — 46 warnings saying a PNG is not a
+        # spreadsheet, and the one warning that mattered, about the receipt
+        # that genuinely could not be read, sitting at the bottom of them.
         readable = {document.filename for document in extracted}
+        readable |= {document.original_filename for document in _captures(bundle)}
         for source in bundle.documents:
             if source.original_filename not in readable:
                 warnings.add(
@@ -220,6 +275,7 @@ class HMartAdapter:
         # Sorted, because a bundle of several files arrives in upload order and
         # a timeline built from it would otherwise jump between them.
         transactions.sort(key=lambda t: t.occurred_at)
+        transactions = _itemise(bundle, transactions, warnings)
 
         if not transactions:
             warnings.add(
@@ -264,10 +320,236 @@ class HMartAdapter:
                 for card, where in cards.items()
             ),
             transactions=tuple(transactions),
-            disclosures=_disclosures(transactions, provenance),
+            disclosures=_disclosures(transactions, provenance, _captures(bundle)),
             follow_ups=_follow_ups(),
             warnings=warnings.as_tuple(),
         )
+
+
+def _itemise(
+    bundle: SourceBundle,
+    transactions: list[Transaction],
+    warnings: WarningCollector,
+) -> list[Transaction]:
+    """Fill in what was in each basket, from the captures that show it.
+
+    The response arrived in two parts, and they answer different questions: the
+    spreadsheet says what every visit cost, the captures say what 44 of them
+    contained. Joined here rather than left as two responses, because they are
+    one retailer's answer to one request and a reader comparing them by hand is
+    work this is for.
+
+    **Nothing is attached to a basket unless the receipt it came from adds up.**
+    A capture is read by a machine looking at 10px type, and the one check that
+    does not come from the same machine is the total the receipt prints on
+    itself. A receipt that does not reconcile is named in a warning and its
+    visit keeps the total-only row it already had.
+
+    That rule is doing more than it looks. The timeline already marks a basket
+    whose lines miss its stated total, and tells the reader the difference is
+    in the response as supplied rather than in how it was read. Letting an
+    unreconciled receipt through would make that sentence false, and turn this
+    tool's own misreading into a finding against the retailer.
+    """
+    captures = _captures(bundle)
+    if not captures:
+        return transactions
+
+    engine = None
+    by_name = {document.original_filename: document for document in captures}
+    itemised: dict[int, Transaction] = {}
+    unmatched: list[rc.Receipt] = []
+
+    for names in rc.group_by_visit(list(by_name)):
+        try:
+            receipts = _read_visit([by_name[name] for name in names])
+        except OcrUnavailable as exc:
+            # One message for the whole upload, not one per capture: the engine
+            # is either there or it is not, and 46 copies of that is not more
+            # informative than one.
+            engine = engine or str(exc)
+            continue
+        for receipt in receipts:
+            short = rc.foots(receipt)
+            if short is not None:
+                warnings.add(_unreconciled(receipt, short), locator=receipt.captures[0])
+                continue
+            index = _match(receipt, transactions, itemised)
+            if index is None:
+                unmatched.append(receipt)
+                continue
+            disagreement = _disagrees(transactions[index], receipt)
+            if disagreement is not None:
+                warnings.add(disagreement, locator=receipt.captures[0])
+                continue
+            itemised[index] = _with_items(transactions[index], receipt, by_name)
+
+    if engine:
+        warnings.error(
+            f"{len(captures)} receipt captures were part of this response and "
+            f"none could be read. {engine} Every visit still carries the total "
+            "the points statement gave for it."
+        )
+    for receipt in unmatched:
+        warnings.add(_unmatched(receipt), locator=receipt.captures[0])
+
+    return [itemised.get(index, txn) for index, txn in enumerate(transactions)]
+
+
+def _read_visit(documents: list) -> list[rc.Receipt]:
+    """The receipts one group of captures holds — usually one, sometimes two.
+
+    Two captures of one date are the halves of a tall receipt about as often as
+    they are two trips to the shop, and the filenames do not distinguish them.
+    A capture that reached the bottom of its page is a receipt on its own; a
+    capture that ran off the edge is half of one.
+    """
+    from pathlib import Path
+
+    parts = [
+        rc.read_capture(transcribe(Path(document.path).read_bytes()), document.original_filename)
+        for document in documents
+    ]
+    if len(parts) > 1 and all(part.complete for part in parts):
+        return parts
+    return [rc.stitch(parts)]
+
+
+def _match(
+    receipt: rc.Receipt,
+    transactions: list[Transaction],
+    taken: dict[int, Transaction],
+) -> int | None:
+    """Which visit this receipt is of, or None.
+
+    The timestamp the receipt prints matches the points statement to the
+    second, so that is the join. It is also the least legible line on the page
+    — a digit of it comes back wrong on about a ninth of the real captures — so
+    where it cannot be read, the date in the capture's filename and the
+    receipt's own subtotal stand in for it together.
+
+    Not the subtotal alone. Two visits to the same shop for the same basket is
+    an ordinary thing, and matching on a number that repeats would attach a
+    receipt to the wrong day rather than to none.
+    """
+    for index, txn in enumerate(transactions):
+        if index in taken:
+            continue
+        if receipt.stamp and txn.occurred_at == receipt.stamp.occurred_at:
+            return index
+    date = rc.capture_date(receipt.captures[0])
+    if date is None:
+        return None
+    for index, txn in enumerate(transactions):
+        if index in taken or not txn.occurred_at.startswith(date):
+            continue
+        if txn.total_pre_discount is not None and _close(
+            Decimal(str(txn.total_pre_discount)), receipt.subtotal
+        ):
+            return index
+    return None
+
+
+def _disagrees(txn: Transaction, receipt: rc.Receipt) -> str | None:
+    """Do the two halves of the response agree about what this visit cost?
+
+    The receipt reconciles against itself by the time this is asked, and the
+    statement is a separate document written by a separate system. So this is
+    the one check that compares the two against each other, and it is the
+    strongest of the three: a misreading would have to survive the receipt's
+    own total AND land on the figure the statement independently reports.
+
+    It is not redundant with the join. A receipt matched on its timestamp is
+    matched on the timestamp alone — that is what makes the timestamp a good
+    key — so nothing has yet compared the money. Without this, a capture whose
+    lines were misread into a self-consistent basket attached to the right
+    visit and left the timeline showing a basket "under by" the difference,
+    with a note telling the reader that difference was in the response as
+    supplied. It would have been in how it was read.
+
+    The statement reports a visit's PRE-tax total, which is what the receipt's
+    lines sum to. Comparing against the receipt's balance instead fails on
+    every visit that paid any tax.
+    """
+    if txn.total_pre_discount is None:
+        return None
+    stated = Decimal(str(txn.total_pre_discount))
+    if _close(stated, receipt.subtotal):
+        return None
+    where = " and ".join(receipt.captures)
+    return (
+        f"{where} reads as a basket of {receipt.subtotal}, and the points "
+        f"statement gives {stated} for the visit it belongs to. The two halves "
+        "of this response disagree about what this visit cost, so its contents "
+        "have not been stored; the statement's total stands."
+    )
+
+
+def _close(stated: Decimal, read: Decimal) -> bool:
+    """Equal to the cent.
+
+    Not a tolerance. Both figures are money that was read exactly, and a join
+    that accepts "nearly" is a join that will one day attach a basket to the
+    wrong visit and leave nothing on screen to show it.
+    """
+    return stated == read
+
+
+def _with_items(txn: Transaction, receipt: rc.Receipt, by_name: dict) -> Transaction:
+    """The same visit, with what was in it.
+
+    `total_pre_discount` is left as the points statement gave it — the pre-tax
+    subtotal, which is what the lines sum to, so the timeline's own footing
+    check reports no difference. The receipt's balance includes tax, and the
+    schema has nowhere to put tax; recorded in NOTES.md rather than rounded
+    into a line that was never on the receipt.
+    """
+    document = by_name.get(receipt.captures[0])
+    return replace(
+        txn,
+        items=tuple(
+            TxnItem(
+                description_raw=line.description,
+                quantity=float(line.quantity) if line.quantity is not None else None,
+                retail_amt=float(line.amount),
+                # Left None throughout. A weight discount and a cancellation are
+                # their own negative lines on this receipt, the way a return is
+                # in a Kroger export — folding either into a loyalty price is
+                # the failure `models.py` spends thirty lines warning about.
+                loyalty_amt=None,
+            )
+            for line in receipt.lines
+        ),
+        tender_type=receipt.tender or txn.tender_type,
+        division_code=receipt.stamp.lane if receipt.stamp else txn.division_code,
+        external_order_id=receipt.stamp.number if receipt.stamp else txn.external_order_id,
+        provenance=Provenance(
+            source_document_id=document.id if document else None,
+            page=1,
+            locator=" + ".join(receipt.captures),
+        ),
+    )
+
+
+def _unreconciled(receipt: rc.Receipt, short: Decimal) -> str:
+    where = " and ".join(receipt.captures)
+    return (
+        f"{where} could not be read into a basket that adds up: its lines come "
+        f"to {short:+} against the total printed on the receipt. Nothing from "
+        "it has been stored, because a basket read wrongly is worse than one "
+        "not read at all. The visit still carries the total the points "
+        "statement gave for it."
+    )
+
+
+def _unmatched(receipt: rc.Receipt) -> str:
+    where = " and ".join(receipt.captures)
+    return (
+        f"{where} is a receipt that adds up, and no visit in the points "
+        "statement matches its date and total. Its contents have not been "
+        "stored: adding a visit the statement does not list would count a trip "
+        "to the shop twice if the two are the same one."
+    )
 
 
 def _provenance(table: Table, row: int, column: int, document_id: int | None) -> Provenance:
@@ -369,7 +651,7 @@ def _transaction(
 
 
 def _timestamp(value: str | None) -> str | None:
-    """`2020-01-18 09:59:00.0` to `2020-01-18T09:59:00`.
+    """`2019-03-04 11:07:00.0` to `2019-03-04T11:07:00`.
 
     Stored as a store-local wall clock with no zone, which is what the response
     gives. Stamping UTC on it would move an evening shop to the next day in
@@ -397,30 +679,55 @@ def _amount(value: str | None) -> float | None:
 def _disclosures(
     transactions: tuple[Transaction, ...] | list[Transaction],
     provenance: Provenance,
+    captures: list | None = None,
 ) -> tuple[Disclosure, ...]:
     """What the response addressed, and what it did not.
 
     `SPECIFIC_PIECES` is PARTIAL, and the choice is load-bearing. The response
-    did disclose specific pieces of personal information — a card number, and
-    every visit's date, store and total — so ABSENT would be false. It disclosed
-    nothing about what was in any basket, so PROVIDED would be false too, and
-    PROVIDED is the cell a compliance reader weighs most heavily. PARTIAL is the
-    only one of the three that is true.
+    did disclose specific pieces of personal information — a card number, every
+    visit's date, store and total, and now the contents of some of those
+    baskets — so ABSENT would be false. It has still not disclosed the contents
+    of all of them, so PROVIDED would be false too, and PROVIDED is the cell a
+    compliance reader weighs most heavily. PARTIAL is the only one of the three
+    that is true.
+
+    It stays PARTIAL after the captures arrived, which is worth being explicit
+    about: a second reply that itemises two thirds of the visits is more than
+    was held before and is not the whole of what was asked for. `legal-basis.md`
+    is direct about which way to resolve that — a category is never upgraded on
+    inference, and the grade describes the response rather than the effort. What
+    changes is the evidence, which now says how many of the visits were covered,
+    because a reader can weigh two thirds and cannot weigh "partial".
 
     Everything else is ABSENT. There is no prose in the response at all.
     """
+    total = len(transactions)
+    with_items = sum(1 for txn in transactions if txn.items)
+    if with_items:
+        evidence = (
+            f"{total} visits, each with a date, a store and a total. "
+            f"{with_items} of them itemised, from {len(captures or ())} screen "
+            "captures of the receipts."
+        )
+        notes = (
+            "The response came in two parts: a points statement covering every "
+            "visit, and captures of the receipt viewer covering some of them. "
+            f"{total - with_items} visits still say what they cost and not what "
+            "was in them."
+        )
+    else:
+        evidence = f"{total} visits, each with a date, a store and a total. No line items."
+        notes = (
+            "The response says what each visit cost and never what was in "
+            "it. Both halves are specific pieces of personal information; "
+            "only one of them was disclosed."
+        )
     found = {
         DisclosureCategory.SPECIFIC_PIECES: Disclosure(
             category=DisclosureCategory.SPECIFIC_PIECES,
             status=DisclosureStatus.PARTIAL,
-            evidence=(
-                f"{len(transactions)} visits, each with a date, a store and a total. No line items."
-            ),
-            notes=(
-                "The response says what each visit cost and never what was in "
-                "it. Both halves are specific pieces of personal information; "
-                "only one of them was disclosed."
-            ),
+            evidence=evidence,
+            notes=notes,
             provenance=provenance,
         )
     }
