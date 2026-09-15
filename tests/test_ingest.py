@@ -147,3 +147,70 @@ class TestWhatIsStoredAboutTheFileItself:
         )
         assert document.media_type == as_read.media_type
         assert document.page_count == (as_read.page_count or None)
+
+
+class TestWhichDocumentARecordCites:
+    """A bundle of more than one file, where the citation has to pick.
+
+    `_save()` used to rewrite every row's `source_document_id` to the FIRST
+    stored document, unconditionally. Every bundle the project had ever ingested
+    held one file, where that is the right answer by coincidence, so the bug was
+    invisible: the adapter's own per-document provenance was computed, written,
+    and then overwritten a moment later.
+
+    The shape that exposes it is a response arriving as a spreadsheet plus a
+    folder of receipt captures — every line item would cite the spreadsheet,
+    which is a citation pointing at a document that does not contain the value.
+
+    Asserted through a real adapter rather than a stub. The generic fallback
+    parses the LONGEST document in the bundle (`generic/adapter.py`), so making
+    the second file the longer one asks the question directly: the answer is the
+    first document's id if the bug is present and the second's if it is not.
+    """
+
+    def test_a_record_cites_the_document_it_was_read_from(self, conn, tmp_path):
+        short = store_upload("short.txt", b"Dear customer,\n", directory=tmp_path)
+        long = store_upload(
+            "long.txt",
+            b"Dear customer,\nWe hold the following categories.\n" * 40,
+            directory=tmp_path,
+        )
+        result = ingest.ingest(conn, [short, long])
+
+        documents = repository.get_documents(conn, result.request_id)
+        assert len(documents) == 2
+        cited = {
+            row["source_document_id"]
+            for row in conn.execute(
+                "SELECT source_document_id FROM disclosure WHERE request_id = ?",
+                (result.request_id,),
+            )
+        }
+        # Not `!= documents[0].id`: that passes on a NULL too, and a citation
+        # that points nowhere is the other way this fails.
+        assert cited == {documents[1].id}
+
+    def test_the_order_files_arrive_in_is_the_order_they_are_cited_by(self, conn, tmp_path):
+        """The mapping is positional, so a reversal has to change the answer.
+
+        Same two files, swapped. If index and id were being matched up by
+        anything other than position — sorted by name, say, or by size — this
+        pair would agree with the one above instead of disagreeing.
+        """
+        short = store_upload("short.txt", b"Dear customer,\n", directory=tmp_path)
+        long = store_upload(
+            "long.txt",
+            b"Dear customer,\nWe hold the following categories.\n" * 40,
+            directory=tmp_path,
+        )
+        result = ingest.ingest(conn, [long, short])
+
+        documents = repository.get_documents(conn, result.request_id)
+        cited = {
+            row["source_document_id"]
+            for row in conn.execute(
+                "SELECT source_document_id FROM disclosure WHERE request_id = ?",
+                (result.request_id,),
+            )
+        }
+        assert cited == {documents[0].id}

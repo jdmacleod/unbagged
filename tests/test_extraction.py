@@ -274,3 +274,74 @@ class TestProbeAgreesWithExtract:
         path.write_bytes(b"\x00\x01\x02")
         doc = SourceDocument(original_filename=path.name, sha256="a" * 64, path=str(path))
         assert probe(doc) is None
+
+
+#: A PNG header and nothing else.
+#:
+#: Deliberately not a valid image: every assertion in this class is about
+#: ROUTING, which reads the first bytes and never decodes pixels. Building a
+#: real image here would make the tests depend on an encoder to prove something
+#: an encoder has no part in. The transcription tests use real captures.
+PNG_HEADER = b"\x89PNG\r\n\x1a\n" + b"not a real image"
+
+
+class TestImages:
+    """A screen capture is a response too, and it is not text.
+
+    Routed by magic bytes rather than by suffix, and more firmly than the other
+    formats are: a capture reaches this tool through whatever the operating
+    system's screenshot key produced and whatever the mail client renamed it to,
+    so the suffix is the least reliable thing about the file.
+    """
+
+    def test_a_png_is_an_image_whatever_it_is_called(self, tmp_path):
+        for name in ("capture.png", "capture.txt", "capture"):
+            path = tmp_path / name
+            path.write_bytes(PNG_HEADER)
+            assert extraction.classify(document(path), path) == "image", name
+
+    def test_an_image_suffix_alone_does_not_make_a_file_an_image(self, tmp_path):
+        """The other half of routing by content.
+
+        Not asserted as `== "text"`: a `.png` was never a text suffix, so this
+        file is unsupported both before and after the image branch existed, and
+        asserting the exact answer would be asserting something this change did
+        not touch. What the change could have broken is the file being claimed
+        as an image on the strength of its name.
+        """
+        path = tmp_path / "letter.png"
+        path.write_text("Dear customer,\n", encoding="utf-8")
+        assert extraction.classify(document(path), path) != "image"
+
+    def test_a_text_file_stays_text_when_it_says_so(self, tmp_path):
+        path = tmp_path / "letter.txt"
+        path.write_text("Dear customer,\n", encoding="utf-8")
+        assert extraction.classify(document(path), path) == "text"
+
+    def test_probe_records_one_page_rather_than_none(self, tmp_path):
+        """None means "this format has no pages". An image has exactly one.
+
+        A spreadsheet stores None because sheets and rows are not pages. Copying
+        that onto an image would throw away the only thing that lets provenance
+        say which capture of a set a line came from.
+        """
+        path = tmp_path / "capture.png"
+        path.write_bytes(PNG_HEADER)
+        facts = probe(document(path))
+        assert facts.media_type == "image/png"
+        assert facts.page_count == 1
+
+    def test_extract_refuses_and_says_why(self, tmp_path):
+        """Not the generic "unsupported file" message.
+
+        Those two send a reader to solve different problems: one means the
+        format is not handled at all, this one means the file has to be
+        transcribed before an adapter can be given it.
+        """
+        path = tmp_path / "capture.png"
+        path.write_bytes(PNG_HEADER)
+        with pytest.raises(ExtractionError) as excinfo:
+            extract(document(path))
+        message = str(excinfo.value)
+        assert "image" in message
+        assert "unzip" not in message

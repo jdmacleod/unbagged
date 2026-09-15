@@ -12,7 +12,7 @@ is the only place that knows about columns.
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import replace
 
 from unbagged.db import transaction
@@ -108,6 +108,38 @@ def insert_documents(
     return tuple(stored)
 
 
+def _document_id_resolver(
+    stored: Sequence[SourceDocument],
+) -> Callable[[Provenance], int | None]:
+    """Turn the bundle index an adapter wrote into the id the document now has.
+
+    An adapter fills provenance in while parsing, before any row exists, so what
+    it can cite is the document's position in the bundle it was handed
+    (`ingest.bundle_from`). `insert_documents` has just returned those same
+    documents carrying their assigned ids, in the same order, so position is the
+    whole mapping.
+
+    Resolved here rather than by an UPDATE pass afterwards: `source_document_id`
+    is a foreign key, and a bundle index is not a valid one — writing 0 and
+    fixing it up a moment later fails the constraint before the fixup can run.
+
+    An index outside the bundle, or none at all, falls back to the first
+    document. Three of the four adapters do not track provenance per document
+    yet; this keeps their behaviour exactly as it was.
+    """
+    ids = [document.id for document in stored]
+    if not ids:
+        return lambda provenance: None
+
+    def resolve(provenance: Provenance) -> int | None:
+        index = provenance.source_document_id
+        if index is None or not 0 <= index < len(ids):
+            return ids[0]
+        return ids[index]
+
+    return resolve
+
+
 def save_parse_result(
     conn: sqlite3.Connection,
     result: ParseResult,
@@ -121,8 +153,8 @@ def save_parse_result(
     """
     with transaction(conn):
         request_id = insert_request(conn, result.request)
-        if documents:
-            insert_documents(conn, request_id, documents)
+        stored = insert_documents(conn, request_id, documents) if documents else ()
+        document_id = _document_id_resolver(stored)
 
         conn.executemany(
             "INSERT INTO identity (request_id, id_type, value, scope, first_seen,"
@@ -134,7 +166,7 @@ def save_parse_result(
                     i.value,
                     str(i.scope) if i.scope else None,
                     i.first_seen,
-                    i.provenance.source_document_id,
+                    document_id(i.provenance),
                     i.provenance.page,
                     i.provenance.locator,
                 )
@@ -157,7 +189,7 @@ def save_parse_result(
                     str(txn.channel) if txn.channel else None,
                     txn.tender_type,
                     txn.total_pre_discount,
-                    txn.provenance.source_document_id,
+                    document_id(txn.provenance),
                     txn.provenance.page,
                     txn.provenance.locator,
                 ),
@@ -195,7 +227,7 @@ def save_parse_result(
                     str(f.subject) if f.subject else None,
                     str(f.origin),
                     None if f.derivable_from_txns is None else int(f.derivable_from_txns),
-                    f.provenance.source_document_id,
+                    document_id(f.provenance),
                     f.provenance.page,
                     f.provenance.locator,
                 )
@@ -213,7 +245,7 @@ def save_parse_result(
                     str(d.status),
                     d.evidence,
                     d.notes,
-                    d.provenance.source_document_id,
+                    document_id(d.provenance),
                     d.provenance.page,
                     d.provenance.locator,
                 )
