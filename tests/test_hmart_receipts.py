@@ -242,3 +242,28 @@ class TestACaptureNothingCanRecover:
         aside — which is asserted here, and acted on in the adapter.
         """
         assert rc.foots(read(BASKET, clip_digits=1)) is not None
+
+
+class TestWhatIsTrimmedFromAName:
+    """A name identifies a product where the retailer disclosed no code.
+
+    So a stray character is not cosmetic: it splits one product into two on a
+    page whose whole subject is what you buy repeatedly. The real response has
+    `AVOCADO HASS` bought three times and `AVOCADO HASS:` bought twice.
+    """
+
+    def test_a_mark_the_engine_added_is_trimmed(self):
+        assert rc._clean("‘SUKOYAKA BRW RICE") == "SUKOYAKA BRW RICE"
+        assert rc._clean("AVOCADO HASS:") == "AVOCADO HASS"
+        assert rc._clean("BABY SALMON,") == "BABY SALMON"
+
+    def test_a_mark_the_receipt_printed_is_left_alone(self):
+        """These receipts truncate a long name and print the cut.
+
+        The full stop is on the page, so trimming it would edit what the
+        retailer printed — which is the failure the trimming above prevents,
+        pointed the other way.
+        """
+        assert rc._clean("BLH B FRESH POTATO.") == "BLH B FRESH POTATO."
+        assert rc._clean("MRNG HI-CHEW GRN A.") == "MRNG HI-CHEW GRN A."
+        assert rc._clean("SC - MRN CHK BNLS") == "SC - MRN CHK BNLS"

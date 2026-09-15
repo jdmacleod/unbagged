@@ -511,16 +511,33 @@ def _stamp(found: re.Match[str]) -> Stamp | None:
     )
 
 
+#: Marks the engine adds at the ends of a line, which a product name cannot
+#: carry. NOT the full stop: these receipts truncate a long name and print the
+#: cut, so `BLH B FRESH POTATO.` and `MRNG HI-CHEW GRN A.` end in one because
+#: the receipt does. Stripping it would edit what the retailer printed.
+LEADING_NOISE = "'`‘’\""
+TRAILING_NOISE = ":,;"
+
+
 def _clean(text: str) -> str:
-    """Trim the leading punctuation the engine adds to a capitalised word.
+    """Trim the punctuation the engine adds, and nothing the receipt printed.
 
     `'SC - MRN CHK BNLS` and `‘SUKOYAKA BRW RICE` are what it returns for a line
-    starting with a tall letter. The mark is not on the receipt, so leaving it
-    in would put a character in `description_raw` the retailer never printed —
-    which is the one thing the never-mutate rule is protecting against, pointed
-    the other way.
+    starting with a tall letter, and a stray `:` at the end is what it makes of
+    the gap before the amount column. Neither mark is on the receipt, so leaving
+    them in puts characters in `description_raw` the retailer never printed —
+    the never-mutate rule pointed the other way.
+
+    It is not cosmetic. A name is what identifies a product where the retailer
+    disclosed no code, so one stray character splits a product in two: the real
+    response has `AVOCADO HASS` bought three times and `AVOCADO HASS:` bought
+    twice, listed as two things on a page whose whole subject is what you buy
+    repeatedly.
+
+    Both lists are deliberately short. A mark that might be something the
+    receipt printed is left alone — see `TRAILING_NOISE`.
     """
-    return text.strip().lstrip("'`‘’\"").strip()
+    return text.strip().lstrip(LEADING_NOISE).rstrip(TRAILING_NOISE).strip()
 
 
 #: `Transaction_030419.png`, and `Transaction_030419_01.png` for the first of
