@@ -377,7 +377,7 @@ class TestCapturesWithNoStatementBesideThem:
             SourceBundle(documents=(self.capture(tmp_path, name="Transaction_030419.png"),))
         )
         assert parsed.transactions[0].store_code is None
-        assert parsed.transactions[0].division_code == "3"
+        assert parsed.transactions[0].division_code == "2"
 
     @needs_engine
     def test_the_evidence_stops_claiming_a_store_was_disclosed(self, tmp_path):

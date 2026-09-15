@@ -184,9 +184,18 @@ class TestTheLayoutOfAPage:
         assert found.tender == "CREDIT CARD"
 
     def test_nothing_from_the_card_block_is_read(self):
-        """It is on the page. It is not asked for, and it is not taken."""
+        """It is on the page. It is not asked for, and it is not taken.
+
+        Asserted against the digits THIS page carries, not a remembered value.
+        This test once named four digits that the fixture no longer contained,
+        so it passed without checking anything — the shape of a guard that
+        asserts a constant instead of a relationship.
+        """
+        tail = next(row[1].rsplit("*", 1)[-1] for row in BASKET if "Card Number" in (row[1] or ""))
         found = read(BASKET)
-        assert "0000" not in repr(found)
+        assert tail, "the fixture must carry a card block or this proves nothing"
+        assert tail not in repr(found)
+        assert all("Card" not in line.description for line in found.lines)
         assert all("Card" not in line.description for line in found.lines)
 
     def test_the_customer_id_and_the_stamp_are_recovered(self):
