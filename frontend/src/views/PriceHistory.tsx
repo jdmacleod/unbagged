@@ -41,7 +41,7 @@ export function PriceHistory({ requestId }: { requestId: number }) {
   const priceable = products.filter((p) => p.priceable);
   const rest = products.filter((p) => !p.priceable);
   const current =
-    products.find((p) => p.upc === selected) ?? priceable[0] ?? products[0];
+    products.find((p) => p.key === selected) ?? priceable[0] ?? products[0];
 
   return (
     <PriceBody
@@ -168,7 +168,7 @@ function PriceBody({
       </Spine>
 
       {current && (
-        <Spine margin={<Aside>{current.upc}</Aside>}>
+        <Spine margin={current.upc ? <Aside>{current.upc}</Aside> : undefined}>
           {/* The view promises not to claim a price change for a product whose
               amounts are not a unit price, and then drew one anyway: selecting a
               row from the unpriceable table below rendered a full series,
@@ -286,7 +286,7 @@ function Series({ series }: { series: PriceSeries }) {
   const pts = series.points;
   const s = scale(pts);
   const savedEver = pts.some((p) => p.saved_amt > 0);
-  const hue = categoryVar(series.upc);
+  const hue = categoryVar(series.key);
 
   return (
     <div>
@@ -297,7 +297,13 @@ function Series({ series }: { series: PriceSeries }) {
         >
           {series.description}
         </h3>
-        <span className="num text-[11.5px] text-faint">{series.upc}</span>
+        {series.upc && (
+          // Absent, not substituted. `.num` sets the mono stack for a numeral
+          // in an aligned column (DESIGN.md), and the name is already the line
+          // above — putting it here too would be the same word twice in a face
+          // chosen for digits.
+          <span className="num text-[11.5px] text-faint">{series.upc}</span>
+        )}
       </div>
       <p className="num mt-1 text-[11.5px] text-faint">
         bought {series.purchases} times · {series.first_seen} →{" "}
@@ -419,7 +425,7 @@ function Series({ series }: { series: PriceSeries }) {
  * amounts are listed and the reason is named.
  */
 function Unpriced({ series }: { series: PriceSeries }) {
-  const hue = categoryVar(series.upc);
+  const hue = categoryVar(series.key);
   return (
     <div>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -429,7 +435,13 @@ function Unpriced({ series }: { series: PriceSeries }) {
         >
           {series.description}
         </h3>
-        <span className="num text-[11.5px] text-faint">{series.upc}</span>
+        {series.upc && (
+          // Absent, not substituted. `.num` sets the mono stack for a numeral
+          // in an aligned column (DESIGN.md), and the name is already the line
+          // above — putting it here too would be the same word twice in a face
+          // chosen for digits.
+          <span className="num text-[11.5px] text-faint">{series.upc}</span>
+        )}
       </div>
       <p className="num mt-1 text-[11.5px] text-faint">
         bought {series.purchases} times · {series.first_seen} →{" "}
@@ -504,18 +516,18 @@ function Table({
         </div>
         {products.map((p) => (
           <button
-            key={p.upc}
-            onClick={() => onSelect(p.upc)}
-            aria-pressed={current?.upc === p.upc}
+            key={p.key}
+            onClick={() => onSelect(p.key)}
+            aria-pressed={current?.key === p.key}
             className={`grid w-full ${cols} gap-3 border-t border-rule py-2 text-left hover:bg-sunken ${
-              current?.upc === p.upc ? "bg-sunken" : ""
+              current?.key === p.key ? "bg-sunken" : ""
             }`}
           >
             <span className="flex min-w-0 items-baseline gap-2">
               <span
                 aria-hidden
                 className="mt-px h-2 w-2 shrink-0 rounded-full"
-                style={{ background: categoryVar(p.upc) }}
+                style={{ background: categoryVar(p.key) }}
               />
               <span className="truncate" title={p.description}>
                 {p.description}
@@ -578,18 +590,18 @@ function Unpriceable({
           </div>
           {products.map((p) => (
             <button
-              key={p.upc}
-              onClick={() => onSelect(p.upc)}
-              aria-pressed={current?.upc === p.upc}
+              key={p.key}
+              onClick={() => onSelect(p.key)}
+              aria-pressed={current?.key === p.key}
               className={`grid w-full ${cols} gap-3 border-t border-rule py-2 text-left hover:bg-sunken ${
-                current?.upc === p.upc ? "bg-sunken" : ""
+                current?.key === p.key ? "bg-sunken" : ""
               }`}
             >
               <span className="flex min-w-0 items-baseline gap-2">
                 <span
                   aria-hidden
                   className="mt-px h-2 w-2 shrink-0 rounded-full"
-                  style={{ background: categoryVar(p.upc) }}
+                  style={{ background: categoryVar(p.key) }}
                 />
                 <span className="truncate" title={p.description}>
                   {p.description}

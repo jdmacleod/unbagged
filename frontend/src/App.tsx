@@ -808,7 +808,9 @@ export default function App() {
                   onOpenProduct={(entry) =>
                     href({
                       tab: "timeline",
-                      query: entry.upc,
+                      // The code is an exact search where one was disclosed; the name
+                      // is the only handle where none was.
+                      query: entry.upc ?? entry.description,
                       label: entry.description,
                     }).search
                   }

@@ -235,10 +235,32 @@ function TimelineBody({
             <MonthRail months={months} current={currentMonth} onJump={jumpTo} />
           }
         >
-          {stats.lines_disclosed ? null : (
-            // Said once, above the roll, instead of 67 times inside it. Each
-            // row used to open onto this same sentence, which is a control
-            // that cannot pay out — the failure this view fixes elsewhere.
+          {/* Said once, above the roll, instead of 67 times inside it. Each row
+              used to open onto this same sentence, which is a control that
+              cannot pay out — the failure this view fixes elsewhere.
+
+              Three states, not two. A response can itemise none of its visits,
+              all of them, or some — and the third is what H Mart sent: a points
+              statement covering every visit, then captures of the receipts
+              covering two thirds. `lines_disclosed` is one bit for the whole
+              response, so on a mixed one it reads true, this paragraph
+              vanished, and two dozen rows quietly would not open with nothing
+              on screen saying why. */}
+          {stats.lines_disclosed ? (
+            stats.itemised_count !== null &&
+            stats.basket_count !== null &&
+            stats.itemised_count < stats.basket_count ? (
+              <p className="mb-4 max-w-[62ch] text-muted">
+                This retailer disclosed what <em>all</em> of these visits cost
+                and what was in{" "}
+                <span className="num">{stats.itemised_count}</span> of{" "}
+                <span className="num">{stats.basket_count}</span> of them. The
+                rows that do not open are the ones it itemised nothing for. What
+                was disclosed, and what was not, is recorded as a finding in the{" "}
+                <strong>Compliance</strong> view.
+              </p>
+            ) : null
+          ) : (
             <p className="mb-4 max-w-[62ch] text-muted">
               This retailer disclosed what each visit cost and never what was in
               it. Every row below carries a date, a store and a total, and

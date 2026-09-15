@@ -465,7 +465,7 @@ function Block({
         lastLetter = letter;
         return (
           <li
-            key={entry.upc}
+            key={entry.key}
             // Inline, so the whole thing reads as one field of type rather than
             // as a stack of rows. `scroll-mt` clears the sticky strip that the
             // jump rail becomes below lg.
@@ -650,7 +650,7 @@ function Stopped({
       <ul className="border-t border-rule">
         {entries.map((entry) => (
           <li
-            key={entry.upc}
+            key={entry.key}
             className="flex items-baseline gap-4 border-b border-rule py-2"
           >
             <span className="min-w-0 flex-1 truncate" title={entry.description}>
