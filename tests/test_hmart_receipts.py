@@ -787,10 +787,15 @@ class TestWhenThePageHasNoTotalLeftToCheckAgainst:
     }
 
     def unreadable(self, **kw):
-        """A page the engine got no total off: the clip took it."""
+        """A page the engine got no total off: the clip took it.
+
+        Two lines, with their last digit corrupted the way a clip corrupts it.
+        A real clipped capture yields ten of these; one is below the floor
+        `_corroborates` sets, and a page that reads as a single amount is not a
+        page this route is willing to act on."""
         return rc.Receipt(
             captures=("Transaction_030419.png",),
-            lines=(line("APPLE", "7.45"),),
+            lines=(line("APPLE", "7.45"), line("PEAR", "5.24")),
             balance=None,
             complete=False,
             clipped=True,
@@ -860,10 +865,11 @@ class TestWhatTheAnchoredGateStillRefuses:
     """
 
     def unreadable(self):
-        """A page the engine got no total off: the clip took it."""
+        """A page the engine got no total off: the clip took it, with two
+        amounts still legible under their corrupted last digit."""
         return rc.Receipt(
             captures=("Transaction_030419.png",),
-            lines=(line("APPLE", "7.45"),),
+            lines=(line("APPLE", "7.45"), line("PEAR", "5.24")),
             balance=None,
             complete=False,
             clipped=True,
@@ -1011,7 +1017,26 @@ class TestWhatAnEngineReadingOfNothingCorroborates:
             "balance": "100.23",
         }
 
+    def test_a_lone_amount_the_models_own_tax_matches_is_not_corroboration(self):
+        """Third cycle, same shape as the first two. The model's tax was one of
+        the candidates an engine amount could match, so a page whose only
+        legible figure was a 0.00 was 'corroborated' by a figure the model also
+        authored, and one invented line went through."""
+        found = rc.from_reply(
+            self.answer(["100.23"]), self.page(["0.00"]), anchor=Decimal("100.23")
+        )
+        assert found is None
+
+    def test_one_matched_amount_is_below_the_floor(self):
+        """`MIN_CORROBORATION` is a floor rather than another special case:
+        twice the check was satisfied by nothing the model had not authored."""
+        found = rc.from_reply(
+            self.answer(["7.49", "92.74"]), self.page(["7.45"]), anchor=Decimal("100.23")
+        )
+        assert found is None
+
     def test_a_page_nothing_could_be_read_off_has_no_second_fact(self):
+
         found = rc.from_reply(self.answer(["100.23"]), self.page([]), anchor=Decimal("100.23"))
         assert found is None
 

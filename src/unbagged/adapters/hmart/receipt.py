@@ -949,6 +949,19 @@ MAX_REPLY_LINES = 200
 MAX_GROSS = 5
 
 
+#: How many of the engine's own amounts must be matched by lines in the answer
+#: before the answer counts as corroborated at all.
+#:
+#: A floor rather than another special case. Twice now the check has been
+#: satisfied by nothing: first by an engine reading of zero amounts, where the
+#: loop never ran; then by an engine reading of ONE amount that the model's own
+#: tax matched, which let a single invented line through on a page whose only
+#: legible figure was a 0.00. Both were the same shape — corroboration that
+#: corroborates against nothing the model did not also author — and a count is
+#: what ends the shape instead of patching its instances.
+MIN_CORROBORATION = 2
+
+
 #: How many rows a clip may destroy outright before an answer claiming to have
 #: recovered them stops being believable. On the real capture it cost two of
 #: twelve — the amounts whose surviving sliver resolved to no digit at all, so
@@ -997,17 +1010,28 @@ def _corroborates(read: tuple, claimed: list, tax: Decimal) -> bool:
     ceiling of this route, and it is why the route exists only for a page whose
     total was lost to a clip rather than as a general fallback.
     """
-    if not read:
-        return False
     if len(claimed) > 2 * len(read) + MAX_UNSEEN:
         return False
-    candidates = [item.amount for item in claimed] + [tax]
+    candidates = [item.amount for item in claimed]
+    spare_tax = tax
+    matched = 0
     for amount in (item.amount for item in read):
         nearest = min(candidates, key=lambda c: abs(c - amount), default=None)
-        if nearest is None or abs(nearest - amount) > CLIP_REACH:
-            return False
-        candidates.remove(nearest)
-    return True
+        if nearest is not None and abs(nearest - amount) <= CLIP_REACH:
+            candidates.remove(nearest)
+            matched += 1
+            continue
+        # The tax, and only once. On a capture that ran off the bottom there is
+        # no balance to work back from, so `_settle` leaves the tax line sitting
+        # among the purchases it read, and the model reports it in its own field
+        # instead of as a line. That is a real correspondence — but it is a
+        # figure the MODEL authored, so it can stand in for at most one amount
+        # and it can never be the whole of the corroboration.
+        if spare_tax is not None and abs(spare_tax - amount) <= CLIP_REACH:
+            spare_tax = None
+            continue
+        return False
+    return matched >= MIN_CORROBORATION
 
 
 #: The longest a line's name may be. A receipt line is twenty or thirty
