@@ -406,7 +406,10 @@ def _furniture_line(line: Line, column: Box) -> bool:
     exactly there.
     """
     left = _left_of_money(line, column).strip()
-    return bool(STAMP.search(left) or CARD_BLOCK.match(left))
+    # The same three `read_capture` steps over. The customer line is here for
+    # the same reason as the other two: it ends in a long run of digits, and a
+    # long enough one reaches the edge of a page whose amounts do not.
+    return bool(STAMP.search(left) or CARD_BLOCK.match(left) or CUSTOMER.search(left))
 
 
 def _reached_the_end(transcript: Transcript) -> bool:
