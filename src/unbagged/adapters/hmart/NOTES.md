@@ -385,12 +385,10 @@ therefore decided some other way, and the decisions are worth keeping:
   names the capture and the reason. Recovering the basket needs a capture that
   is not clipped, which means asking the retailer again.
 
-
   `_clipped` is the physical signal, and it measures the amount column only —
   the stamp line ends in a run of digits that can sit against the edge of a
   page whose amounts are well clear of it. Measured on amount ink: the gap is
   0px on that capture and 4px to 24px on the other 45.
-
 
 - **Two captures sharing a date may be two visits.** One pair in the corpus is
   two separate trips on one day, at different lanes, for different amounts.

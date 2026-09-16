@@ -208,7 +208,8 @@ per visit. Those are read, and they are read carefully:
   out of the same reader. One that does not reconcile is named in a warning and
   its visit keeps the total it already had. On the response this was built for,
   43 of 44 receipts reconciled; the one that did not was clipped when it was
-  captured, and no reader can recover a pixel that was never taken.
+  captured, slicing through the last digit of every amount on it — including
+  the total, which left nothing on the page to check a reading against.
 - Nothing from the card block at the foot of a receipt is transcribed or stored.
 
 Reading is done by tesseract, which ships in the image. A local vision model can

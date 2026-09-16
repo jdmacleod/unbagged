@@ -71,9 +71,8 @@ changes what was stored.
   be nothing to check the answer against. And because a sum says nothing about
   its parts, the basket's gross is bounded too — otherwise a pair of offsetting
   lines nets to zero and carries two invented products through every arithmetic
-  check there is. Off unless `UNBAGGED_OLLAMA_HOST` is set; a host that
-
-  is not this machine is refused until you acknowledge that it would receive
+  check there is. Off unless `UNBAGGED_OLLAMA_HOST` is set; a host that is
+  not this machine is refused until you acknowledge that it would receive
   pictures of your shopping. See `.env.example`.
 
 - **Products and Prices work for a retailer that names what you bought without
