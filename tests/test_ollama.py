@@ -58,7 +58,11 @@ def chat(payload: dict) -> dict:
     return {"message": {"role": "assistant", "content": json.dumps(payload)}, "done": True}
 
 
-TAGS = {"models": [{"name": "qwen2.5vl:7b"}]}
+#: A host with the shipped default pulled. Named off `DEFAULT_MODEL` rather than
+#: written out, because these tests are about the preflight and the transport
+#: and not about which model was measured fastest this year — pinning the tag
+#: here made eleven of them fail when the bake-off changed it.
+TAGS = {"models": [{"name": ollama.DEFAULT_MODEL}]}
 
 
 class TestWhetherAModelMayBeAsked:
@@ -112,14 +116,14 @@ class TestWhetherAModelMayBeAsked:
     def test_a_model_that_is_not_pulled_says_how_to_pull_it(self, monkeypatch):
         monkeypatch.setenv(ollama.HOST_ENV, "localhost:11434")
         monkeypatch.setenv(ollama.MODEL_ENV, "some-other-model")
-        found = ollama.availability(opener=replies({"models": [{"name": "qwen2.5vl:7b"}]}))
+        found = ollama.availability(opener=replies(TAGS))
         assert found.status is ollama.Reachability.MODEL_MISSING
         assert "ollama pull some-other-model" in found.message
 
     def test_a_family_name_finds_the_tag_that_was_pulled(self, monkeypatch):
-        """People write `qwen2.5vl` as often as `qwen2.5vl:7b`."""
+        """People write `minicpm-v4.5` as often as `minicpm-v4.5:8b`."""
         monkeypatch.setenv(ollama.HOST_ENV, "localhost:11434")
-        monkeypatch.setenv(ollama.MODEL_ENV, "qwen2.5vl")
+        monkeypatch.setenv(ollama.MODEL_ENV, ollama.DEFAULT_MODEL.split(":")[0])
         assert ollama.availability(opener=replies(TAGS)).usable
 
 

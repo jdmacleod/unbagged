@@ -56,7 +56,15 @@ MODEL_ENV = "UNBAGGED_OLLAMA_VISION_MODEL"
 #: Acknowledgement that a non-loopback host will receive your receipts.
 REMOTE_ENV = "UNBAGGED_ALLOW_REMOTE_OLLAMA"
 
-DEFAULT_MODEL = "qwen2.5vl:7b"
+#: Measured, not chosen. `src/unbagged/adapters/hmart/NOTES.md` carries the
+#: bake-off this came out of: twelve vision models over six receipt-shaped
+#: pages, scored through this lane. Three clear the gate on every page it can be
+#: cleared on, and this is the fastest of them at a ~10s median against a 600s
+#: budget for a whole response.
+#:
+#: It is one host on one day, and a re-pulled tag can be a different build.
+#: `python -m tools.bakeoff_vision` is how to check rather than assume.
+DEFAULT_MODEL = "minicpm-v4.5:8b"
 
 LOOPBACK = frozenset({"localhost", "127.0.0.1", "::1"})
 

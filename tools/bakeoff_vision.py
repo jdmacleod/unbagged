@@ -337,13 +337,16 @@ def report(results: list[Result]) -> None:
 
     rows = []
     for (model, tier), group in by_key.items():
+        # Scored over the pages that HAVE a printed total. The cut-off page is
+        # the top half of a taller receipt and never had one, so counting it in
+        # the denominator marked every model down for reading it correctly.
         gated = [r for r in group if r.gate_ok is not None]
         rows.append(
             {
                 "model": model,
                 "tier": tier,
-                "totals": sum(1 for r in group if r.total_ok),
-                "of": len(group),
+                "totals": sum(1 for r in gated if r.total_ok),
+                "of": len(gated),
                 "recall": statistics.mean([r.recall for r in group]),
                 "strict": statistics.mean([r.strict for r in group]),
                 "furniture": sum(r.furniture for r in group),
@@ -371,7 +374,8 @@ def report(results: list[Result]) -> None:
             f"{_yn(row['signs']):>5} {row['secs']:>7.1f}  {row['marks']}"
         )
     print()
-    print("total  the printed balance came back correct — the gate rests on this")
+    print("total  the printed balance came back correct — the gate rests on this.")
+    print("       Over the pages that print one: the cut-off page never had a total.")
     print("acc    `from_reply` accepted it (pages with a printed total only)")
     print("gate   the lane took it: accepted AND `foots` found the arithmetic sound")
     print("recall mean fraction of purchase lines found, amount exact")
@@ -398,7 +402,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--screen", action="store_true", help="One page per model, then stop.")
     parser.add_argument("--timeout", type=float, default=ollama.TIMEOUT_SECONDS)
     parser.add_argument("--out", type=Path, help="Write every measurement here as JSON.")
+    parser.add_argument(
+        "--from",
+        dest="replay",
+        type=Path,
+        help="Re-render the table from a saved --out file, asking no model anything.",
+    )
     args = parser.parse_args(argv)
+
+    if args.replay:
+        # A full matrix is measured in hours. Changing how it is REPORTED should
+        # not cost another one.
+        report([Result(**row) for row in json.loads(args.replay.read_text())])
+        return 0
 
     os.environ[ollama.HOST_ENV] = args.host
 
