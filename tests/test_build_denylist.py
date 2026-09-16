@@ -274,10 +274,118 @@ class TestDatesThatCameFromAResponse:
             / "synthetic_history.xls"
         )
         found = build_denylist.buckets()
-        assert build_denylist.from_adapter(fixture, found), (
-            "a response whose adapter finds no identity graph still has visits, "
-            "and the visits are the part that leaked"
-        )
+        build_denylist.from_adapter(fixture, found)
         dates = found["dates and times of a visit"]
-        assert dates, "the points statement is visits and nothing else"
+        assert dates, "every row of a points statement is a visit"
         assert all(value[:4].isdigit() and value[4] == "-" for value in dates)
+
+
+class TestAVisitDateIsNotAFormatConstant:
+    """Found by the automated review on 2026-09-16.
+
+    `split_known_values` drops a candidate that already appears in a committed
+    file, on the reasoning that a value sitting in the repository is a format
+    constant rather than a secret. That reasoning holds for everything it was
+    written for, all of which are guesses. It is exactly backwards for a visit
+    date: those are derived from a response, so one already in the repository is
+    the bug this rule exists to catch — and dropping it would leave the list
+    unarmed against the same date arriving again tomorrow.
+    """
+
+    def run(self, tmp_path, monkeypatch, *, occurred_at: str, corpus: str):
+        out = tmp_path / "denylist.txt"
+        monkeypatch.setattr(build_denylist, "is_gitignored", lambda _p: True)
+        monkeypatch.setattr(build_denylist, "repo_corpus", lambda: corpus)
+        monkeypatch.setattr(build_denylist, "extract", lambda _d: type("T", (), {"text": ""})())
+
+        def fake_adapter(_report, found):
+            build_denylist.from_visit_times(occurred_at, found)
+            return False
+
+        monkeypatch.setattr(build_denylist, "from_adapter", fake_adapter)
+        report = tmp_path / "history.xls"
+        report.write_text("", encoding="utf-8")
+        code = build_denylist.main([str(report), "-o", str(out)])
+        return code, out.read_text(encoding="utf-8") if out.exists() else ""
+
+    def test_a_visit_date_already_committed_stays_on_the_list(self, tmp_path, monkeypatch):
+        code, written = self.run(
+            tmp_path,
+            monkeypatch,
+            occurred_at="2024-02-29T16:05:00",
+            corpus="## [0.9.0] - 2024-02-29\n",
+        )
+        assert code == 0
+        assert "2024-02-29" in written
+
+    def test_and_says_so_rather_than_dropping_it_quietly(self, tmp_path, monkeypatch, capsys):
+        self.run(
+            tmp_path,
+            monkeypatch,
+            occurred_at="2024-02-29T16:05:00",
+            corpus="## [0.9.0] - 2024-02-29\n",
+        )
+        said = capsys.readouterr().out
+        assert "ALREADY APPEAR in committed files" in said
+        assert "They stay on the list" in said
+
+    def test_a_date_nothing_has_seen_needs_no_such_warning(self, tmp_path, monkeypatch, capsys):
+        self.run(tmp_path, monkeypatch, occurred_at="2024-02-29T16:05:00", corpus="")
+        assert "ALREADY APPEAR" not in capsys.readouterr().out
+
+
+class TestTheSweepIsStillTheFallbackForIdentifiers:
+    """Found by the automated review on 2026-09-16.
+
+    `from_adapter`'s return value is used for one thing: whether to skip the
+    regex sweep, because an adapter that supplied identifiers precisely should
+    not have them buried under every product code in the report. Returning true
+    for visit dates alone meant a retailer changing its identity section, while
+    its transactions still parsed, silently lost the fallback that existed for
+    exactly that.
+    """
+
+    def parsed_as(self, monkeypatch, *, identities, transactions):
+        """An adapter that reads this response, standing in for a real one.
+
+        The committed H Mart fixture cannot make this point: it carries a
+        smartcard number, so its adapter does return an identifier and the
+        sweep is correctly skipped. What is under test is the response that
+        has visits and nothing else.
+        """
+        from unbagged.models import Identity, IdType, Transaction
+
+        result = type(
+            "Result",
+            (),
+            {
+                "identities": tuple(
+                    Identity(id_type=IdType.LOYALTY_CARD, value=v) for v in identities
+                ),
+                "transactions": tuple(Transaction(occurred_at=t) for t in transactions),
+                "request": type("R", (), {"report_reference": None})(),
+            },
+        )()
+        match = type(
+            "Match",
+            (),
+            {"is_fallback": False, "adapter": type("A", (), {"parse": lambda _s, _b: result})()},
+        )()
+        monkeypatch.setattr(build_denylist.registry, "select", lambda _b: match)
+
+    def test_visits_alone_do_not_switch_the_sweep_off(self, tmp_path, monkeypatch):
+        self.parsed_as(monkeypatch, identities=(), transactions=("2024-02-29T16:05:00",))
+        found = build_denylist.buckets()
+        supplied = build_denylist.from_adapter(tmp_path / "history.xls", found)
+        assert found["dates and times of a visit"], "the visits were read"
+        assert not supplied, "but no identifiers were, so the sweep must still run"
+
+    def test_an_identifier_still_switches_it_off(self, tmp_path, monkeypatch):
+        self.parsed_as(
+            monkeypatch,
+            identities=(FAKE_LOYALTY,),
+            transactions=("2024-02-29T16:05:00",),
+        )
+        found = build_denylist.buckets()
+        assert build_denylist.from_adapter(tmp_path / "history.xls", found)
+        assert found["dates and times of a visit"], "and the visits come too"

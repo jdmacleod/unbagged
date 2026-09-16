@@ -147,7 +147,10 @@ Three behaviours worth knowing:
 - Candidates that **already appear in committed files** are dropped, and reported.
   A value sitting in the repository is a format constant or an ordinary word, not
   your secret. If you think one of them really is your data, it is already in git
-  history — stop and read the top of this file.
+  history — stop and read the top of this file. Visit dates are the exception:
+  they are derived rather than guessed, so one already in a committed file is the
+  bug rather than proof of innocence. Those are reported and **kept**.
+
 - **Every visit's date and time goes on the list**, taken from the transactions the
   adapter read rather than matched by a pattern. There is no pattern that could do
   it: `2026-01-04` in a generated fixture, `%Y-%m-%d` in a format string and a

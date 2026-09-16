@@ -290,10 +290,12 @@ def from_adapter(report: Path, found: dict[str, set[str]]) -> bool:
         # that check wants nine, so every one of these was being dropped before
         # it reached the list. See `from_visit_times`.
         from_visit_times(txn.occurred_at, found)
-    # Deliberately NOT gated on identifiers being found. An adapter can read
-    # every visit in a response and return no identity graph — the H Mart points
-    # statement is exactly that — and the visits are the part that leaked.
-    return bool(found["identifiers the adapter found"] or found["dates and times of a visit"])
+    # Still only about IDENTIFIERS, because that is the only thing the caller
+    # uses it for: whether to skip the text sweep. Visits are collected either
+    # way and survive the merge. Returning true for visits alone meant that a
+    # retailer changing its identity section while its transactions still parsed
+    # would silently lose the sweep that was the fallback for exactly that.
+    return bool(found["identifiers the adapter found"])
 
 
 def harvest(text: str, filename: str, *, sweep: bool = True) -> dict[str, set[str]]:
@@ -359,6 +361,15 @@ def main(argv: list[str] | None = None) -> int:
 
     totals: Counter[str] = Counter()
     values: set[str] = set()
+    #: Kept apart from `values` all the way to `merge`. Everything in `values` is
+    #: a GUESS at what might be personal, so one already sitting in a committed
+    #: file is evidence it was a format constant. These are not guesses — a visit
+    #: came out of a response — so that inference is exactly backwards for them:
+    #: a visit date already in the repository is the bug this rule exists to
+    #: catch, not proof the date was innocent. Dropping it would also unarm the
+    #: list against the same date arriving again later.
+    derived: set[str] = set()
+
     for report in args.reports:
         document = SourceDocument(report.name, sha256="", path=str(report))
         try:
@@ -386,13 +397,17 @@ def main(argv: list[str] | None = None) -> int:
             if items:
                 print(f"      {len(items):>4}  {bucket}")
             totals[bucket] += len(items)
-            values |= items
+            if bucket == "dates and times of a visit":
+                derived |= items
+            else:
+                values |= items
 
-    if not values:
+    if not (values or derived):
         print("\nNothing found to denylist.", file=sys.stderr)
         return 1
 
-    values, already_present = split_known_values(values, repo_corpus())
+    corpus = repo_corpus()
+    values, already_present = split_known_values(values, corpus)
     if already_present:
         print(
             f"\n  {len(already_present)} candidate(s) already appear in committed "
@@ -402,11 +417,25 @@ def main(argv: list[str] | None = None) -> int:
             "  If you believe one of them really is personal data, it is already "
             "in git history. Stop and read CONTRIBUTING.md."
         )
-    if not values:
+    _, committed_visits = split_known_values(derived, corpus)
+    if committed_visits:
+        # Reported, never dropped. This is the one category where "already in a
+        # committed file" is a finding rather than a reason to stop looking.
+        print(
+            f"\n  {len(committed_visits)} date(s) from a visit ALREADY APPEAR in "
+            "committed files. They stay on the list."
+        )
+        print(
+            "  A release note that landed on a day you shopped is a coincidence "
+            "you can suppress on the line. Anything else is your shopping history "
+            "in the repository — run `make check-pii` and read what it names."
+        )
+    if not (values or derived):
         print("\nNothing left to denylist after that.", file=sys.stderr)
         return 1
 
-    before, after = merge(args.output, values)
+    before, after = merge(args.output, values | derived)
+
     try:
         where = args.output.relative_to(REPO_ROOT)
     except ValueError:
