@@ -146,6 +146,9 @@ class Receipt:
     #: True when the tax line was identified by POSITION alone — the line above
     #: the balance, whatever it turned out to say. See `with_tax_as_item`.
     tax_inferred: bool = False
+    #: What that line actually said, kept so that restoring it as a purchase
+    #: restores the name the retailer printed on it too.
+    tax_description: str = ""
 
     def with_tax_as_item(self) -> Receipt:
         """The same receipt, read with the tax line taken as a purchase.
@@ -163,12 +166,17 @@ class Receipt:
         """
         if self.tax is None:
             return self
-        restored = ReceiptLine(description="", amount=self.tax, row=0)
+        # With the description the line carried. It was read off the page like
+        # any other; dropping it would put the purchase back in the basket as a
+        # blank row and leave it out of Products and Prices, which key on a
+        # name. The retailer printed one.
+        restored = ReceiptLine(description=self.tax_description, amount=self.tax, row=0)
         return replace(
             self,
             lines=self.lines + (restored,),
             tax=Decimal("0.00"),
             tax_inferred=False,
+            tax_description="",
         )
 
     @property
@@ -222,7 +230,10 @@ def read_capture(transcript: Transcript, capture: str) -> Receipt:
             )
         )
 
-    items, tax, balance, tender, inferred = _settle(rows, complete=_reached_the_end(transcript))
+    items, tax, balance, tender, inferred, taxed = _settle(
+        rows, complete=_reached_the_end(transcript)
+    )
+
     return Receipt(
         captures=(capture,),
         lines=items,
@@ -233,6 +244,7 @@ def read_capture(transcript: Transcript, capture: str) -> Receipt:
         stamp=stamp,
         complete=balance is not None,
         tax_inferred=inferred,
+        tax_description=taxed,
     )
 
 
@@ -249,7 +261,7 @@ class _Row:
 
 def _settle(
     rows: list[_Row], *, complete: bool
-) -> tuple[tuple[ReceiptLine, ...], Decimal | None, Decimal | None, str | None, bool]:
+) -> tuple[tuple[ReceiptLine, ...], Decimal | None, Decimal | None, str | None, bool, str]:
     """Split the amount lines into purchases, tax, the balance and the tender.
 
     By POSITION first and by what the line says second, which is the opposite
@@ -267,7 +279,8 @@ def _settle(
     so the cost of this being fooled is a quarantined visit, never a wrong one.
     """
     if not rows:
-        return (), None, None, None, False
+        return (), None, None, None, False, ""
+
     if not complete:
         # The top half of a taller receipt: it runs off the bottom of the
         # screen mid-list, so every amount on it is a purchase and none of the
@@ -279,9 +292,10 @@ def _settle(
         # two products that happen to cost the same, which reads exactly like a
         # balance and its tender echo. It was taken as a complete receipt, the
         # second half was never joined to it, and the visit split in two.
-        return _purchases(rows), None, None, None, False
+        return _purchases(rows), None, None, None, False, ""
 
     tender = None
+
     balance = None
     body = rows
     if len(rows) >= 2 and rows[-1].amount == rows[-2].amount:
@@ -294,6 +308,7 @@ def _settle(
 
     tax = None
     tax_inferred = False
+    tax_description = ""
     if balance is not None and body:
         # The line above the balance. Whether the engine could READ the word is
         # recorded, because the two readings are indistinguishable to `foots()`
@@ -301,9 +316,10 @@ def _settle(
         # `Receipt.with_tax_as_item`.
         tax = body[-1].amount
         tax_inferred = not TAX.search(body[-1].description)
+        tax_description = body[-1].description
         body = body[:-1]
 
-    return _purchases(body), tax, balance, tender, tax_inferred
+    return _purchases(body), tax, balance, tender, tax_inferred, tax_description
 
 
 def _purchases(rows) -> tuple[ReceiptLine, ...]:
@@ -443,6 +459,10 @@ def stitch(parts: list[Receipt]) -> Receipt:
     return longest
 
 
+#: How many joinings of one receipt's captures are worth enumerating.
+MAX_JOINS = 4096
+
+
 def _candidates(parts: list[Receipt]):
     """Every joining of `parts` worth checking.
 
@@ -454,10 +474,29 @@ def _candidates(parts: list[Receipt]):
     differs by a character at the true seam, which is the case this search
     exists for.
 
-    Ordered fewest-trims-first so the reading that KEEPS the most lines wins a
-    tie. Two trims can both reconcile — a product and its `CL` cancellation
-    straddling a seam sum to zero — and between two readings that both add up,
-    the one that discards less of what the shopper paid for is the safer answer.
+    Ordered MOST-trims-first, which reverses what this did a commit ago. Every
+    trim offered here is at most the longest exact run of (description, amount)
+    across the seam, so each one is an overlap that was measured rather than
+    guessed — and between two joins that both reconcile, the one that treats a
+    measured run as the seam beats the one that treats it as a coincidence.
+
+    Fewest-first broke on the case it was written for. A product and its `CL`
+    cancellation straddling a seam sum to zero, so trimming nothing adds up
+    exactly as well as trimming the real overlap — and sorted first, so two
+    lines the shopper was never charged for were stored, one of which the
+    product index counts as a second purchase. Ordering cannot lose a real
+    line to this: a trim that discards something genuinely bought changes the
+    sum, and a join whose sum is wrong never reconciles at all.
+
+
+    Bounded, because the seam count comes from how many files were uploaded and
+    the space is a product over them. Six parts with 8-line seams is already
+    59,049 joins; eight parts with 20-line seams is 1.8 billion, on filenames
+    the uploader chooses — a hang and an out-of-memory, on a synchronous upload
+    handler. Past the bound only the two readings worth having are tried, the
+    full measured overlap and no overlap at all, and a receipt that needs a
+    third stays quarantined, which is the outcome this path is for.
+
     """
     from itertools import product
 
@@ -465,7 +504,15 @@ def _candidates(parts: list[Receipt]):
     if not seams:
         yield parts[0]
         return
-    for trims in sorted(product(*(range(s + 1) for s in seams)), key=sum):
+    space = 1
+
+    for seam in seams:
+        space *= seam + 1
+    if space > MAX_JOINS:
+        yield _joined(parts, trims=tuple(seams))
+        yield _joined(parts, trims=(0,) * len(seams))
+        return
+    for trims in sorted(product(*(range(s + 1) for s in seams)), key=sum, reverse=True):
         yield _joined(parts, trims=trims)
 
 
@@ -485,6 +532,16 @@ def _joined(parts: list[Receipt], *, greedy: bool = False, trims: tuple = ()) ->
             tender=part.tender or joined.tender,
             stamp=part.stamp or joined.stamp,
             complete=part.balance is not None or joined.complete,
+            # Carried with the tax it describes. Dropping these defaulted a
+            # stitched receipt to "the word TAX was read", which is the one
+            # state that stops the statement adjudicating — so a tall receipt
+            # whose TAX line could not be read lost its last purchase, footed
+            # anyway, and then disagreed with the statement. The adapter
+            # reported that as the retailer contradicting itself.
+            tax_inferred=(part.tax_inferred if part.tax is not None else joined.tax_inferred),
+            tax_description=(
+                part.tax_description if part.tax is not None else joined.tax_description
+            ),
         )
     return joined
 
@@ -668,13 +725,16 @@ def from_reply(reply: dict, like: Receipt) -> Receipt | None:
     reading from an invention. The receipt's own printed total is the one fact in
     the room the model had no hand in.
 
-    The timestamp, the customer number, the captures **and the balance** come
-    from `like` rather than from the reply. That last one is the whole gate:
-    taking the balance out of the reply too made `foots()` a check of three
-    model-authored numbers against each other, so any self-consistent JSON
-    passed — a fabricated basket of 1000.00 was accepted against a page the
+    The timestamp, the customer number, the captures, **the balance and the
+    tax** come from `like` rather than from the reply. Those last two are the
+    whole gate: taking the balance out of the reply too made `foots()` a check
+    of three model-authored numbers against each other, so any self-consistent
+    JSON passed — a fabricated basket of 1000.00 was accepted against a page the
     engine had read as 87.65. The printed total is the one fact the model had
-    no hand in, and it only works as a check if it comes from the page.
+    no hand in, and it only works as a check if it comes from the page. `_tax_for`
+    has the same argument for the other free variable, and why bounding it is
+    enough where the page could not state it.
+
 
     A reply whose balance disagrees with the printed one is refused outright
     rather than corrected: the two read the same pixels and reached different
@@ -686,9 +746,15 @@ def from_reply(reply: dict, like: Receipt) -> Receipt | None:
     boundary, and text rendered into one is an instruction the model may read.
     """
     lines = []
-    for index, row in enumerate(reply.get("lines") or [], start=1):
+    rows = reply.get("lines") or []
+    if not isinstance(rows, list) or len(rows) > MAX_REPLY_LINES:
+        # The byte cap upstream is generous enough to hold tens of thousands of
+        # short rows, and every one of them would become a `TxnItem`.
+        return None
+    for index, row in enumerate(rows, start=1):
         if not isinstance(row, dict):
             return None
+
         amount = _decimal(row.get("amount"))
         if amount is None:
             # One unreadable amount voids the answer rather than costing one
@@ -710,18 +776,55 @@ def from_reply(reply: dict, like: Receipt) -> Receipt | None:
     claimed = _decimal(reply.get("balance"))
     if claimed is None or claimed != like.balance:
         return None
-    tax = _decimal(reply.get("tax"))
+    tax = _tax_for(reply, like)
+    if tax is None:
+        return None
     return Receipt(
         captures=like.captures,
         lines=tuple(lines),
         customer_id=like.customer_id,
-        tax=tax if tax is not None else Decimal("0.00"),
+        tax=tax,
         # The page's, never the reply's.
         balance=like.balance,
         tender=like.tender,
         stamp=like.stamp,
         complete=True,
+        tax_inferred=like.tax_inferred,
+        tax_description=like.tax_description,
     )
+
+
+#: The most lines one answer may claim. A page holds about thirty; the reply
+#: cap is in bytes, and bytes buy a great many short rows.
+MAX_REPLY_LINES = 200
+
+
+def _tax_for(reply: dict, like: Receipt) -> Decimal | None:
+    """The tax to check this answer against, or None to refuse the answer.
+
+    Pinning the balance alone left the gate with one equation and two unknowns
+    the model controls. `foots()` is `subtotal + tax - balance`, so a reply can
+    quote the printed total back correctly — it can read the page too — and let
+    `tax` absorb whatever the basket was inflated by. Measured: lines of 1000.00
+    and 250.00 against a page printing 20.00, with `tax` returned as -1230.00,
+    reconciled and stored. Same hole as the balance, one field over.
+
+    So tax comes off the page wherever the page could be read. Where it could
+    not, the reply's figure is accepted only within the range a tax can occupy:
+    at least nothing, at most the whole total. That bounds the subtotal to
+    [0, balance] and closes the inflating direction outright — a basket can no
+    longer claim more than the receipt says was paid.
+    """
+    if like.tax is not None and not like.tax_inferred:
+        return like.tax
+    tax = _decimal(reply.get("tax"))
+    if tax is None:
+        return Decimal("0.00") if like.tax is None else like.tax
+    if tax < 0 or tax > like.balance:
+        # Not a tax. An answer reaching for one of these is reaching for the
+        # residual, which is the thing the printed total exists to pin.
+        return None
+    return tax
 
 
 def _decimal(value: object) -> Decimal | None:

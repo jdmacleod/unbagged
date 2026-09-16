@@ -351,6 +351,17 @@ therefore decided some other way, and the decisions are worth keeping:
 - **The stamp's first field is a lane, not a store.** The same values appear
   against both of the branches in the corpus, so it cannot be one. The branch
   comes from the statement, which names it; a capture never does.
+- **The gate has exactly two inputs, and both must come off the page.** It is
+  `sum(lines) + tax - balance`, so every figure in it that a reader also
+  authored is a free variable that reader can solve for. Pinning the balance
+  alone left `tax`: an answer can quote the printed total back correctly, since
+  it reads the same pixels, and let the tax absorb whatever the basket was
+  inflated by. Measured on a synthetic page printing 20.00 — lines of 1000.00
+  and 250.00 with a tax of -1230.00 reconciled and were stored. Where the TAX
+  line itself is illegible, a bound of `0 <= tax <= balance` is what stands in:
+  it holds the subtotal inside `[0, balance]`, so a basket can never claim more
+  than the receipt says was paid.
+
 
 ### Deliberately not read
 

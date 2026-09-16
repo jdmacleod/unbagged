@@ -313,29 +313,47 @@ def ask(
         "think": False,
     }
     url = f"{where.host.rstrip('/')}/api/chat"
-    for attempt in range(1 + MAX_SIZED_RETRIES):
+    attempt = 0
+    while attempt <= MAX_SIZED_RETRIES:
         try:
             body = _post(url, payload, opener)
         except _Rejected as exc:
+            # The overflow markers are tested FIRST. `think` is on the payload by
+            # construction, so a rule that checked for it first read every 400 as
+            # "this build predates the field" — including the one 400 the sizing
+            # retries exist for. A modern server rejecting for size got its
+            # window doubled once instead of twice, burned an attempt on the
+            # misdiagnosis, and lost the reasoning-channel suppression for the
+            # rest of the call.
+            if _is_overflow(exc):
+                if attempt >= MAX_SIZED_RETRIES:
+                    return None
+                payload["options"]["num_ctx"] *= 2
+                attempt += 1
+                continue
             if "think" in payload:
                 # A build that predates the field rejects the whole request.
+                # Dropping it is a version fix, not an attempt at the answer, so
+                # it does not count against the sizing budget.
                 payload.pop("think")
-                continue
-            if _is_overflow(exc) and attempt < MAX_SIZED_RETRIES:
-                payload["options"]["num_ctx"] *= 2
                 continue
             return None
         except Exception:  # noqa: BLE001 - a model that will not answer is not a failed upload
             log.debug("vision read failed", exc_info=True)
             return None
 
-        if body.get("done_reason") == "length" and attempt < MAX_SIZED_RETRIES:
+        if body.get("done_reason") == "length":
             # The model ran out of window mid-answer. Its `lines` array is a
             # prefix of a basket it never finished, and a short basket is
             # exactly what the gate cannot see — it reconciles against whatever
             # total came with it. Grow the window and ask again rather than
-            # reading a truncated answer.
+            # reading a truncated answer; out of retries, return nothing at all.
+            # Falling through to `_content` on the last attempt returned the
+            # truncated answer this branch exists to refuse.
+            if attempt >= MAX_SIZED_RETRIES:
+                return None
             payload["options"]["num_ctx"] *= 2
+            attempt += 1
             continue
         return _content(body)
     return None
@@ -398,9 +416,31 @@ def _post(url: str, payload: dict, opener=None) -> dict:
     try:
         return _send(request, TIMEOUT_SECONDS, opener)
     except urllib.error.HTTPError as exc:
-        if exc.code == 400:
-            raise _Rejected(str(exc)) from exc
+        if exc.code in (400, 500):
+            # 500 as well as 400. A build that reports a context overflow as a
+            # server error got no sizing retry at all, and the difference
+            # between the two codes is a version, not a different problem.
+            raise _Rejected(f"{exc} {_detail(exc)}") from exc
         raise
+
+
+def _detail(exc: urllib.error.HTTPError) -> str:
+    """What the server actually said.
+
+    `str(HTTPError)` is the status line and the reason phrase — "HTTP Error 400:
+    Bad Request" — and nothing else. Ollama reports WHY in the JSON body, so
+    matching the overflow markers against the exception's text matched nothing
+    a real server has ever sent, and the sizing retry could not fire outside the
+    test suite.
+    """
+    try:
+        return exc.read(_MAX_ERROR_BYTES).decode("utf-8", "replace")
+    except Exception:  # noqa: BLE001 - a body that will not read is not worse than none
+        return ""
+
+
+#: An error body is a sentence. Anything past this is not a reason.
+_MAX_ERROR_BYTES = 4096
 
 
 def _send(request, timeout: float, opener=None) -> dict:

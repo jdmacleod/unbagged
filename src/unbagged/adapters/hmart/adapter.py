@@ -419,6 +419,16 @@ def _itemise(
 
     engine = None
     by_name = {document.original_filename: document for document in captures}
+    if len(by_name) < len(captures):
+        # Two files of one name in one upload. The map keeps the last, and the
+        # counts below would still report both as read, so a dropped capture
+        # would leave no trace anywhere.
+        warnings.add(
+            f"{len(captures) - len(by_name)} capture(s) in this upload share a "
+            "filename with another. Only one of each name was read; rename them "
+            "and upload the rest separately."
+        )
+
     itemised: dict[int, Transaction] = {}
     unmatched: list[rc.Receipt] = []
     added: list[rc.Receipt] = []
@@ -446,7 +456,12 @@ def _itemise(
             unread.extend(names)
             continue
         try:
-            receipts = _read_visit([by_name[name] for name in names])
+            receipts = _read_visit(
+                [by_name[name] for name in names], deadline=started + CAPTURE_BUDGET_SECONDS
+            )
+        except _OutOfTime as exc:
+            unread.extend(names[-exc.args[0] :])
+            continue
         except OcrUnavailable as exc:
             # One message for the whole upload, not one per capture: the engine
             # is either there or it is not, and 46 copies of that is not more
@@ -469,7 +484,13 @@ def _itemise(
             short = rc.foots(receipt)
             if short is not None:
                 second = None
-                if adjudicated < MAX_ADJUDICATIONS:
+                # The budget covers the model too. Eight adjudications at the
+                # per-call timeout is over twenty minutes, and every one of them
+                # sits after the last capture was read — so the cap on how many
+                # is not a cap on how long.
+                if adjudicated < MAX_ADJUDICATIONS and (
+                    time.monotonic() - started <= CAPTURE_BUDGET_SECONDS
+                ):
                     adjudicated += 1
                     second = _adjudicate(receipt, by_name, model)
                 if second is None:
@@ -505,14 +526,22 @@ def _itemise(
                 # for it. Both come from the response; neither is a guess. But
                 # "matched on the printed timestamp" and "matched on a filename
                 # and an amount" are different claims.
+                why = (
+                    "has no readable timestamp"
+                    if receipt.stamp is None
+                    else "prints a timestamp that matches no visit in the statement"
+                )
                 warnings.info(
-                    f"{' and '.join(receipt.captures)} has no readable timestamp, "
-                    "so it was placed by the date in its filename together with "
-                    "its own total. Both come from the response, and they agree "
-                    "with this visit; no other visit matches them.",
+                    f"{' and '.join(receipt.captures)} {why}, so it was placed "
+                    "by the date in its filename together with its own total. "
+                    "Both come from the response, they agree with this visit, "
+                    "and no other visit on that date matches them.",
                     locator=receipt.captures[0],
                 )
-            itemised[index] = _with_items(transactions[index], receipt, by_name)
+
+            itemised[index] = _with_items(
+                transactions[index], receipt, by_name, stamp_trusted=not by_filename
+            )
 
     if engine:
         warnings.error(
@@ -653,28 +682,46 @@ def _adjudicate(
     return candidate
 
 
-def _read_visit(documents: list) -> list[rc.Receipt]:
+def _read_visit(documents: list, *, deadline: float | None = None) -> list[rc.Receipt]:
     """The receipts one group of captures holds — usually one, sometimes two.
 
     Two captures of one date are the halves of a tall receipt about as often as
     they are two trips to the shop, and the filenames do not distinguish them.
     A capture that reached the bottom of its page is a receipt on its own; a
     capture that ran off the edge is half of one.
+
+    The deadline is tested between captures, not only between groups. A group is
+    every file sharing a visit key, so `…030419.png` and `…030419_00` through
+    `…030419_99` are one iteration of the caller's loop — a hundred pages of OCR
+    with no budget test among them. What the upload is allowed to spend has to
+    be checked where the spending happens.
     """
     from pathlib import Path
 
-    parts = [
-        rc.read_capture(transcribe(Path(document.path).read_bytes()), document.original_filename)
-        for document in documents
-    ]
+    parts = []
+    for document in documents:
+        if deadline is not None and time.monotonic() > deadline and parts:
+            # Only ever mid-group. Stopping before the first capture would
+            # return no receipt at all for a group the caller has already
+            # counted as read.
+            raise _OutOfTime(len(documents) - len(parts))
+        parts.append(
+            rc.read_capture(
+                transcribe(Path(document.path).read_bytes()), document.original_filename
+            )
+        )
     return rc.split_into_receipts(parts)
+
+
+class _OutOfTime(Exception):
+    """The budget ran out partway through one visit's captures."""
 
 
 def _match(
     receipt: rc.Receipt,
     transactions: list[Transaction],
     taken: dict[int, Transaction],
-) -> int | None:
+) -> tuple[int | None, bool]:
     """Which visit this receipt is of, or None.
 
     The timestamp the receipt prints matches the points statement to the
@@ -686,6 +733,13 @@ def _match(
     Not the subtotal alone. Two visits to the same shop for the same basket is
     an ordinary thing, and matching on a number that repeats would attach a
     receipt to the wrong day rather than to none.
+
+    Which is also why the fallback counts its candidates before it answers. The
+    same basket bought twice on ONE day is that same ordinary thing, and the
+    date and the subtotal are all this has: both visits fit, neither is more
+    right, and taking the first silently puts a real basket against the wrong
+    trip. Ambiguity is reported as no match, and the receipt is quarantined with
+    a reason.
     """
     for index, txn in enumerate(transactions):
         if index in taken:
@@ -695,14 +749,17 @@ def _match(
     date = rc.capture_date(receipt.captures[0])
     if date is None:
         return None, False
-    for index, txn in enumerate(transactions):
-        if index in taken or not txn.occurred_at.startswith(date):
-            continue
-        if txn.total_pre_discount is not None and _close(
-            Decimal(str(txn.total_pre_discount)), receipt.subtotal
-        ):
-            return index, True
-    return None, False
+    fits = [
+        index
+        for index, txn in enumerate(transactions)
+        if index not in taken
+        and txn.occurred_at.startswith(date)
+        and txn.total_pre_discount is not None
+        and _close(Decimal(str(txn.total_pre_discount)), receipt.subtotal)
+    ]
+    if len(fits) != 1:
+        return None, False
+    return fits[0], True
 
 
 def _settle_tax_against(txn: Transaction, receipt: rc.Receipt) -> rc.Receipt:
@@ -787,7 +844,9 @@ def _close(stated: Decimal, read: Decimal) -> bool:
     return stated == read
 
 
-def _with_items(txn: Transaction, receipt: rc.Receipt, by_name: dict) -> Transaction:
+def _with_items(
+    txn: Transaction, receipt: rc.Receipt, by_name: dict, *, stamp_trusted: bool = True
+) -> Transaction:
     """The same visit, with what was in it.
 
     `total_pre_discount` is left as the points statement gave it — the pre-tax
@@ -795,14 +854,21 @@ def _with_items(txn: Transaction, receipt: rc.Receipt, by_name: dict) -> Transac
     check reports no difference. The receipt's balance includes tax, and the
     schema has nowhere to put tax; recorded in NOTES.md rather than rounded
     into a line that was never on the receipt.
+
+    The lane and the transaction number are taken only from a stamp the join
+    trusted. They share a line with the timestamp and are set in the same 10px
+    type, so a stamp whose date could not be matched is not a stamp whose other
+    two fields can be relied on — and those two are stored as fact, with nothing
+    on screen marking them as the weaker reading.
     """
     document = by_name.get(receipt.captures[0])
+    stamp = receipt.stamp if stamp_trusted else None
     return replace(
         txn,
         items=_items(receipt),
         tender_type=receipt.tender or txn.tender_type,
-        division_code=receipt.stamp.lane if receipt.stamp else txn.division_code,
-        external_order_id=receipt.stamp.number if receipt.stamp else txn.external_order_id,
+        division_code=stamp.lane if stamp else txn.division_code,
+        external_order_id=stamp.number if stamp else txn.external_order_id,
         provenance=Provenance(
             source_document_id=document.id if document else None,
             page=1,
@@ -829,11 +895,24 @@ def _unreconciled(receipt: rc.Receipt, short: Decimal, model, *, statement: bool
         # and a total that does not exist. One of these sends a reader to look
         # for a misread digit; the other tells them the file is not what they
         # thought it was.
+        if receipt.lines:
+            # The ordinary tall-receipt case, and it was being told the same
+            # thing as a file with nothing on it. There are products here; what
+            # is missing is the bottom of the page, and the reader has an
+            # action: find the rest of it.
+            return (
+                f"{where} reads as {len(receipt.lines)} line(s) of a receipt "
+                "that runs past the bottom of the capture, so there is no "
+                "printed total on it to check them against. Nothing from it is "
+                "in this report. Upload the rest of the receipt with it and "
+                f"both halves will be read together.{tried}"
+            )
         return (
             f"{where} has no receipt on it that this could read — no lines, no "
             "total, nothing with the shape of one. Nothing from it is in this "
             f"report.{tried}"
         )
+
     return (
         f"{where} could not be read into a basket that adds up: its lines come "
         f"to {short:+} against the total printed on the receipt. Nothing from "

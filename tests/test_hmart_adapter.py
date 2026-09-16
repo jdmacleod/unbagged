@@ -22,6 +22,7 @@ from unbagged.models import (
     IdType,
     SourceBundle,
     SourceDocument,
+    Transaction,
 )
 from unbagged.transcription import words as tr_words
 
@@ -822,3 +823,106 @@ class TestWhenTheEngineIsNotInstalled:
         engine = [w for w in parsed.warnings if "install" in w.message.lower()]
         assert len(engine) == 1, "one message about the machine, not one per capture"
         assert len(parsed.transactions) > 1, "the statement was lost with the captures"
+
+
+class TestWhenTwoVisitsFitTheSameCapture:
+    """Found by the adversarial re-check on 2026-09-16.
+
+    Where the printed timestamp cannot be read, a capture is placed by the date
+    in its filename and its own total. `_match`'s own docstring calls the same
+    basket bought twice an ordinary thing — and on one day, the date and the
+    total are all the fallback has. Both visits fit; the first was taken,
+    silently, and a real basket went against the wrong trip.
+    """
+
+    def visit(self, at: str, amount: float) -> Transaction:
+        return Transaction(occurred_at=at, total_pre_discount=amount)
+
+    def receipt(self, amount: str) -> rc.Receipt:
+        return rc.Receipt(
+            captures=("Transaction_030419.png",),
+            lines=(rc.ReceiptLine("RICE", Decimal(amount)),),
+            tax=Decimal("0.00"),
+            balance=Decimal(amount),
+            complete=True,
+        )
+
+    def test_two_visits_on_one_day_for_one_total_match_neither(self):
+        visits = [
+            self.visit("2019-03-04T09:12:00", 12.34),
+            self.visit("2019-03-04T17:40:00", 12.34),
+        ]
+        assert HMART._match(self.receipt("12.34"), visits, {}) == (None, False)
+
+    def test_one_visit_that_fits_is_still_matched(self):
+        visits = [
+            self.visit("2019-03-04T09:12:00", 12.34),
+            self.visit("2019-03-04T17:40:00", 99.00),
+        ]
+        assert HMART._match(self.receipt("12.34"), visits, {}) == (0, True)
+
+    def test_a_visit_already_taken_does_not_make_the_rest_ambiguous(self):
+        visits = [
+            self.visit("2019-03-04T09:12:00", 12.34),
+            self.visit("2019-03-04T17:40:00", 12.34),
+        ]
+        found, by_filename = HMART._match(self.receipt("12.34"), visits, {0: visits[0]})
+        assert (found, by_filename) == (1, True)
+
+
+class TestWhatAWeakMatchIsAllowedToRecord:
+    """Found by the adversarial re-check on 2026-09-16.
+
+    The lane and the transaction number share a line with the timestamp and are
+    set in the same 10px type. A stamp whose timestamp could not be matched is
+    not a stamp whose other two fields can be relied on — and those two were
+    being stored as fact, with nothing on screen marking them as the weaker
+    reading.
+    """
+
+    def receipt(self) -> rc.Receipt:
+        return rc.Receipt(
+            captures=("Transaction_030419.png",),
+            lines=(rc.ReceiptLine("RICE", Decimal("12.34")),),
+            tax=Decimal("0.00"),
+            balance=Decimal("12.34"),
+            complete=True,
+            stamp=rc.Stamp(occurred_at="2019-03-04T11:07:00", lane="2", number="0042"),
+        )
+
+    def test_a_trusted_stamp_still_records_its_lane(self):
+        txn = HMART._with_items(Transaction(occurred_at="x"), self.receipt(), {})
+        assert (txn.division_code, txn.external_order_id) == ("2", "0042")
+
+    def test_a_stamp_the_join_would_not_use_does_not_become_a_stored_fact(self):
+        txn = HMART._with_items(
+            Transaction(occurred_at="x"), self.receipt(), {}, stamp_trusted=False
+        )
+        assert (txn.division_code, txn.external_order_id) == (None, None)
+
+
+class TestWhatACaptureWithNoTotalIsTold:
+    """Found by the adversarial re-check on 2026-09-16.
+
+    `balance is None` is the ordinary top-half-of-a-tall-receipt case as well as
+    the not-a-receipt case, and both were being sent the same sentence. One of
+    them has an action attached to it: find the other half.
+    """
+
+    def message(self, lines) -> str:
+        found = rc.Receipt(captures=("Transaction_030419.png",), lines=tuple(lines))
+        return HMART._unreconciled(found, Decimal("0.00"), _NoModel(), statement=False)
+
+    def test_a_page_full_of_products_is_told_to_upload_the_rest(self):
+        said = self.message([rc.ReceiptLine("RICE", Decimal("10.00"))])
+        assert "Upload the rest of the receipt" in said
+        assert "no lines, no total" not in said
+
+    def test_a_page_with_nothing_on_it_is_told_that_instead(self):
+        said = self.message([])
+        assert "no lines, no total" in said
+
+
+class _NoModel:
+    usable = False
+    model = None

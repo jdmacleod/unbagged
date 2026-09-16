@@ -314,3 +314,103 @@ class TestWhatIsDoneWithTheAnswer:
 
     def test_an_empty_answer_is_not_a_receipt(self):
         assert rc.from_reply({"lines": [], "tax": "0.00", "balance": "87.65"}, self.LIKE) is None
+
+
+def rejected(code: int, said: str):
+    """An HTTP error carrying the server's own explanation in its body.
+
+    Which is where Ollama puts it. `str(HTTPError)` is the status line and the
+    reason phrase and nothing else, so an overflow marker matched against the
+    exception's text matched nothing a real server has ever sent.
+    """
+    import io
+    import urllib.error
+
+    return urllib.error.HTTPError(
+        "u", code, "Bad Request", {}, io.BytesIO(json.dumps({"error": said}).encode())
+    )
+
+
+class TestGrowingTheWindowWhenTheAnswerWillNotFit:
+    """Found by the adversarial re-check on 2026-09-16.
+
+    `think` is on the payload by construction, so a rule that tested for it
+    before testing the overflow markers read EVERY first rejection as "this
+    build predates the field". A modern server rejecting for size got one
+    doubling instead of two, burned an attempt on the misdiagnosis, and lost
+    the reasoning-channel suppression for the rest of the call.
+    """
+
+    @pytest.fixture()
+    def where(self, monkeypatch):
+        monkeypatch.setenv(ollama.HOST_ENV, "localhost:11434")
+        return ollama.availability(opener=replies(TAGS))
+
+    def sizes(self, opener):
+        return [sent["body"]["options"]["num_ctx"] for sent in opener.sent]
+
+    #: A fresh exception per reply. An `HTTPError`'s body is a stream and reads
+    #: once, so serving one object twice makes the second read come back empty.
+    OVER = "input length 9000 exceeds context length 4096"
+
+    def test_a_server_that_rejects_for_size_gets_both_doublings(self, where):
+        opener = replies(
+            rejected(400, self.OVER),
+            rejected(400, self.OVER),
+            chat({"lines": [], "tax": "0", "balance": "0"}),
+        )
+
+        assert vision.read_receipt([b"png"], where, opener=opener) is not None
+        first, *rest = self.sizes(opener)
+        assert rest == [first * 2, first * 4]
+
+    def test_the_reasoning_channel_stays_suppressed_on_a_server_that_honours_it(self, where):
+        opener = replies(rejected(400, self.OVER), chat({"lines": [], "tax": "0", "balance": "0"}))
+
+        vision.read_receipt([b"png"], where, opener=opener)
+        assert all("think" in sent["body"] for sent in opener.sent)
+
+    def test_dropping_think_does_not_cost_a_sizing_attempt(self, where):
+        """It is a version fix, not an attempt at the answer."""
+        opener = replies(
+            rejected(400, "unknown field: think"),
+            rejected(400, self.OVER),
+            rejected(400, self.OVER),
+            chat({"lines": [], "tax": "0", "balance": "0"}),
+        )
+
+        assert vision.read_receipt([b"png"], where, opener=opener) is not None
+        assert len(opener.sent) == 4
+
+    def test_an_overflow_reported_as_a_server_error_is_still_retried(self, where):
+        """The difference between a 400 and a 500 here is a version."""
+        opener = replies(
+            rejected(500, "context window exceeded"),
+            chat({"lines": [], "tax": "0", "balance": "0"}),
+        )
+        assert vision.read_receipt([b"png"], where, opener=opener) is not None
+        assert len(opener.sent) == 2
+
+
+class TestAnAnswerThatRanOutOfWindowEveryTime:
+    """Found by the adversarial re-check on 2026-09-16.
+
+    The `length` branch grew the window and retried, but only `while attempt <
+    MAX_SIZED_RETRIES` — so on the last attempt control fell through and
+    returned the truncated answer the branch exists to refuse. A short basket is
+    exactly what the gate cannot see: it reconciles against whatever total came
+    with it.
+    """
+
+    @pytest.fixture()
+    def where(self, monkeypatch):
+        monkeypatch.setenv(ollama.HOST_ENV, "localhost:11434")
+        return ollama.availability(opener=replies(TAGS))
+
+    def test_nothing_is_returned_rather_than_a_prefix_of_a_basket(self, where):
+        cut_off = {
+            "message": {"content": json.dumps({"lines": [{"amount": "1.00"}]})},
+            "done_reason": "length",
+        }
+        opener = replies(cut_off, cut_off, cut_off, cut_off)
+        assert vision.read_receipt([b"png"], where, opener=opener) is None

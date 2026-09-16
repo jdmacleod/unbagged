@@ -62,10 +62,15 @@ heads; neither changes what was stored.
 - **A local vision model may be asked about the pages the engine could not
   read** — and only those, which on a real response is a handful rather than all
   of them. Its answer is kept only if it makes the receipt add up, which is the
-  same gate every other reading passes and the whole basis for asking. Off
-  unless `UNBAGGED_OLLAMA_HOST` is set; a host that is not this machine is
-  refused until you acknowledge that it would receive pictures of your
-  shopping. See `.env.example`.
+  same gate every other reading passes and the whole basis for asking. Both
+  figures that check it — the printed total and the tax — are taken off the page
+  rather than out of the answer, so the sum has nothing left in it for an answer
+  to adjust. Where the tax line itself could not be read, a figure outside the
+  range a tax can occupy is refused outright, which bounds a basket to what the
+  receipt says was paid. Off unless `UNBAGGED_OLLAMA_HOST` is set; a host that
+  is not this machine is refused until you acknowledge that it would receive
+  pictures of your shopping. See `.env.example`.
+
 
 - **Products and Prices work for a retailer that names what you bought without
   coding it.** Both views identified a product by its barcode, so a response
@@ -81,11 +86,18 @@ heads; neither changes what was stored.
   documenting that nothing in it knows what a receipt is should not contain a
   receipt prompt. A model that cannot read images is now refused at the
   preflight rather than failing on every page, and a prompt rejected for size
-  gets a larger window and one more try.
+  gets a larger window and two more tries. An answer the model ran out of room
+  to finish is never read: a basket cut off partway through still adds up
+  against whatever total came with it.
+
 
 - **Reading captures has a time budget.** The upload cap bounds bytes, not
   images, and every per-item timeout multiplied with nothing capping the whole
-  inside a request a person is waiting on.
+  inside a request a person is waiting on. The budget is tested between pages
+  and before each question put to a model, not only between visits — a hundred
+  captures can share one visit, and asking a model about eight receipts is
+  twenty minutes that used to sit after the last check.
+
 
 - **A visit placed by its filename rather than by the timestamp printed on the
   receipt now says so.** Measured on the response this was built against, that
