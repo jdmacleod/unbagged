@@ -16,6 +16,7 @@ and to say so plainly rather than rendering it as a smaller Kroger.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
@@ -40,6 +41,7 @@ from unbagged.adapters.base import (
     absent_disclosures,
 )
 from unbagged.adapters.hmart import receipt as rc
+from unbagged.adapters.hmart import vision
 from unbagged.extraction import Table, classify, extract, extract_all
 from unbagged.models import TxnItem
 from unbagged.transcription import OcrUnavailable, UnreadableImage, ollama, transcribe
@@ -64,6 +66,29 @@ SCHEMA_VERSION = 2
 #: an image yields no text, so the fallback scores nothing on one and a bundle
 #: of captures would otherwise be refused outright rather than read.
 CAPTURE_CONFIDENCE = 0.4
+
+#: Seconds this adapter will spend reading captures in one upload.
+#:
+#: The upload cap is 64 MB of BYTES, which bounds nothing that matters here: at
+#: ~150 KB a capture that is four hundred of them, each costing two OCR runs and,
+#: where it will not reconcile, a model call of up to three minutes. Every
+#: per-item timeout multiplies; none of them caps the whole. The request is
+#: synchronous by design — parsing on the event loop would starve the container's
+#: own healthcheck — so an unbounded loop holds a threadpool worker for as long
+#: as it takes, and a handful of such uploads exhausts the pool and fails the
+#: healthcheck the synchronous choice exists to protect.
+#:
+#: Ten minutes is twenty times the measured cost of the real 46-capture response
+#: and still bounded. Captures past the budget are named, not silently dropped.
+CAPTURE_BUDGET_SECONDS = 600
+
+#: How many receipts a model may be asked about in one upload.
+#:
+#: `_adjudicate` is justified by running on "a handful" of captures — that is one
+#: measured corpus, not a limit. A response whose captures this reader cannot
+#: reconcile at all would put every one of them through a call of up to three
+#: minutes.
+MAX_ADJUDICATIONS = 8
 
 log = logging.getLogger(__name__)
 
@@ -388,15 +413,18 @@ def _itemise(
     # reachable is a fact about the machine, and it is checked before any
     # reading so that "there is no model" and "the model could not help" stay
     # different answers.
-    vision = ollama.availability()
-    if vision.message:
-        warnings.info(vision.message)
+    model = ollama.availability()
+    if model.message:
+        warnings.info(model.message)
 
     engine = None
     by_name = {document.original_filename: document for document in captures}
     itemised: dict[int, Transaction] = {}
     unmatched: list[rc.Receipt] = []
     added: list[rc.Receipt] = []
+    started = time.monotonic()
+    adjudicated = 0
+    unread: list[str] = []
     #: Whether a points statement came with the captures.
     #:
     #: It decides what to do with a receipt that matches no visit, and the two
@@ -414,6 +442,9 @@ def _itemise(
     statement = bool(statement_rows)
 
     for names in rc.group_by_visit(list(by_name)):
+        if time.monotonic() - started > CAPTURE_BUDGET_SECONDS:
+            unread.extend(names)
+            continue
         try:
             receipts = _read_visit([by_name[name] for name in names])
         except OcrUnavailable as exc:
@@ -437,16 +468,19 @@ def _itemise(
         for receipt in receipts:
             short = rc.foots(receipt)
             if short is not None:
-                second = _adjudicate(receipt, by_name, vision)
+                second = None
+                if adjudicated < MAX_ADJUDICATIONS:
+                    adjudicated += 1
+                    second = _adjudicate(receipt, by_name, model)
                 if second is None:
                     warnings.add(
-                        _unreconciled(receipt, short, vision, statement=statement),
+                        _unreconciled(receipt, short, model, statement=statement),
                         locator=receipt.captures[0],
                     )
                     continue
                 warnings.info(
                     f"{' and '.join(receipt.captures)} would not add up as read, "
-                    f"and {vision.model} read it into a basket that does. Only "
+                    f"and {model.model} read it into a basket that does. Only "
                     "an answer that reconciles is kept, so this one has been."
                 )
                 receipt = second
@@ -469,6 +503,15 @@ def _itemise(
             f"{len(captures)} receipt captures were part of this response and "
             f"none could be read. {engine} Every visit still carries the total "
             "the points statement gave for it."
+        )
+    if unread:
+        warnings.add(
+            f"{len(unread)} capture(s) in this upload were not read: this "
+            f"response took longer than the {CAPTURE_BUDGET_SECONDS // 60} "
+            "minutes reading captures is allowed, and the rest were left rather "
+            "than holding the request open indefinitely. Upload them separately "
+            "and they will be read.",
+            locator=unread[0],
         )
     for receipt in unmatched:
         warnings.add(_unmatched(receipt), locator=receipt.captures[0])
@@ -559,7 +602,7 @@ def _items(receipt: rc.Receipt) -> tuple[TxnItem, ...]:
 
 
 def _adjudicate(
-    receipt: rc.Receipt, by_name: dict, vision: ollama.Availability
+    receipt: rc.Receipt, by_name: dict, where: ollama.Availability
 ) -> rc.Receipt | None:
     """Ask a local model about a page the engine could not read into a basket.
 
@@ -574,7 +617,7 @@ def _adjudicate(
     against the first; it is a second attempt at a check neither of them
     administers.
     """
-    if not vision.usable:
+    if not where.usable:
         return None
     from pathlib import Path
 
@@ -585,7 +628,7 @@ def _adjudicate(
     ]
     if not pages:
         return None
-    reply = ollama.read_receipt(pages, vision)
+    reply = vision.read_receipt(pages, where)
     if reply is None:
         return None
     candidate = rc.from_reply(reply, receipt)
@@ -752,7 +795,7 @@ def _with_items(txn: Transaction, receipt: rc.Receipt, by_name: dict) -> Transac
     )
 
 
-def _unreconciled(receipt: rc.Receipt, short: Decimal, vision, *, statement: bool) -> str:
+def _unreconciled(receipt: rc.Receipt, short: Decimal, model, *, statement: bool) -> str:
     where = " and ".join(receipt.captures)
     # "The visit still carries the total the points statement gave for it" is a
     # comfort that is only true when a statement came with the captures. On an
@@ -761,7 +804,7 @@ def _unreconciled(receipt: rc.Receipt, short: Decimal, vision, *, statement: boo
         " The visit still carries the total the points statement gave for it." if statement else ""
     )
     tried = (
-        f" {vision.model} was asked about it as well and could not either." if vision.usable else ""
+        f" {model.model} was asked about it as well and could not either." if model.usable else ""
     )
     if receipt.balance is None:
         # A different finding, and it was being reported as the first one. A

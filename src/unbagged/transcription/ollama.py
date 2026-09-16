@@ -20,6 +20,11 @@ model agreeing with itself is not evidence. Here there is: the receipt's own
 total, and the points statement's separate figure for the same visit. The
 arithmetic does the work corroboration does there, and does it better.
 
+Nothing here knows what a receipt is. The prompt and the schema are the
+caller's — see `adapters/hmart/vision.py` — which is what the package docstring
+one level up promises and what this module used to quietly break by holding a
+receipt prompt of its own.
+
 Off unless configured. `docs/handoff.md` §6.9 permits an outbound call that is
 opt-in, off by default, and clearly labelled as sending data off-device; this
 is written to that shape. A loopback host is the intended case. A host that is
@@ -75,45 +80,40 @@ MAX_REPLY_BYTES = 4 * 1024 * 1024
 IMAGE_TOKENS = 3072
 NUM_CTX_FLOOR = 8192
 
-#: Flat on purpose. Quantised models in this size class return empty arrays at
-#: intermediate levels of a nested schema, so the whole receipt is one object
-#: with one list in it.
-RECEIPT_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "lines": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "description": {"type": "string"},
-                    "amount": {"type": "string"},
-                },
-                "required": ["description", "amount"],
-            },
-        },
-        "tax": {"type": "string"},
-        "balance": {"type": "string"},
-    },
-    "required": ["lines", "tax", "balance"],
-}
+#: How many times a rejected-for-size prompt may be retried with a larger window.
+#:
+#: Bounded, because each attempt costs a full model call. Two doublings take the
+#: budget from one image's worth to four, which covers a taller capture than any
+#: observed without letting a pathological page loop.
+MAX_SIZED_RETRIES = 2
 
-PROMPT = (
-    "This is a screen capture of a supermarket receipt. Transcribe every "
-    "purchase line exactly as printed: the product description in the middle "
-    "column and its amount in the right column. Keep a minus sign where one is "
-    "printed — a negative line is a discount or a cancelled item and it matters. "
-    "Do not merge lines. Do not include the TAX line or the BALANCE line or the "
-    "payment method among the purchases; report the tax and the balance in "
-    "their own fields. Report amounts as decimal numbers with two places and no "
-    "currency symbol. Ignore anything written over the receipt by hand, and "
-    "ignore the card details at the bottom entirely."
+#: Substrings a server uses to say the prompt overran the context window.
+#:
+#: llama.cpp and Ollama phrase this differently across builds, so several are
+#: matched. Only consulted on a failure, so a false match costs one bounded
+#: retry and nothing else.
+#:
+#: The reference implementation this is ported from also infers truncation by
+#: comparing `prompt_eval_count` against a character-count estimate of the
+#: prompt. That does not transfer here: this prompt is a few hundred characters
+#: and one or more IMAGES, and the image tokens are most of the budget and
+#: invisible to any character estimate. The signals that do transfer are the
+#: server saying so, and the reply saying it stopped for length.
+_OVERFLOW_MARKERS = (
+    "exceed_context_size",
+    "exceeds context",
+    "context length",
+    "context window",
+    "context size",
+    "num_ctx",
+    "too large for this model",
 )
 
 
 class Reachability(Enum):
     OFF = "off"  # not configured; the deterministic reader is on its own
     OK = "ok"
+    NO_VISION = "no_vision"  # pulled, but the server says it cannot take images
     REFUSED = "refused"  # a remote host, unacknowledged
     UNREACHABLE = "unreachable"
     MODEL_MISSING = "model_missing"
@@ -216,7 +216,44 @@ def availability(opener=None) -> Availability:
             host,
             model,
         )
+    if not _can_see(host, model, opener):
+        return Availability(
+            Reachability.NO_VISION,
+            f"{model!r} is pulled on {host} but cannot read images. Name a "
+            f"vision model in {MODEL_ENV} — without one, a receipt the "
+            "deterministic reader could not resolve is simply set aside.",
+            host,
+            model,
+        )
     return Availability(Reachability.OK, "", host, model)
+
+
+def _can_see(host: str, model: str, opener=None) -> bool:
+    """Does this model take images?
+
+    Asked of the server, never inferred from the name. A model's FAMILY is not
+    a vision signal — a text-only sibling shares the family of a multimodal one,
+    so `qwen2.5` tells you nothing about `qwen2.5vl`. `/api/show` reports what
+    the server actually loaded.
+
+    Fails OPEN: a server too old to report capabilities should not have its
+    model refused on that account. Getting this wrong in that direction costs a
+    misleading message; the other direction costs the feature entirely.
+
+    Without it, a text-only model named by mistake passes the preflight, every
+    receipt comes back unreadable, and the reader is told "could not read it"
+    rather than "that model cannot see".
+    """
+    try:
+        body = _post_to(
+            f"{host.rstrip('/')}/api/show", {"model": model}, PREFLIGHT_TIMEOUT_SECONDS, opener
+        )
+    except Exception:  # noqa: BLE001 - a preflight has no failure it may raise on
+        return True
+    capabilities = body.get("capabilities")
+    if not isinstance(capabilities, list):
+        return True
+    return "vision" in capabilities
 
 
 def _present(model: str, names: set[str]) -> bool:
@@ -230,12 +267,23 @@ def _present(model: str, names: set[str]) -> bool:
     return any(name.split(":", 1)[0] == model for name in names)
 
 
-def read_receipt(pages: list[bytes], where: Availability, opener=None) -> dict | None:
-    """Ask the model what is on this page. None if it will not say usefully.
+def ask(
+    pages: list[bytes],
+    prompt: str,
+    schema: dict,
+    where: Availability,
+    opener=None,
+) -> dict | None:
+    """Put one question about some images to the local model. None on any failure.
 
-    Returns the raw reply. It is a claim, not a reading: the caller has to put
-    it through the same arithmetic the deterministic transcriber's answer goes
-    through, and throw it away if it does not hold.
+    Generic on purpose: the prompt and the schema come from the caller, because
+    this package reads pixels and does not know what a receipt is. Keeping a
+    receipt prompt here made the package docstring's own boundary claim false —
+    `adapters/hmart/vision.py` is where that knowledge belongs.
+
+    Returns the raw reply. It is a claim, not a reading: whatever asked has to
+    put it through a check the model had no hand in, and throw it away if it
+    does not hold.
     """
     if not where.usable or where.host is None:
         return None
@@ -244,7 +292,7 @@ def read_receipt(pages: list[bytes], where: Availability, opener=None) -> dict |
         "messages": [
             {
                 "role": "user",
-                "content": PROMPT,
+                "content": prompt,
                 # Every capture of one receipt in one call, so a model asked
                 # about a receipt split across two screens sees both halves and
                 # can give one answer for the whole of it.
@@ -254,7 +302,7 @@ def read_receipt(pages: list[bytes], where: Availability, opener=None) -> dict |
         "stream": False,
         # The full schema, not the string "json". Constrained decoding is what
         # keeps a small model from answering in prose about the receipt.
-        "format": RECEIPT_SCHEMA,
+        "format": schema,
         "options": {
             "temperature": 0,
             "num_ctx": NUM_CTX_FLOOR + IMAGE_TOKENS * len(pages),
@@ -264,19 +312,38 @@ def read_receipt(pages: list[bytes], where: Availability, opener=None) -> dict |
         # retried once rather than losing the call to a version difference.
         "think": False,
     }
-    try:
-        body = _post(f"{where.host.rstrip('/')}/api/chat", payload, opener)
-    except _Rejected:
-        payload.pop("think")
+    url = f"{where.host.rstrip('/')}/api/chat"
+    for attempt in range(1 + MAX_SIZED_RETRIES):
         try:
-            body = _post(f"{where.host.rstrip('/')}/api/chat", payload, opener)
-        except Exception:  # noqa: BLE001 - a model that will not answer is not a failed upload
+            body = _post(url, payload, opener)
+        except _Rejected as exc:
+            if "think" in payload:
+                # A build that predates the field rejects the whole request.
+                payload.pop("think")
+                continue
+            if _is_overflow(exc) and attempt < MAX_SIZED_RETRIES:
+                payload["options"]["num_ctx"] *= 2
+                continue
             return None
-    except Exception:  # noqa: BLE001
-        log.debug("vision read failed", exc_info=True)
-        return None
+        except Exception:  # noqa: BLE001 - a model that will not answer is not a failed upload
+            log.debug("vision read failed", exc_info=True)
+            return None
 
-    return _content(body)
+        if body.get("done_reason") == "length" and attempt < MAX_SIZED_RETRIES:
+            # The model ran out of window mid-answer. Its `lines` array is a
+            # prefix of a basket it never finished, and a short basket is
+            # exactly what the gate cannot see — it reconciles against whatever
+            # total came with it. Grow the window and ask again rather than
+            # reading a truncated answer.
+            payload["options"]["num_ctx"] *= 2
+            continue
+        return _content(body)
+    return None
+
+
+def _is_overflow(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return any(marker in text for marker in _OVERFLOW_MARKERS)
 
 
 def _content(body: dict) -> dict | None:
@@ -308,6 +375,17 @@ class _Rejected(RuntimeError):
 
 def _get(url: str, timeout: float, opener=None) -> dict:
     return _send(urllib.request.Request(url, method="GET"), timeout, opener)  # noqa: S310
+
+
+def _post_to(url: str, payload: dict, timeout: float, opener=None) -> dict:
+    """A POST with an explicit timeout. The preflight must not wait a model out."""
+    request = urllib.request.Request(  # noqa: S310
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    return _send(request, timeout, opener)
 
 
 def _post(url: str, payload: dict, opener=None) -> dict:

@@ -18,6 +18,7 @@ from decimal import Decimal
 import pytest
 
 from unbagged.adapters.hmart import receipt as rc
+from unbagged.adapters.hmart import vision
 from unbagged.transcription import ollama
 
 
@@ -130,7 +131,7 @@ class TestWhatIsAsked:
 
     def test_the_request_is_the_one_a_small_model_can_answer(self, where):
         opener = replies(chat({"lines": [], "tax": "0.00", "balance": "0.00"}))
-        ollama.read_receipt([b"png"], where, opener=opener)
+        vision.read_receipt([b"png"], where, opener=opener)
         (call,) = opener.sent
         assert call["url"].endswith("/api/chat"), (
             "not /api/generate: it mangles a constrained reply"
@@ -140,13 +141,13 @@ class TestWhatIsAsked:
         assert body["options"]["temperature"] == 0
         # The whole schema, not the string "json". Constrained decoding is what
         # stops a small model answering in prose about the receipt.
-        assert body["format"] == ollama.RECEIPT_SCHEMA
+        assert body["format"] == vision.RECEIPT_SCHEMA
         assert len(body["messages"][0]["images"]) == 1
 
     def test_every_capture_of_one_receipt_goes_in_one_call(self, where):
         """A receipt split across two screens gets one answer, not two halves."""
         opener = replies(chat({"lines": [], "tax": "0.00", "balance": "0.00"}))
-        ollama.read_receipt([b"top", b"bottom"], where, opener=opener)
+        vision.read_receipt([b"top", b"bottom"], where, opener=opener)
         body = opener.sent[0]["body"]
         assert len(body["messages"][0]["images"]) == 2
         # The image spends context a character count of the prompt cannot see.
@@ -159,7 +160,7 @@ class TestWhatIsAsked:
 
         rejection = urllib.error.HTTPError("u", 400, "bad", None, None)
         opener = replies(rejection, chat({"lines": [], "tax": "0", "balance": "0"}))
-        ollama.read_receipt([b"png"], where, opener=opener)
+        vision.read_receipt([b"png"], where, opener=opener)
         assert len(opener.sent) == 2
         assert "think" in opener.sent[0]["body"]
         assert "think" not in opener.sent[1]["body"]
@@ -171,7 +172,7 @@ class TestWhatIsAsked:
             "message": {"content": "", "thinking": json.dumps({"lines": [], "balance": "1.00"})},
             "done_reason": "stop",
         }
-        assert ollama.read_receipt([b"png"], where, opener=replies(body)) is not None
+        assert vision.read_receipt([b"png"], where, opener=replies(body)) is not None
 
     def test_an_answer_that_was_cut_off_is_not_read(self, where):
         """`length` means it never finished. Its numbers were never committed to.
@@ -183,15 +184,15 @@ class TestWhatIsAsked:
             "message": {"content": "", "thinking": '{"lines": [{"amount": "3.'},
             "done_reason": "length",
         }
-        assert ollama.read_receipt([b"png"], where, opener=replies(body)) is None
+        assert vision.read_receipt([b"png"], where, opener=replies(body)) is None
 
     def test_a_model_that_will_not_answer_costs_one_receipt_and_not_the_upload(self, where):
-        assert ollama.read_receipt([b"png"], where, opener=replies(ConnectionError("gone"))) is None
+        assert vision.read_receipt([b"png"], where, opener=replies(ConnectionError("gone"))) is None
 
     def test_nothing_is_sent_when_no_model_may_be_asked(self, monkeypatch):
         monkeypatch.delenv(ollama.HOST_ENV, raising=False)
         opener = replies(chat({"lines": []}))
-        assert ollama.read_receipt([b"png"], ollama.availability(), opener=opener) is None
+        assert vision.read_receipt([b"png"], ollama.availability(), opener=opener) is None
         assert opener.sent == [], "a request was made with no model configured"
 
 

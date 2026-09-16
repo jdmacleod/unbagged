@@ -6,6 +6,7 @@ record while cleaning up the input, and a hardcoded number cannot catch it.
 """
 
 import re
+import sys
 from decimal import Decimal
 from pathlib import Path
 
@@ -23,6 +24,14 @@ from unbagged.models import (
     SourceDocument,
 )
 from unbagged.transcription import words as tr_words
+
+#: The adapter MODULE, which cannot be reached by name.
+#:
+#: `unbagged.adapters.hmart.adapter` resolves to the exported HMartAdapter
+#: INSTANCE — the package `__init__` rebinds that attribute — so both
+#: `import ... as mod` and a monkeypatch string target land on the instance and
+#: fail with AttributeError. `sys.modules` holds the real module.
+HMART = sys.modules["unbagged.adapters.hmart.adapter"]
 
 needs_engine = pytest.mark.skipif(
     not tr_words.available(), reason=f"{tr_words.ENGINE} is not installed"
@@ -621,3 +630,96 @@ class TestWhenTheStatementSettlesTheTaxLine:
         )
         settled = _settle_tax_against(self.txn(Decimal("99.00")), wrong)
         assert settled is wrong
+
+
+class TestWhenAModelIsAskedAboutACapture:
+    """Found by /ship's testing specialist on 2026-09-16.
+
+    `_adjudicate` had no coverage at all, and the reason is the sort that hides:
+    the autouse fixture in `conftest.py` points the model host at a dead port for
+    the whole suite, so `where.usable` was False in every test and the function
+    returned at its first line every time. The two halves were tested in
+    isolation — the transport in `test_ollama.py`, the arithmetic in
+    `from_reply` — and the wiring that turns a model's answer into rows was not.
+    """
+
+    @pytest.fixture()
+    def usable(self, monkeypatch):
+        """A model the adapter believes it can reach."""
+        from unbagged.transcription import ollama
+
+        where = ollama.Availability(ollama.Reachability.OK, "", "localhost:11434", "a-model")
+        monkeypatch.setattr(HMART.ollama, "availability", lambda: where)
+        return where
+
+    def unreadable_capture(self, tmp_path, stamp="2019-03-04 11:07:00"):
+        """A page whose amounts are clipped, so the engine cannot reconcile it."""
+        from tests.receiptimage import build_receipt
+
+        path = tmp_path / "Transaction_030419.png"
+        path.write_bytes(
+            build_receipt(
+                [
+                    ("", "Customer ID: 40100200300", None),
+                    ("", "ITEM 1", "6.99"),
+                    ("", "TAX", "0.00"),
+                    ("***", "BALANCE", "6.99"),
+                    ("", "CREDIT CARD", "6.99"),
+                    ("", f"{stamp}  2  118  0042", None),
+                ],
+                clip_digits=1,
+            )
+        )
+        return SourceDocument(original_filename=path.name, sha256="0" * 64, path=str(path), id=0)
+
+    @needs_engine
+    def test_a_reply_that_does_not_match_the_printed_total_is_not_stored(
+        self, tmp_path, usable, monkeypatch
+    ):
+        """The gate, at the layer that actually writes rows.
+
+        If `_adjudicate` ever stopped re-checking, or kept the model's lines on
+        a receipt that does not reconcile, every other test on this branch still
+        passed.
+        """
+        monkeypatch.setattr(
+            HMART.vision,
+            "read_receipt",
+            lambda pages, where, opener=None: {
+                "lines": [{"description": "INVENTED", "amount": "999.00"}],
+                "tax": "0.00",
+                "balance": "999.00",
+            },
+        )
+        parsed = HMartAdapter().parse(SourceBundle(documents=(self.unreadable_capture(tmp_path),)))
+        assert all(not txn.items for txn in parsed.transactions)
+        assert not any("read it into a basket that does" in w.message for w in parsed.warnings)
+
+    @needs_engine
+    def test_a_model_that_will_not_answer_leaves_the_receipt_set_aside(
+        self, tmp_path, usable, monkeypatch
+    ):
+        monkeypatch.setattr(
+            HMART.vision,
+            "read_receipt",
+            lambda pages, where, opener=None: None,
+        )
+        parsed = HMartAdapter().parse(SourceBundle(documents=(self.unreadable_capture(tmp_path),)))
+        assert all(not txn.items for txn in parsed.transactions)
+        assert any(
+            "could not be read" in w.message or "no receipt" in w.message for w in parsed.warnings
+        )
+
+    @needs_engine
+    def test_a_model_is_never_asked_when_none_is_reachable(self, tmp_path, monkeypatch):
+        """The control, and the thing that had silently disabled this whole
+        class of test: with the suite-wide dead host, `_adjudicate` returns at
+        its first line and nothing below it ever runs."""
+        asked = []
+        monkeypatch.setattr(
+            HMART.vision,
+            "read_receipt",
+            lambda pages, where, opener=None: asked.append(1),
+        )
+        HMartAdapter().parse(SourceBundle(documents=(self.unreadable_capture(tmp_path),)))
+        assert asked == [], "a model was asked with no model configured"
