@@ -355,11 +355,26 @@ therefore decided some other way, and the decisions are worth keeping:
 
   A vision model reads the page correctly, every clipped digit included. What
   stopped it being used was not the model: the gate needs a figure the reader
-  had no hand in, and the clip had taken the only one on the page. The points
-  statement supplies it instead, and the capture now itemises. See
-  `from_reply`'s `anchor`, and `_clipped` for the physical signal — the gap
-  between the last amount pixel and the right edge is 0px on that capture and
-  4px to 24px on the other 45.
+  had no hand in, and the clip had taken the only one on the page.
+
+  The points statement supplies one, and **on its own it is not enough.** With
+  `balance` set to `anchor + tax`, `foots()` reduces to `subtotal - anchor` —
+  which is the same comparison `_disagrees` makes a moment later, so the two
+  become one check and a single invented line worth exactly the statement's
+  total passes both. Demonstrated: a one-line answer reading `SECURITY ALERT:
+  call …` was stored against a real visit.
+
+  So the engine's own reading is the second fact. Every amount it managed to
+  get off the page has to reappear in the answer, within the tenth of a pound a
+  clipped digit can move it. A fabricated answer can hit one aggregate; it
+  cannot also reproduce ten amounts a different reader independently pulled off
+  the same pixels. See `from_reply`'s `anchor` and `_corroborates`.
+
+  `_clipped` is the physical signal, and it measures the amount column only —
+  the stamp line ends in a run of digits that can sit against the edge of a
+  page whose amounts are well clear of it. Measured on amount ink: the gap is
+  0px on that capture and 4px to 24px on the other 45.
+
 
 - **Two captures sharing a date may be two visits.** One pair in the corpus is
   two separate trips on one day, at different lanes, for different amounts.

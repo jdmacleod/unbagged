@@ -486,8 +486,12 @@ def _itemise(
             continue
         for receipt in receipts:
             short = rc.foots(receipt)
+            #: The accepted model answer, and the visit its anchor came from.
+            #: Bound here rather than in the branch below, because both are read
+            #: after the join for a receipt that never needed a model at all.
+            second = None
+            anchored_to = None
             if short is not None:
-                second = None
                 # The budget covers the model too. Eight adjudications at the
                 # per-call timeout is over twenty minutes, and every one of them
                 # sits after the last capture was read — so the cap on how many
@@ -496,12 +500,8 @@ def _itemise(
                     time.monotonic() - started <= CAPTURE_BUDGET_SECONDS
                 ):
                     adjudicated += 1
-                    second = _adjudicate(
-                        receipt,
-                        by_name,
-                        model,
-                        anchor=_anchor_for(receipt, transactions, itemised),
-                    )
+                    anchored_to, anchor = _anchor_for(receipt, transactions, itemised)
+                    second = _adjudicate(receipt, by_name, model, anchor=anchor)
 
                 if second is None:
                     warnings.add(
@@ -509,37 +509,34 @@ def _itemise(
                         locator=receipt.captures[0],
                     )
                     continue
-                # Which figure the answer was checked against is part of the
-                # claim, not a detail. Against the receipt's own printed total
-                # it is one document checking itself; against the statement it
-                # is two documents agreeing, which is the stronger of the two
-                # and the only one available when the total is unreadable.
-                # `second`, not `receipt`: the flag is set by the answer that
-                # was accepted, and `receipt` is still the engine's reading
-                # until the rebind below.
-                against = (
-                    "the total the points statement gives for that visit"
-                    if second.balance_from_statement
-                    else "the total printed on the receipt"
-                )
-
-                warnings.info(
-                    f"{' and '.join(receipt.captures)} would not add up as read, "
-                    f"and {model.model} read it into a basket that does. The "
-                    f"answer was checked against {against}, which nothing that "
-                    "read the picture had a hand in, and only an answer that "
-                    "reconciles is kept — so this one has been."
-                )
-
                 receipt = second
             index, by_filename = _match(receipt, transactions, itemised)
+
             if index is None:
                 if statement:
                     unmatched.append(receipt)
                 else:
                     added.append(receipt)
                 continue
+            if receipt.balance_from_statement and index != anchored_to:
+                # The answer was checked against one visit and has landed on
+                # another, because the anchor is found by the filename's date
+                # and the join prefers the printed timestamp. Storing it would
+                # attach a basket validated against visit A to visit B; worse,
+                # A stays free to anchor the next capture that day, so one
+                # statement figure would vouch for two baskets. And where the
+                # totals differ, `_disagrees` fires and accuses the retailer of
+                # contradicting itself over a disagreement this tool invented.
+                warnings.add(
+                    f"{' and '.join(receipt.captures)} was read into a basket "
+                    "that adds up, and the visit it adds up against is not the "
+                    "visit its own timestamp points at. Nothing here can say "
+                    "which is right, so its contents have not been stored.",
+                    locator=receipt.captures[0],
+                )
+                continue
             receipt = _settle_tax_against(transactions[index], receipt)
+
             disagreement = _disagrees(transactions[index], receipt)
             if disagreement is not None:
                 warnings.add(disagreement, locator=receipt.captures[0])
@@ -580,6 +577,32 @@ def _itemise(
             itemised[index] = _with_items(
                 transactions[index], receipt, by_name, stamp_trusted=not by_filename
             )
+            if receipt is second:
+                # Said AFTER the row is written, not before. Emitted at the
+                # point the answer was accepted, it claimed the basket had been
+                # kept while `_match` and `_disagrees` could still refuse it —
+                # and the report then carried two sentences about one capture
+                # that contradicted each other, with nothing retracting the
+                # first.
+                #
+                # Which figure the answer was checked against is part of the
+                # claim, not a detail. Against the receipt's own printed total
+                # it is the page checking itself; against the statement it is
+                # the statement's figure plus the engine's own reading of the
+                # page, which is what `from_reply` requires on that route.
+                against = (
+                    "the total the points statement gives for that visit, "
+                    "together with the amounts the engine did read off the page"
+                    if second.balance_from_statement
+                    else "the total printed on the receipt"
+                )
+                warnings.info(
+                    f"{' and '.join(receipt.captures)} would not add up as read, "
+                    f"and {model.model} read it into a basket that does. The "
+                    f"answer was checked against {against} — nothing that read "
+                    "the picture had a hand in it, and only an answer that "
+                    "reconciles is kept, so this one has been."
+                )
 
     if engine:
         # `OcrUnavailable` is not only "the engine is not installed" — it also
@@ -721,8 +744,15 @@ def _anchor_for(
     receipt: rc.Receipt,
     transactions: list[Transaction],
     taken: dict[int, Transaction],
-) -> Decimal | None:
-    """The statement's total for this visit, to check a model's answer against.
+) -> tuple[int | None, Decimal | None]:
+    """The statement's total for this visit, and which visit it came from.
+
+    The index matters as much as the figure. The caller compares it against the
+    visit `_match` settles on and refuses the answer if they differ: this key
+    is the filename's date and `_match` prefers the printed timestamp, so the
+    two can name different visits, and a basket checked against one visit must
+    never be stored against another.
+
 
     Only reached when the page's own printed total could not be read, which on
     a right-clipped capture is the same event that cost every amount its last
@@ -738,24 +768,26 @@ def _anchor_for(
     """
     date = rc.capture_date(receipt.captures[0])
     if date is None:
-        return None
+        return None, None
     fits = [
-        txn
+        (index, txn)
         for index, txn in enumerate(transactions)
         if index not in taken
         and txn.occurred_at.startswith(date)
         and txn.total_pre_discount is not None
     ]
     if len(fits) != 1:
-        return None
-    return Decimal(str(fits[0].total_pre_discount))
+        return None, None
+    index, txn = fits[0]
+    return index, Decimal(str(txn.total_pre_discount))
 
 
 def _adjudicate(
     receipt: rc.Receipt,
     by_name: dict,
     where: ollama.Availability,
-    anchor: Decimal | None = None,
+    *,
+    anchor: Decimal | None,
 ) -> rc.Receipt | None:
     """Ask a local model about a page the engine could not read into a basket.
 
@@ -997,7 +1029,7 @@ def _unreconciled(receipt: rc.Receipt, short: Decimal, model, *, statement: bool
     tried = (
         f" {model.model} was asked about it as well and could not either." if model.usable else ""
     )
-    if receipt.clipped:
+    if receipt.clipped and receipt.balance is None:
         # Checked BEFORE the no-total branch, because a clip causes that too
         # and the reader would otherwise be sent looking for a second capture
         # that was never taken. The amount column runs into the right edge, so

@@ -95,7 +95,11 @@ AMOUNT = re.compile(r"^[$§s]?\s*(?P<value>-?\d{1,3}(?:,\d{3})*\.\d{2}|-?\d+\.\d
 
 #: Lines that are the receipt's own furniture rather than a purchase.
 TAX = re.compile(r"\bTAX\b", re.IGNORECASE)
-BALANCE = re.compile(r"\bBAL[A-Z]*E\b", re.IGNORECASE)
+#: Bounded rather than `[A-Z]*`, which backtracks quadratically over a long
+#: uppercase run with no closing E — and a description now reaches it from a
+#: model's answer.
+BALANCE = re.compile(r"\bBAL[A-Z]{0,8}E\b", re.IGNORECASE)
+
 CARD_BLOCK = re.compile(r"^\W*Card\b", re.IGNORECASE)
 #: How the receipt names what paid. Only used to recognise the tender line in a
 #: MODEL's answer — the engine's reading finds it by position, because the last
@@ -157,10 +161,11 @@ class Receipt:
     #: the last digit of every amount on the page is cut through. See `_clipped`.
     clipped: bool = False
     #: True when the total this was checked against came from the points
+    #: statement rather than off the page. On that route the statement's figure
+    #: is checked together with the engine's own reading of the page, because
+    #: on its own it is the same check `_disagrees` makes downstream — see
+    #: `from_reply` and `_corroborates`.
 
-    #: statement rather than off the page. Still a figure no transcriber
-    #: produced — see `from_reply` — but a different document, and the reader
-    #: is told which.
     balance_from_statement: bool = False
 
     def with_tax_as_item(self) -> Receipt:
@@ -374,11 +379,41 @@ def _clipped(transcript: Transcript) -> bool:
     """
     if transcript.money_column is None:
         return False
+    # AMOUNTS, not every word that lands in the column. The column is located
+    # with a margin of left padding, so it also catches the trailing number
+    # group on the stamp line, the tender's wording and the card block — any of
+    # which can touch the edge of a page whose amounts are nowhere near it. The
+    # calibration below was measured on amount ink; measuring anything else
+    # made the threshold uncalibratable and told readers a healthy capture was
+    # cut off.
     right = max(
-        (word.right for line in transcript.lines for word in line.within(transcript.money_column)),
+        (
+            word.right
+            for line in transcript.lines
+            if not _furniture_line(line, transcript.money_column)
+            for word in line.within(transcript.money_column)
+            if any(character.isdigit() for character in word.text)
+        ),
         default=None,
     )
     return right is not None and (transcript.width - right) < CLIP_MARGIN
+
+
+def _furniture_line(line: Line, column: Box) -> bool:
+    """The stamp and the card block, which `read_capture` also steps over.
+
+    They are the reason this cannot simply take the rightmost word in the
+    column: the stamp ends in a run of digits and the card block in a masked
+    number, either of which can sit against the edge of a page whose amounts
+    are well clear of it.
+
+    Any word carrying a digit counts on the lines that remain, rather than only
+    a well-formed amount. A clip severe enough to stop every amount parsing is
+    the case this flag exists for, and requiring a parse would switch it off
+    exactly there.
+    """
+    left = _left_of_money(line, column).strip()
+    return bool(STAMP.search(left) or CARD_BLOCK.match(left))
 
 
 def _reached_the_end(transcript: Transcript) -> bool:
@@ -591,6 +626,11 @@ def _joined(parts: list[Receipt], *, greedy: bool = False, trims: tuple = ()) ->
             # One clipped half clips the join: the amounts it contributed are
             # cut whatever the other half looked like.
             clipped=joined.clipped or part.clipped,
+            # Named even though stitching happens before any model is asked, so
+            # it is always False here today. Every field this function forgot
+            # has become a bug — `tax_inferred` once, `clipped` a second time —
+            # and the cost of naming one that cannot yet be set is nothing.
+            balance_from_statement=(joined.balance_from_statement or part.balance_from_statement),
         )
     return joined
 
@@ -812,7 +852,19 @@ def from_reply(reply: dict, like: Receipt, *, anchor: Decimal | None = None) -> 
     for index, row in enumerate(rows, start=1):
         if not isinstance(row, dict):
             return None
-        if _is_furniture(str(row.get("description") or "")):
+        description = _clean(str(row.get("description") or ""))[:MAX_DESCRIPTION]
+        amount = _decimal(row.get("amount"))
+        if amount is None:
+            # One unreadable amount voids the answer rather than costing one
+            # line. A basket missing a line still adds up if the model also
+            # adjusted the total, and skipping quietly is how that gets stored.
+            #
+            # Checked BEFORE the furniture test, not after. The other order let
+            # a row the model happened to name `TAX` carry any garbage it liked
+            # and be dropped in silence, which took the rule out of the only
+            # part of the answer that is not checked by arithmetic.
+            return None
+        if _is_furniture(description, amount, reply):
             # The prompt asks for purchases only and says so twice. A 30B model
             # returned the TAX line, the BALANCE line and the weight qualifier
             # above a weighed item as three more purchases, the last of them
@@ -822,45 +874,51 @@ def from_reply(reply: dict, like: Receipt, *, anchor: Decimal | None = None) -> 
             # these are the receipt's own furniture and the format layer
             # already knows their shape.
             continue
-
-        amount = _decimal(row.get("amount"))
-        if amount is None:
-            # One unreadable amount voids the answer rather than costing one
-            # line. A basket missing a line still adds up if the model also
-            # adjusted the total, and skipping quietly is how that gets stored.
-            return None
-        lines.append(
-            ReceiptLine(
-                description=_clean(str(row.get("description") or "")),
-                amount=amount,
-                row=index,
-            )
-        )
+        lines.append(ReceiptLine(description=description, amount=amount, row=index))
     if not lines:
         return None
+
     # The most a tax can be. Against the printed total where there is one, and
     # against the statement's own figure where there is not — never None, so
     # the bound is never quietly skipped on the path that has no printed total.
     ceiling = like.balance if like.balance is not None else anchor
     if ceiling is None:
+        # Nothing to check the answer against, by either route.
         return None
     tax = _tax_for(reply, like, ceiling)
     if tax is None:
         return None
-    if like.balance is None:
-        if anchor is None:
-            # Nothing to check the answer against.
-            return None
-        # The statement's figure standing in for the printed one. It is the
-        # SAME kind of fact: a number no transcriber produced, from a document
-        # the model never saw. On a right-clipped capture it is the only one
-        # left, because the clip takes the printed total along with everything
-        # else — and that is exactly the page the model is being asked about.
+    if sum((abs(item.amount) for item in lines), Decimal("0.00")) > ceiling * MAX_GROSS:
+        # The gate is a check on the SUM, and a sum says nothing about its
+        # parts: a pair of offsetting lines at a thousand pounds each nets to
+        # zero, passes every arithmetic check there is, and puts two invented
+        # products into Products and Prices. `_tax_for`'s docstring used to
+        # claim that was already impossible. It was not.
         #
-        # Expressed as a balance so `foots()` is unchanged, and note what that
-        # makes the check: subtotal + tax - (anchor + tax), which is
-        # subtotal - anchor. The tax cancels, so the one figure still authored
-        # by the model cannot move the result.
+        # Measured rather than guessed, and measured on the GROSS rather than
+        # on any single line, because a discount legitimately makes one line
+        # bigger than the whole receipt — a 91.40 item against a 87.65 balance
+        # is an ordinary page once its discount is counted. Across the real
+        # corpus the worst gross-to-total ratio is 2.2 and the worst single
+        # line is 0.95 of its receipt; the offsetting-pair attack runs at 21.
+        return None
+
+    if like.balance is None:
+        # The statement's figure standing in for the printed one, and on its
+        # own it is NOT enough. `foots()` here reduces to `subtotal - anchor`,
+        # and `_disagrees` downstream compares the same subtotal against the
+        # same statement row — so the two checks are one check, and a single
+        # fabricated line worth exactly the statement's total passes both.
+        # Measured: a one-line answer reading `SECURITY ALERT: call …` was
+        # stored against a real visit.
+        #
+        # So the engine's own reading is the second fact. It is an independent
+        # transcription the model had no hand in, and a clip corrupts the last
+        # digit of an amount without inventing or deleting lines — so whatever
+        # the engine managed to read must still be in the answer.
+        if not _corroborates(like.lines, lines, tax):
+            return None
+        # Expressed as a balance so `foots()` is unchanged.
         return replace(
             like,
             lines=tuple(lines),
@@ -872,19 +930,10 @@ def from_reply(reply: dict, like: Receipt, *, anchor: Decimal | None = None) -> 
     claimed = _decimal(reply.get("balance"))
     if claimed is None or claimed != like.balance:
         return None
-    return Receipt(
-        captures=like.captures,
-        lines=tuple(lines),
-        customer_id=like.customer_id,
-        tax=tax,
-        # The page's, never the reply's.
-        balance=like.balance,
-        tender=like.tender,
-        stamp=like.stamp,
-        complete=True,
-        tax_inferred=like.tax_inferred,
-        tax_description=like.tax_description,
-    )
+    # `replace`, not a fresh `Receipt`: enumerating the fields by hand is how
+    # this dropped `tax_inferred` once and `clipped` a second time. Every field
+    # not named here is the page's own, which is what it should be.
+    return replace(like, lines=tuple(lines), tax=tax, complete=True)
 
 
 #: The most lines one answer may claim. A page holds about thirty; the reply
@@ -892,12 +941,76 @@ def from_reply(reply: dict, like: Receipt, *, anchor: Decimal | None = None) -> 
 MAX_REPLY_LINES = 200
 
 
-def _is_furniture(description: str) -> bool:
-    """A line that is the receipt talking about itself, not something bought."""
+#: How many times its own total a basket's gross may come to before the reading
+#: stops being a reading. Discounts are negative lines, so the gross legitimately
+#: exceeds the total: measured across the real corpus the worst is 2.2. Five
+#: leaves that more than double the headroom and still refuses the offsetting
+#: pair that made this bound necessary, which runs at twenty-one.
+MAX_GROSS = 5
+
+
+#: How far a clip can move an amount. It cuts the last digit, so the most it can
+
+#: change is that digit's place: `7.49` came back as `7.45`, `0.39` as `0.35`.
+#: A tenth covers every corruption measured on the real corpus with room to
+#: spare, and is far tighter than the gap between a real line and an invented one.
+CLIP_REACH = Decimal("0.10")
+
+
+def _corroborates(read: tuple, claimed: list, tax: Decimal) -> bool:
+    """Does the answer still contain what the engine managed to read?
+
+    The check that makes the anchor path safe. Every amount the engine got off
+    the page has to be matched, one for one, by an amount in the model's answer
+    — within `CLIP_REACH`, because a clipped digit is exactly what sent this
+    page to a second reader in the first place.
+
+    Matched greedily against the closest candidate, and the model's tax counts
+    as one of them: on a capture that ran off the bottom, `_settle` has no
+    balance to work back from, so the tax line is still sitting among the
+    purchases it read.
+
+    This is what a fabricated answer cannot do. It can hit one aggregate — the
+    statement's total is a single number and the page prints it — but it cannot
+    also reproduce ten amounts a different reader independently pulled off the
+    same pixels.
+    """
+    candidates = [item.amount for item in claimed] + [tax]
+    for amount in (item.amount for item in read):
+        nearest = min(candidates, key=lambda c: abs(c - amount), default=None)
+        if nearest is None or abs(nearest - amount) > CLIP_REACH:
+            return False
+        candidates.remove(nearest)
+    return True
+
+
+#: The longest a line's name may be. A receipt line is twenty or thirty
+
+#: characters; the transport cap is four megabytes, and the row cap is a count,
+#: so nothing between them stopped one answer putting a megabyte of model-authored
+#: text into `description_raw` — which is also the key a product is identified by
+#: where the retailer disclosed no code. Measured: a 50,000-character name was
+#: stored verbatim.
+MAX_DESCRIPTION = 200
+
+
+def _is_furniture(description: str, amount: Decimal, reply: dict) -> bool:
+    """A line that is the receipt talking about itself, not something bought.
+
+    The tender line is recognised by its AMOUNT, not by its wording. Matching
+    the word alone dropped real purchases: `TENDER` is a whole-word search for
+    CREDIT, DEBIT, CASH, CHECK, EBT or GIFT, and a shop that sells gift cards
+    prints `GIFT CARD 25` as an ordinary line. It was deleted from the basket
+    in silence, the sum then came up short, and the visit was quarantined for
+    arithmetic that looked wrong for a reason nobody could see. What actually
+    identifies the tender line is that it repeats the balance — which is how
+    `_settle` finds it in the engine's own reading, by position and by the
+    echo, never by the word.
+    """
     text = description.strip()
-    return bool(
-        TAX.search(text) or BALANCE.search(text) or QUANTITY.match(text) or TENDER.search(text)
-    )
+    if TAX.search(text) or BALANCE.search(text) or QUANTITY.match(text):
+        return True
+    return bool(TENDER.search(text)) and amount == _decimal(reply.get("balance"))
 
 
 def _tax_for(reply: dict, like: Receipt, ceiling: Decimal) -> Decimal | None:
@@ -912,10 +1025,17 @@ def _tax_for(reply: dict, like: Receipt, ceiling: Decimal) -> Decimal | None:
 
     So tax comes off the page wherever the page could be read. Where it could
     not, the reply's figure is accepted only within the range a tax can occupy:
-    at least nothing, at most the whole total. That bounds the subtotal to
-    [0, balance] and closes the inflating direction outright — a basket can no
-    longer claim more than the receipt says was paid.
+    at least nothing, at most `ceiling`.
+
+    `ceiling` is the printed total where the page had one and the statement's
+    figure for the visit where it did not. Note what that bound does NOT do,
+    because this docstring used to claim it: it bounds the SUM, and a sum says
+    nothing about its parts. A pair of offsetting lines nets to zero and walks
+    through it. `from_reply` bounds the gross for that, and on the route with
+    no printed total `_corroborates` is what actually pins the basket — there
+    the tax cancels out of the check entirely.
     """
+
     if like.tax is not None and not like.tax_inferred:
         return like.tax
     tax = _decimal(reply.get("tax"))
@@ -935,7 +1055,7 @@ def _tax_for(reply: dict, like: Receipt, ceiling: Decimal) -> Decimal | None:
 #: back with a leading colon, `_decimal` returned None for all of them, and
 #: `from_reply` voids the whole answer on one unreadable amount — so the
 #: adjudication tier read every page correctly and stored nothing, ever.
-_CURRENCY_MARKS = "$§s:  "
+_CURRENCY_MARKS = "$§s:"
 
 
 def _decimal(value: object) -> Decimal | None:

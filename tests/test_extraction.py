@@ -391,3 +391,13 @@ class TestWhatTheLogSaysAboutAFileItCouldNotRead:
 
         assert "history.xls" in said
         assert "XML Spreadsheet 2003" in said, "the actionable half was being discarded"
+
+    def test_a_document_with_no_stored_path_is_still_logged(self, caplog):
+        """The guard in front of the image check, which exists because
+        `Path(None)` raises. A document with nowhere to read from is a real
+        failure and has to reach the log as one rather than as a TypeError."""
+        nowhere = SourceDocument(original_filename="history.xls", sha256="0" * 64, path=None)
+        with caplog.at_level(logging.WARNING):
+            extract_all((nowhere,))
+        (record,) = caplog.records
+        assert "no stored path" in record.getMessage()

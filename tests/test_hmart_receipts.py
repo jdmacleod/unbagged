@@ -15,6 +15,7 @@ from decimal import Decimal
 
 import pytest
 
+from tests import receiptimage
 from tests.receiptimage import build_receipt
 from unbagged import transcription as tr
 from unbagged.adapters.hmart import receipt as rc
@@ -485,11 +486,21 @@ class TestTheOtherFreeVariableInTheGate:
         deflating = dict(self.FABRICATED, tax="25.00")
         assert rc.from_reply(deflating, self.page(tax_inferred=True)) is None
 
+    def test_a_line_worth_more_than_the_whole_receipt_is_refused(self):
+        """It used to be built and then quarantined by the sum. Refusing it
+        here is stronger: the sum says nothing about its parts, so a pair of
+        offsetting lines at a thousand each would have passed."""
+        assert rc.from_reply(self.FABRICATED, self.page(tax=Decimal("1.00"))) is None
+
     def test_the_page_wins_where_the_page_could_be_read(self):
-        """And the answer then has to survive the gate on its own merits."""
-        found = rc.from_reply(self.FABRICATED, self.page(tax=Decimal("1.00")))
+        """The tax comes off the page, not out of the reply."""
+        honest = {
+            "lines": [{"description": "RICE", "amount": "19.00"}],
+            "tax": "-1230.00",
+            "balance": "20.00",
+        }
+        found = rc.from_reply(honest, self.page(tax=Decimal("1.00")))
         assert found.tax == Decimal("1.00"), "not the reply's -1230.00"
-        assert rc.foots(found) == Decimal("1231.00"), "quarantined"
 
     def test_a_bounded_tax_is_still_accepted_where_the_page_could_not(self):
         honest = {
@@ -557,6 +568,7 @@ class TestThePurchaseTakenForTaxKeepsItsName:
     out of Products and Prices, which key on a name. The retailer printed one.
     """
 
+    @needs_engine
     def test_the_restored_line_carries_the_description_from_the_page(self):
         page = rc.read_capture(
             tr.transcribe(
@@ -643,14 +655,13 @@ class TestWhatAModelActuallySendsBack:
     model obeys is a reader that does not work.
     """
 
-    def page(self, **kw):
+    def page(self):
         return rc.Receipt(
             captures=("Transaction_030419.png",),
             lines=(line("RICE", "19.00"),),
             balance=Decimal("39.74"),
             tax=Decimal("0.00"),
             complete=True,
-            **kw,
         )
 
     def test_the_currency_mark_it_sends_is_not_an_unreadable_amount(self):
@@ -685,11 +696,28 @@ class TestWhatAModelActuallySendsBack:
         assert [item.description for item in found.lines] == ["THAI BASIL", "CHINESE BROCCOLI"]
         assert found.subtotal == Decimal("11.34")
 
+    def furniture(self, text, amount="1.00", balance="99.99"):
+        return rc._is_furniture(text, Decimal(amount), {"balance": balance})
+
     def test_a_weight_qualifier_is_recognised_however_it_is_written(self):
         for text in ("1.54 lb @ 3.99 / lb", "2 @ 1.50", "0.47 lb @ 1.49 / lb"):
-            assert rc._is_furniture(text), text
+            assert self.furniture(text), text
         for text in ("THAI BASIL", "WT DISCOUNT", "CL TOFU", "PK 90% LEAN GROUND"):
-            assert not rc._is_furniture(text), text
+            assert not self.furniture(text), text
+
+    def test_a_product_named_after_a_tender_is_still_a_purchase(self):
+        """`TENDER` is a whole-word search, and a shop that sells gift cards
+        prints `GIFT CARD 25` as an ordinary line. Matching the word alone
+        deleted it from the basket in silence; the sum then came up short and
+        the visit was quarantined for arithmetic that looked wrong for a reason
+        nobody could see."""
+        for text in ("GIFT CARD 25", "EBT ELIGIBLE RICE", "CREDIT - RETURNED ITEM", "CASH BACK"):
+            assert not self.furniture(text, amount="25.00", balance="99.99"), text
+
+    def test_the_tender_line_is_recognised_by_its_echo_of_the_balance(self):
+        """What actually identifies it, and how `_settle` finds it too."""
+        assert self.furniture("CREDIT CARD", amount="99.99", balance="99.99")
+        assert not self.furniture("CREDIT CARD", amount="12.00", balance="99.99")
 
 
 class TestACaptureCutThroughItsOwnAmounts:
@@ -713,9 +741,11 @@ class TestACaptureCutThroughItsOwnAmounts:
         ]
         return rc.read_capture(tr.transcribe(build_receipt(rows, **kw)), "Transaction_030419.png")
 
+    @needs_engine
     def test_a_clipped_capture_says_so(self):
         assert self.page(clip_digits=1).clipped is True
 
+    @needs_engine
     def test_an_ordinary_capture_does_not(self):
         """No false positive: the real corpus separates 0px from 4px with
         nothing in between, and 45 of 46 captures sit at 4px or wider."""
@@ -816,3 +846,140 @@ class TestWhenThePageHasNoTotalLeftToCheckAgainst:
         found = rc.from_reply(self.HONEST, printed, anchor=Decimal("99.00"))
         assert found.balance == Decimal("13.69")
         assert found.balance_from_statement is False
+
+
+class TestWhatTheAnchoredGateStillRefuses:
+    """Found by /ship's coverage pass on 2026-09-16.
+
+    The route that stands the statement's figure in for a printed total has two
+    free variables where the printed route has one, and each of them was
+    reachable by a path no test walked: a reply that names no tax at all, a tax
+    bounded against the anchor rather than against a balance, and an answer that
+    the furniture filter empties. Every one of them has to end in a refusal or
+    in a basket that was checked.
+    """
+
+    def unreadable(self):
+        """A page the engine got no total off: the clip took it."""
+        return rc.Receipt(
+            captures=("Transaction_030419.png",),
+            lines=(line("APPLE", "7.45"),),
+            balance=None,
+            complete=False,
+            clipped=True,
+        )
+
+    def test_an_answer_that_names_no_tax_is_checked_against_the_anchor_alone(self):
+        """A reply with no `tax` field at all, against a page that read none
+        either. Nothing is known about tax from either side, so it is nothing —
+        and the check is then the statement's figure against the lines."""
+        reply = {
+            "lines": [
+                {"description": "APPLE", "amount": ": 7.49"},
+                {"description": "PEAR", "amount": ": 5.20"},
+            ]
+        }
+        found = rc.from_reply(reply, self.unreadable(), anchor=Decimal("12.69"))
+        assert found is not None
+        assert found.tax == Decimal("0.00")
+        assert found.balance == Decimal("12.69")
+        assert rc.foots(found) is None
+
+    def test_a_tax_larger_than_the_statements_total_is_refused(self):
+        """The ceiling is the anchor where there is no printed total, so the
+        inflating direction is closed on this route too: an answer reaching for
+        a tax bigger than the whole visit is reaching for the residual."""
+        reply = {
+            "lines": [{"description": "APPLE", "amount": ": 7.49"}],
+            "tax": "50.00",
+            "balance": "57.49",
+        }
+        assert rc.from_reply(reply, self.unreadable(), anchor=Decimal("12.69")) is None
+
+    def test_an_answer_of_nothing_but_furniture_is_no_answer(self):
+        """Dropping the receipt's own furniture must not be able to leave an
+        empty basket that reconciles against a visit by accident."""
+        reply = {
+            "lines": [
+                {"description": "TAX", "amount": ": 0.00"},
+                {"description": "*** BALANCE", "amount": ": 12.69"},
+                {"description": "CREDIT CARD", "amount": ": 12.69"},
+            ],
+            "tax": "0.00",
+            "balance": "12.69",
+        }
+        assert rc.from_reply(reply, self.unreadable(), anchor=Decimal("12.69")) is None
+
+    def test_a_reply_row_that_is_not_a_row_voids_the_whole_answer(self):
+        """Rather than costing one line. A basket missing a line still adds up
+        if the rest of the answer was written to match, and skipping quietly is
+        how that gets stored."""
+        reply = {
+            "lines": [
+                {"description": "APPLE", "amount": ": 7.49"},
+                "PEAR : 5.20",
+            ],
+            "tax": "0.00",
+            "balance": "12.69",
+        }
+        assert rc.from_reply(reply, self.unreadable(), anchor=Decimal("12.69")) is None
+
+
+class TestWhereTheClipThresholdSits:
+    """Found by /ship's testing specialist on 2026-09-16.
+
+    `CLIP_MARGIN` is justified by a measurement — 0px on the one clipped
+    capture, 4px on the tightest of the other 45 — and nothing pinned it. The
+    only negative test used the drawing default of 13px, six times the
+    discriminating distance, so widening the constant to 6 left the whole suite
+    green while it told readers that 45 of 46 good captures were cut off.
+    """
+
+    def page(self, **kw):
+        rows = [
+            ("", "Customer ID: 40100200300", None),
+            ("", "APPLE", "7.49"),
+            ("", "TAX", "0.00"),
+            ("***", "BALANCE", "7.49"),
+            ("", "CREDIT CARD", "7.49"),
+            ("", "2019-03-04 11:07:00  2  118  0042", None),
+        ]
+        return rc.read_capture(tr.transcribe(build_receipt(rows, **kw)), "Transaction_030419.png")
+
+    @needs_engine
+    def test_the_tightest_good_capture_is_not_called_clipped(self, monkeypatch):
+        """4px is the narrowest margin in the real corpus that is NOT a clip."""
+        monkeypatch.setattr(receiptimage, "RIGHT_MARGIN", 4)
+        assert self.page().clipped is False
+
+    @needs_engine
+    def test_a_page_flush_against_its_amounts_is(self, monkeypatch):
+        monkeypatch.setattr(receiptimage, "RIGHT_MARGIN", 0)
+        assert self.page().clipped is True
+
+
+class TestWhatTheClipCheckMustNotMeasure:
+    """Found by /ship's red team on 2026-09-16.
+
+    `_clipped` took the rightmost word ANYWHERE in the money column. The column
+    is located with a margin of left padding, so it also catches the trailing
+    number group on the stamp line and the card block — either of which can sit
+    against the edge of a page whose amounts are well clear of it. The docstring
+    and NOTES.md both said it measured amounts, and the calibration was made on
+    amount ink, so the code and its own justification disagreed.
+    """
+
+    @needs_engine
+    def test_a_stamp_running_to_the_edge_is_not_a_clip(self, monkeypatch):
+        rows = [
+            ("", "Customer ID: 40100200300", None),
+            ("", "APPLE", "7.49"),
+            ("", "TAX", "0.00"),
+            ("***", "BALANCE", "7.49"),
+            ("", "CREDIT CARD", "7.49"),
+            # Long enough that it runs past where the amounts stop.
+            ("", "2019-03-04 11:07:00  2  118  0042  0000000", None),
+        ]
+        page = rc.read_capture(tr.transcribe(build_receipt(rows)), "Transaction_030419.png")
+        assert page.balance == Decimal("7.49"), "the page read fine"
+        assert page.clipped is False, "the stamp is not the amount column"

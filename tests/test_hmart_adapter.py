@@ -979,6 +979,7 @@ class TestWhenOneCaptureFailsAndTheRestDoNot:
     were.
     """
 
+    @needs_engine
     def test_the_message_counts_what_failed_rather_than_the_whole_upload(
         self, tmp_path, source, monkeypatch
     ):
@@ -1021,7 +1022,7 @@ class TestWhichVisitSuppliesTheAnchor:
 
     def test_one_visit_that_day_supplies_its_total(self):
         visits = [self.visit("2019-03-04T11:07:00", 12.69)]
-        assert HMART._anchor_for(self.receipt(), visits, {}) == Decimal("12.69")
+        assert HMART._anchor_for(self.receipt(), visits, {}) == (0, Decimal("12.69"))
 
     def test_two_visits_that_day_supply_nothing(self):
         """Neither is more right, and guessing would check the answer against
@@ -1030,27 +1031,25 @@ class TestWhichVisitSuppliesTheAnchor:
             self.visit("2019-03-04T09:12:00", 12.69),
             self.visit("2019-03-04T17:40:00", 40.00),
         ]
-        assert HMART._anchor_for(self.receipt(), visits, {}) is None
+        assert HMART._anchor_for(self.receipt(), visits, {}) == (None, None)
 
     def test_a_visit_already_itemised_is_not_offered_again(self):
         visits = [
             self.visit("2019-03-04T09:12:00", 12.69),
             self.visit("2019-03-04T17:40:00", 40.00),
         ]
-        assert HMART._anchor_for(self.receipt(), visits, {0: visits[0]}) == Decimal("40.00")
+        assert HMART._anchor_for(self.receipt(), visits, {0: visits[0]}) == (1, Decimal("40.00"))
 
     def test_a_visit_with_no_amount_is_not_an_anchor(self):
-        assert (
-            HMART._anchor_for(self.receipt(), [self.visit("2019-03-04T11:07:00", None)], {}) is None
+        assert HMART._anchor_for(self.receipt(), [self.visit("2019-03-04T11:07:00", None)], {}) == (
+            None,
+            None,
         )
 
     def test_a_filename_with_no_date_has_no_anchor(self):
-        assert (
-            HMART._anchor_for(
-                self.receipt("scan.png"), [self.visit("2019-03-04T11:07:00", 1.0)], {}
-            )
-            is None
-        )
+        assert HMART._anchor_for(
+            self.receipt("scan.png"), [self.visit("2019-03-04T11:07:00", 1.0)], {}
+        ) == (None, None)
 
 
 class TestSayingWhoseMistakeItWas:
@@ -1064,6 +1063,7 @@ class TestSayingWhoseMistakeItWas:
     the failure this adapter exists to avoid.
     """
 
+    @needs_engine
     def test_an_unmatched_stamp_is_reported_as_a_misreading(self, tmp_path, source, monkeypatch):
         holder = TestWhenTheCapturesArrive()
         # Built from the committed fixture's own first row, like the suite
@@ -1095,3 +1095,179 @@ class TestSayingWhoseMistakeItWas:
         assert "could not read into any visit" in said
         assert "misread digit" in said
         assert "matches no visit in the statement" not in said
+
+
+class TestWhenTheModelsAnswerIsAccepted:
+    """Found by /ship's coverage pass on 2026-09-16.
+
+    Every test on this branch stopped at a refusal. `_adjudicate` returning an
+    answer, the sentence naming the figure that answer was checked against, and
+    the rebind that puts the model's basket in front of the join were reached
+    by nothing — so the half of this path that actually WRITES rows was the
+    untested half, including the whole of the statement-anchored route the
+    branch was opened for.
+    """
+
+    @pytest.fixture()
+    def usable(self, monkeypatch):
+        """A model the adapter believes it can reach."""
+        from unbagged.transcription import ollama
+
+        where = ollama.Availability(ollama.Reachability.OK, "", "localhost:11434", "a-model")
+        monkeypatch.setattr(HMART.ollama, "availability", lambda: where)
+        return where
+
+    @pytest.fixture()
+    def holder(self):
+        """The suite above, for its capture builder and its statement bundle."""
+        return TestWhenTheCapturesArrive()
+
+    @pytest.fixture()
+    def visit(self, source) -> dict:
+        row = read_tables(source).tables[0].rows[2]
+        stamp = row.value(2)[:19]
+        return {
+            "stamp": stamp,
+            "date": stamp[:10],
+            "name": f"Transaction_{stamp[5:7]}{stamp[8:10]}{stamp[2:4]}.png",
+            "amount": Decimal(row.value(4)),
+        }
+
+    def clipped(self, tmp_path, visit) -> SourceDocument:
+        """A capture cut through its own amount column.
+
+        The page the anchor exists for: the clip takes the last digit of every
+        amount AND the printed total, so the engine reads no balance off it and
+        there is nothing on the page left to check a second reader against.
+        """
+        from tests.receiptimage import build_receipt
+
+        path = tmp_path / visit["name"]
+        path.write_bytes(
+            build_receipt(
+                [
+                    ("", "Customer ID: 40100200300", None),
+                    ("", "ITEM 1", str(visit["amount"])),
+                    ("", "TAX", "0.00"),
+                    ("***", "BALANCE", str(visit["amount"])),
+                    ("", "CREDIT CARD", str(visit["amount"])),
+                    ("", f"{visit['stamp']}  2  118  0042", None),
+                ],
+                clip_digits=1,
+            )
+        )
+        return SourceDocument(original_filename=path.name, sha256="0" * 64, path=str(path), id=1)
+
+    def answers(self, monkeypatch, reply):
+        monkeypatch.setattr(HMART.vision, "read_receipt", lambda pages, where, opener=None: reply)
+
+    def honest(self, visit) -> dict:
+        """Two lines summing to what the statement says the visit cost."""
+        half = (visit["amount"] / 2).quantize(Decimal("0.01"))
+        return {
+            "lines": [
+                {"description": "ITEM ONE", "amount": f": {half}"},
+                {"description": "ITEM TWO", "amount": f": {visit['amount'] - half}"},
+            ],
+            "tax": "0.00",
+            "balance": str(visit["amount"]),
+        }
+
+    @needs_engine
+    def test_an_anchored_answer_is_stored_against_its_visit(
+        self, tmp_path, source, visit, usable, monkeypatch, holder
+    ):
+        """The page the engine lost the total off is itemised anyway, because
+        the statement supplies a total the model never saw."""
+        self.answers(monkeypatch, self.honest(visit))
+        parsed = holder.parse(tmp_path, source, self.clipped(tmp_path, visit))
+        txn = holder.visit_row(parsed, visit)
+        assert [item.description_raw for item in txn.items] == ["ITEM ONE", "ITEM TWO"]
+        assert sum(item.retail_amt for item in txn.items) == txn.total_pre_discount
+
+    @needs_engine
+    def test_the_reader_is_told_the_statement_supplied_the_total(
+        self, tmp_path, source, visit, usable, monkeypatch, holder
+    ):
+        """Which figure the answer was checked against is part of the claim.
+        Against the statement it is two documents agreeing, which is a stronger
+        thing to say than one document checking itself."""
+        self.answers(monkeypatch, self.honest(visit))
+        parsed = holder.parse(tmp_path, source, self.clipped(tmp_path, visit))
+        said = " ".join(w.message for w in parsed.warnings)
+        assert "the total the points statement gives for that visit" in said
+        assert "the total printed on the receipt" not in said
+
+    @needs_engine
+    def test_an_answer_checked_against_the_printed_total_says_so(
+        self, tmp_path, source, visit, usable, monkeypatch, holder
+    ):
+        """The other half of the same sentence. A page that DID print a total
+        is checked against it, and the anchor never enters."""
+        misread = holder.capture(tmp_path, visit, lines=[Decimal("5.00")], balance=visit["amount"])
+        self.answers(monkeypatch, self.honest(visit))
+        parsed = holder.parse(tmp_path, source, misread)
+        said = " ".join(w.message for w in parsed.warnings)
+        assert "the total printed on the receipt" in said
+        assert holder.visit_row(parsed, visit).items
+
+    @needs_engine
+    def test_a_fabricated_basket_is_refused_on_the_anchored_path(
+        self, tmp_path, source, visit, usable, monkeypatch, holder
+    ):
+        """The safety property, at the layer that writes rows. The anchor is
+        matched on a date alone, which is only safe because a wrong one fails
+        the arithmetic rather than attaching a basket to the wrong visit."""
+        self.answers(
+            monkeypatch,
+            {
+                "lines": [{"description": "INVENTED", "amount": ": 999.00"}],
+                "tax": "0.00",
+                "balance": ": 999.00",
+            },
+        )
+        parsed = holder.parse(tmp_path, source, self.clipped(tmp_path, visit))
+        assert all(not txn.items for txn in parsed.transactions)
+        said = " ".join(w.message for w in parsed.warnings)
+        assert "read it into a basket that does" not in said
+        assert "cut off at its right edge" in said
+
+    @needs_engine
+    def test_a_model_authored_tax_cannot_buy_a_wrong_basket(
+        self, tmp_path, source, visit, usable, monkeypatch, holder
+    ):
+        """The hole `_tax_for` was written to close, on the route that has no
+        printed total. The balance is set to `anchor + tax`, so `foots` reduces
+        to `subtotal - anchor` and a tax sized to absorb the difference cancels
+        out of the check instead of paying for it."""
+        inflated = visit["amount"] + Decimal("8.00")
+        self.answers(
+            monkeypatch,
+            {
+                "lines": [{"description": "INVENTED", "amount": f": {inflated}"}],
+                # Within the range a tax may occupy, and exactly the residual.
+                "tax": "8.00",
+                "balance": str(inflated),
+            },
+        )
+        parsed = holder.parse(tmp_path, source, self.clipped(tmp_path, visit))
+        assert all(not txn.items for txn in parsed.transactions)
+        assert not any("read it into a basket that does" in w.message for w in parsed.warnings)
+
+    @needs_engine
+    def test_the_cap_on_how_many_pages_a_model_is_asked_about_holds(
+        self, tmp_path, source, visit, usable, monkeypatch, holder
+    ):
+        """The other side of the same `if`, and the only thing standing between
+        an upload of unreadable captures and a call per capture. With the cap
+        spent, the page is set aside unread rather than sent."""
+        asked = []
+        monkeypatch.setattr(HMART, "MAX_ADJUDICATIONS", 0)
+        monkeypatch.setattr(
+            HMART.vision,
+            "read_receipt",
+            lambda pages, where, opener=None: asked.append(1),
+        )
+        parsed = holder.parse(tmp_path, source, self.clipped(tmp_path, visit))
+        assert asked == [], "a model was asked past the cap"
+        assert all(not txn.items for txn in parsed.transactions)

@@ -52,14 +52,13 @@ PROMPT = (
     "receipt by hand, and ignore the card details at the bottom entirely."
 )
 
-#: What the prompt asks for and what a model returns are different things, and
-#: the difference is not recoverable by asking more firmly. Measured against a
-#: 30B vision model on the real corpus: it returned the TAX line, the BALANCE
-#: line and a weight qualifier as purchases despite two sentences forbidding
-#: exactly that, and prefixed every amount with `: ` despite being told to send
-#: no currency symbol. `receipt.from_reply` drops the furniture and `_decimal`
-#: tolerates the mark, because a reader that depends on a model obeying is a
-#: reader that does not work.
+# What the prompt asks for and what a model returns are different things, and
+# the difference is not recoverable by asking more firmly: a 30B model returned
+# the lines these sentences forbid, and a currency mark it was told not to send.
+# `receipt.from_reply` drops the furniture and `receipt._decimal` tolerates the
+# mark, because a reader that depends on a model obeying is a reader that does
+# not work. The measurements are recorded there, beside the code that acts on
+# them, rather than repeated here.
 
 
 def read_receipt(pages: list[bytes], where: ollama.Availability, opener=None) -> dict | None:

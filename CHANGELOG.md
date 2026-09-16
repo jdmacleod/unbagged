@@ -37,27 +37,33 @@ from a specific response. See `CONTRIBUTING.md`.
   doubled the basket. Both are now handled where the answer is read, because a
   reader that works only when a model obeys is a reader that does not work.
 
-- **A capture cut off at its right edge is read, and said so.** The narrowest
-  page in a real response ran its amount column into the edge of the picture,
+- **A capture cut off at its right edge is read, and said so.** A capture whose
+  amount column runs into the edge of the picture cuts
+
   cutting through the last digit of every amount rather than removing it. Some
   came back as a different digit with nothing to show they had changed; others
   stopped looking like amounts at all and their rows were dropped, the printed
   total among them. The page is now recognised as clipped from the position of
-  its own ink, and a visit it belongs to is checked against the total the
-  points statement gives instead — a figure from a different document that
-  nothing reading the picture had a hand in. The receipt that could not be read
-  at all now itemises, and the warning for one that still cannot says the
+  its own ink, and the reading is checked against two things neither of which
+  came out of the model: the total the points statement gives for that visit,
+  and the amounts the deterministic reader did manage to pull off the same
+  pixels. The statement's figure alone is not enough — it is the same number a
+  later check already compares against, so on its own it would let a single
+  invented line worth exactly that total through. A receipt that could not be
+  read at all now itemises, and the warning for one that still cannot says the
   capture is too narrow rather than telling you to upload a second half that
   does not exist.
 
+
 - **Three messages blamed the response for this tool's own misreadings.** A
   capture whose printed timestamp reached no visit was reported as disagreeing
-  with the statement, when both real instances were a single digit misread off
-  the till's own stamp. A file that could not be read logged its name and
-  discarded the sentence explaining what to do about it. And an image logged as
-  a failure every time, though an image reaching the transcription tier is the
-  routing working — a statement and 46 captures wrote 46 warnings saying a PNG
-  could not be extracted.
+  with the statement, when the cause was a single digit misread off the till's
+  own stamp. A file that could not be read logged its name and discarded the
+  sentence explaining what to do about it. And an image logged as a failure
+  every time, though an image reaching the transcription tier is the routing
+  working, so an upload of captures wrote one such warning per file and buried
+  the ones that mattered.
+
 
 ## [0.15.0] - 2026-09-16
 
@@ -87,7 +93,10 @@ changes what was stored.
   out of the same reader — and where the retailer also sent a statement of what
   each visit cost, against that too. A receipt that fails either check is named
   in a warning and its visit keeps the total it already had. On the response
-  this was built against, all 44 receipts reconciled to the cent.
+  this was built against, 43 of 44 receipts reconciled to the cent; the one
+  that did not was clipped when it was captured, so every amount on it lost
+  part of its last digit.
+
 
 
   Reading whole pages at once is not safe for this: the engine drops a minus

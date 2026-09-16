@@ -94,6 +94,17 @@ class ExtractionError(Exception):
     failure: nothing downstream can do anything useful with the bytes."""
 
 
+class NotTextBearing(ExtractionError):
+    """A file this layer is not the reader for, rather than one that is broken.
+
+    An image is the case: the transcription tier reads those, so the exception
+    is the routing working. A subclass rather than a separate type, so every
+    existing `except ExtractionError` still catches it — and carried distinctly
+    so `extract_all` can tell a routing decision from a failure without opening
+    the file a second time to re-derive what `classify` already decided.
+    """
+
+
 @dataclass(frozen=True)
 class ExtractedDocument:
     """Pages of text, plus enough identity to attach provenance to them."""
@@ -582,7 +593,11 @@ def extract(document: SourceDocument, max_pages: int | None = None) -> Extracted
         raise ExtractionError(f"{document.original_filename} has no stored path")
     path = Path(document.path)
     if not path.is_file():
-        raise ExtractionError(f"{document.original_filename} is not on disk at {path}")
+        # The NAME, not the path. `document.path` points into `data/incoming/`
+        # and carries a content-hash prefix, and this message is now logged
+        # verbatim — a path the project treats as off-limits does not belong in
+        # a log line to buy a reader nothing they did not already know.
+        raise ExtractionError(f"{document.original_filename} is not on disk")
 
     suffix = path.suffix.lower()
     kind = classify(document, path)
@@ -621,7 +636,7 @@ def extract(document: SourceDocument, max_pages: int | None = None) -> Extracted
         # arrive as images at all — not, as this used to, that "an image
         # reaches an adapter as a transcript", which described a design that
         # was replaced before it shipped and names nothing a reader can act on.
-        raise ExtractionError(
+        raise NotTextBearing(
             f"{document.original_filename} is an image, and no retailer this "
             "knows about answers with one of this shape. Screen captures of a "
             "receipt are read when their filenames are the ones the store's "
@@ -675,26 +690,17 @@ def extract_all(documents: tuple[SourceDocument, ...]) -> list[ExtractedDocument
     for document in documents:
         try:
             extracted.append(extract(document))
+        except NotTextBearing as exc:
+            # Not a failure: the transcription tier reads these. It was being
+            # logged as a warning anyway, once per file, so a healthy upload of
+            # a statement and its receipt captures wrote one scary line per
+            # capture — both untrue and the loudest thing in the log.
+            log.debug("%s routes to the transcription tier: %s", document.original_filename, exc)
         except ExtractionError as exc:
-            # Two different events, logged two different ways.
-            #
-            # An image ALWAYS raises here: this layer turns bytes into text and
-            # a receipt capture is read by the transcription tier instead, so
-            # the exception is the routing working. It was being logged as a
-            # warning anyway, once per file — a healthy upload of a statement
-            # and 46 captures wrote 46 lines saying a PNG could not be
-            # extracted, which is both untrue and the loudest thing in the log.
-            #
-            # Anything else is a real failure, and it is logged with the REASON
-            # rather than the filename alone. `extract` raises with a sentence
-            # written for a person: which kind of file this is, what would have
-            # had to read it, and what to do next. "could not extract <file>"
-            # threw all of that away and left nothing anyone could act on.
-            if looks_like_image(Path(document.path)) if document.path else False:
-                log.debug(
-                    "%s is an image; this layer does not read one, the transcription tier does",
-                    document.original_filename,
-                )
-            else:
-                log.warning("could not read %s: %s", document.original_filename, exc)
+            # A real failure, logged with the REASON rather than the filename
+            # alone. `extract` raises with a sentence written for a person:
+            # which kind of file this is, what would have had to read it, and
+            # what to do next. "could not extract <file>" threw all of that
+            # away and left nothing anyone could act on.
+            log.warning("could not read %s: %s", document.original_filename, exc)
     return extracted
