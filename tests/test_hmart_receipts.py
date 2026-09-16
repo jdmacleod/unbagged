@@ -632,3 +632,187 @@ class TestChoosingBetweenTwoJoinsThatBothAddUp:
         )
         joined = rc.stitch(parts)
         assert joined is not None, "it returns, rather than enumerating for an hour"
+
+
+class TestWhatAModelActuallySendsBack:
+    """Found by /investigate on 2026-09-16, against a live 30B vision model.
+
+    The prompt asks for amounts with no currency symbol and says twice not to
+    return the TAX or BALANCE lines among the purchases. The model did both
+    anyway. Asking more firmly is not a fix: a reader that works only when the
+    model obeys is a reader that does not work.
+    """
+
+    def page(self, **kw):
+        return rc.Receipt(
+            captures=("Transaction_030419.png",),
+            lines=(line("RICE", "19.00"),),
+            balance=Decimal("39.74"),
+            tax=Decimal("0.00"),
+            complete=True,
+            **kw,
+        )
+
+    def test_the_currency_mark_it_sends_is_not_an_unreadable_amount(self):
+        """Every amount came back as `: 7.50`. `_decimal` returned None for all
+        of them, and one unreadable amount voids the whole answer — so the
+        adjudication tier read every page correctly and stored nothing, ever."""
+        assert rc._decimal(": 7.50") == Decimal("7.50")
+        assert rc._decimal(": -3.75") == Decimal("-3.75")
+
+    def test_a_stray_character_inside_a_number_still_voids_it(self):
+        """Only the leading mark is tolerated. `7.5O` is not 7.50 here."""
+        assert rc._decimal("7.5O") is None
+        assert rc._decimal("7.5 0") is None
+
+    def test_the_receipts_own_furniture_is_not_taken_for_a_purchase(self):
+        """It returned 14 rows for an 11-item receipt: the TAX line, the
+        BALANCE line, and the weight qualifier above a weighed item carrying a
+        copy of the amount below it. They summed to more than twice the total."""
+        reply = {
+            "lines": [
+                {"description": "THAI BASIL", "amount": ": 5.20"},
+                {"description": "1.54 lb @ 3.99 / lb", "amount": ": 6.14"},
+                {"description": "CHINESE BROCCOLI", "amount": ": 6.14"},
+                {"description": "TAX", "amount": ": 0.00"},
+                {"description": "*** BALANCE", "amount": ": 39.74"},
+                {"description": "CREDIT CARD", "amount": ": 39.74"},
+            ],
+            "tax": "0.00",
+            "balance": "39.74",
+        }
+        found = rc.from_reply(reply, self.page())
+        assert [item.description for item in found.lines] == ["THAI BASIL", "CHINESE BROCCOLI"]
+        assert found.subtotal == Decimal("11.34")
+
+    def test_a_weight_qualifier_is_recognised_however_it_is_written(self):
+        for text in ("1.54 lb @ 3.99 / lb", "2 @ 1.50", "0.47 lb @ 1.49 / lb"):
+            assert rc._is_furniture(text), text
+        for text in ("THAI BASIL", "WT DISCOUNT", "CL TOFU", "PK 90% LEAN GROUND"):
+            assert not rc._is_furniture(text), text
+
+
+class TestACaptureCutThroughItsOwnAmounts:
+    """Found by /investigate on 2026-09-16.
+
+    One capture in the real corpus is 518px wide where the rest are 519-542, and
+    its amount column runs into the right edge. The clip does not blank the last
+    digit, it cuts through it, and the engine reads the surviving sliver as SOME
+    digit.
+    """
+
+    def page(self, **kw):
+        rows = [
+            ("", "Customer ID: 40100200300", None),
+            ("", "APPLE", "7.49"),
+            ("", "PEAR", "5.20"),
+            ("", "TAX", "0.00"),
+            ("***", "BALANCE", "12.69"),
+            ("", "CREDIT CARD", "12.69"),
+            ("", "2019-03-04 11:07:00  2  118  0042", None),
+        ]
+        return rc.read_capture(tr.transcribe(build_receipt(rows, **kw)), "Transaction_030419.png")
+
+    def test_a_clipped_capture_says_so(self):
+        assert self.page(clip_digits=1).clipped is True
+
+    def test_an_ordinary_capture_does_not(self):
+        """No false positive: the real corpus separates 0px from 4px with
+        nothing in between, and 45 of 46 captures sit at 4px or wider."""
+        assert self.page().clipped is False
+
+    def test_one_clipped_half_clips_the_join(self):
+        head = rc.Receipt(captures=("a.png",), lines=(line("A", "1.00"),), clipped=True)
+        tail = rc.Receipt(
+            captures=("b.png",),
+            lines=(line("B", "2.00"),),
+            tax=Decimal("0.00"),
+            balance=Decimal("3.00"),
+            complete=True,
+        )
+        assert rc.stitch([head, tail]).clipped is True
+
+
+class TestWhenThePageHasNoTotalLeftToCheckAgainst:
+    """Found by /investigate on 2026-09-16.
+
+    The two failures are one failure. A capture clipped at its right edge loses
+    the last digit of every amount AND of the printed total, so the page that
+    most needs a second reader is the page with nothing left to check one
+    against. Measured: the model read that page perfectly and its answer was
+    refused, because the engine had lost the balance.
+
+    The statement is the way out, and it is not a relaxation: it is a separate
+    document the model never saw, so it checks the answer exactly as the printed
+    total does.
+    """
+
+    HONEST = {
+        "lines": [
+            {"description": "APPLE", "amount": ": 7.49"},
+            {"description": "PEAR", "amount": ": 5.20"},
+        ],
+        "tax": "1.00",
+        "balance": "13.69",
+    }
+
+    def unreadable(self, **kw):
+        """A page the engine got no total off: the clip took it."""
+        return rc.Receipt(
+            captures=("Transaction_030419.png",),
+            lines=(line("APPLE", "7.45"),),
+            balance=None,
+            complete=False,
+            clipped=True,
+            **kw,
+        )
+
+    def test_with_no_anchor_it_is_still_refused(self):
+        """The contract that held before this existed, and still holds."""
+        assert rc.from_reply(self.HONEST, self.unreadable()) is None
+
+    def test_the_statements_total_lets_the_answer_be_checked(self):
+        found = rc.from_reply(self.HONEST, self.unreadable(), anchor=Decimal("12.69"))
+        assert found is not None
+        assert rc.foots(found) is None
+        assert found.subtotal == Decimal("12.69")
+        assert found.balance_from_statement is True
+
+    def test_an_answer_that_misses_the_statement_is_refused_by_the_gate(self):
+        """Which is what makes a weak anchor safe: a wrong one does not attach
+        a basket to the wrong visit, it fails the arithmetic."""
+        found = rc.from_reply(self.HONEST, self.unreadable(), anchor=Decimal("99.00"))
+        assert rc.foots(found) is not None
+
+    def test_the_model_cannot_move_the_result_with_its_tax(self):
+        """`balance` is set to `anchor + tax`, so `foots` reduces to
+        `subtotal - anchor` and the one figure still authored by the model
+        cancels out of the check entirely."""
+        for claimed_tax in ("0.00", "1.00", "5.00"):
+            reply = dict(self.HONEST, tax=claimed_tax)
+            found = rc.from_reply(reply, self.unreadable(), anchor=Decimal("12.69"))
+            assert rc.foots(found) is None, claimed_tax
+
+    def test_a_tax_outside_what_a_tax_can_be_is_still_refused(self):
+        """The bound is against the anchor when there is no printed total, so
+        the path without one does not quietly skip it."""
+        assert (
+            rc.from_reply(
+                dict(self.HONEST, tax="-50.00"), self.unreadable(), anchor=Decimal("12.69")
+            )
+            is None
+        )
+
+    def test_a_page_that_DID_print_a_total_ignores_the_anchor(self):
+        """The printed total wins where there is one. An anchor must never be
+        able to override the page against its own evidence."""
+        printed = rc.Receipt(
+            captures=("a.png",),
+            lines=(line("APPLE", "7.49"),),
+            balance=Decimal("13.69"),
+            tax=Decimal("1.00"),
+            complete=True,
+        )
+        found = rc.from_reply(self.HONEST, printed, anchor=Decimal("99.00"))
+        assert found.balance == Decimal("13.69")
+        assert found.balance_from_statement is False

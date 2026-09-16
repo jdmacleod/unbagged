@@ -7,6 +7,7 @@ record while cleaning up the input, and a hardcoded number cannot catch it.
 
 import re
 import sys
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 
@@ -708,9 +709,12 @@ class TestWhenAModelIsAskedAboutACapture:
         )
         parsed = HMartAdapter().parse(SourceBundle(documents=(self.unreadable_capture(tmp_path),)))
         assert all(not txn.items for txn in parsed.transactions)
-        assert any(
-            "could not be read" in w.message or "no receipt" in w.message for w in parsed.warnings
-        )
+        # The fixture is built with `clip_digits=1`, so the specific finding is
+        # available and is the one reported: the capture is cut through its own
+        # amounts. Before, this said the receipt ran past the bottom of the
+        # picture and told the reader to upload a second half that does not
+        # exist.
+        assert any("cut off at its right edge" in w.message for w in parsed.warnings)
 
     @needs_engine
     def test_a_model_is_never_asked_when_none_is_reachable(self, tmp_path, monkeypatch):
@@ -1004,3 +1008,90 @@ class TestWhenOneCaptureFailsAndTheRestDoNot:
         said = " ".join(warning.message for warning in parsed.warnings)
         assert "1 of 2 receipt captures" in said
         assert "none could be read" not in said
+
+
+class TestWhichVisitSuppliesTheAnchor:
+    """Found by /investigate on 2026-09-16. See `_anchor_for`."""
+
+    def receipt(self, name="Transaction_030419.png"):
+        return rc.Receipt(captures=(name,), lines=(rc.ReceiptLine("A", Decimal("1.00")),))
+
+    def visit(self, at, amount):
+        return Transaction(occurred_at=at, total_pre_discount=amount)
+
+    def test_one_visit_that_day_supplies_its_total(self):
+        visits = [self.visit("2019-03-04T11:07:00", 12.69)]
+        assert HMART._anchor_for(self.receipt(), visits, {}) == Decimal("12.69")
+
+    def test_two_visits_that_day_supply_nothing(self):
+        """Neither is more right, and guessing would check the answer against
+        the wrong trip's total."""
+        visits = [
+            self.visit("2019-03-04T09:12:00", 12.69),
+            self.visit("2019-03-04T17:40:00", 40.00),
+        ]
+        assert HMART._anchor_for(self.receipt(), visits, {}) is None
+
+    def test_a_visit_already_itemised_is_not_offered_again(self):
+        visits = [
+            self.visit("2019-03-04T09:12:00", 12.69),
+            self.visit("2019-03-04T17:40:00", 40.00),
+        ]
+        assert HMART._anchor_for(self.receipt(), visits, {0: visits[0]}) == Decimal("40.00")
+
+    def test_a_visit_with_no_amount_is_not_an_anchor(self):
+        assert (
+            HMART._anchor_for(self.receipt(), [self.visit("2019-03-04T11:07:00", None)], {}) is None
+        )
+
+    def test_a_filename_with_no_date_has_no_anchor(self):
+        assert (
+            HMART._anchor_for(
+                self.receipt("scan.png"), [self.visit("2019-03-04T11:07:00", 1.0)], {}
+            )
+            is None
+        )
+
+
+class TestSayingWhoseMistakeItWas:
+    """Found by /investigate on 2026-09-16.
+
+    Two captures in the real corpus print a timestamp that reached no visit.
+    Both were this tool misreading the stamp — one minute digit, one year digit
+    — and the retailer was consistent throughout. The warning said the capture
+    'prints a timestamp that matches no visit in the statement', which reads as
+    the response contradicting itself. Blaming a response for our own OCR is
+    the failure this adapter exists to avoid.
+    """
+
+    def test_an_unmatched_stamp_is_reported_as_a_misreading(self, tmp_path, source, monkeypatch):
+        holder = TestWhenTheCapturesArrive()
+        # Built from the committed fixture's own first row, like the suite
+        # above: a hand-written visit matches no statement row, and the receipt
+        # then goes down the unmatched path instead of the one under test.
+        row = read_tables(source).tables[0].rows[2]
+        stamp = row.value(2)[:19]
+        visit = {
+            "stamp": stamp,
+            "date": stamp[:10],
+            "name": f"Transaction_{stamp[5:7]}{stamp[8:10]}{stamp[2:4]}.png",
+            "amount": Decimal(row.value(4)),
+        }
+        cap = holder.capture(tmp_path, visit)
+
+        real = rc.read_capture
+
+        def stamp_misread(transcript, capture):
+            page = real(transcript, capture)
+            # The same instant with one digit of the year wrong, which is what
+            # the engine actually did to one real capture.
+            broken = stamp[0] + "9" + stamp[2:].replace(" ", "T")
+
+            return replace(page, stamp=rc.Stamp(occurred_at=broken, lane="2", number="0042"))
+
+        monkeypatch.setattr(HMART.rc, "read_capture", stamp_misread)
+        parsed = holder.parse(tmp_path, source, cap)
+        said = " ".join(w.message for w in parsed.warnings)
+        assert "could not read into any visit" in said
+        assert "misread digit" in said
+        assert "matches no visit in the statement" not in said

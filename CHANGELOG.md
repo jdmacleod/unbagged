@@ -23,7 +23,44 @@ from a specific response. See `CONTRIBUTING.md`.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/
 
+## [Unreleased]
+
+### Fixed
+
+- **The local vision model could never help, on any page.** It was asked, it
+  answered correctly, and every answer was thrown away. Two reasons, both in
+  how the answer was read rather than in the model: it prefixes each amount
+  with a currency mark the number reader did not tolerate, and one unreadable
+  amount voids a whole answer — so the first line of every reply killed it. And
+  it returns the receipt's own TAX, BALANCE and weight-qualifier lines among
+  the purchases however firmly the question says not to, which more than
+  doubled the basket. Both are now handled where the answer is read, because a
+  reader that works only when a model obeys is a reader that does not work.
+
+- **A capture cut off at its right edge is read, and said so.** The narrowest
+  page in a real response ran its amount column into the edge of the picture,
+  cutting through the last digit of every amount rather than removing it. Some
+  came back as a different digit with nothing to show they had changed; others
+  stopped looking like amounts at all and their rows were dropped, the printed
+  total among them. The page is now recognised as clipped from the position of
+  its own ink, and a visit it belongs to is checked against the total the
+  points statement gives instead — a figure from a different document that
+  nothing reading the picture had a hand in. The receipt that could not be read
+  at all now itemises, and the warning for one that still cannot says the
+  capture is too narrow rather than telling you to upload a second half that
+  does not exist.
+
+- **Three messages blamed the response for this tool's own misreadings.** A
+  capture whose printed timestamp reached no visit was reported as disagreeing
+  with the statement, when both real instances were a single digit misread off
+  the till's own stamp. A file that could not be read logged its name and
+  discarded the sentence explaining what to do about it. And an image logged as
+  a failure every time, though an image reaching the transcription tier is the
+  routing working — a statement and 46 captures wrote 46 warnings saying a PNG
+  could not be extracted.
+
 ## [0.15.0] - 2026-09-16
+
 
 **This release changes what already-ingested responses display.** Nothing needs
 re-loading and no migration runs, but three figures move: a product is now
@@ -50,9 +87,8 @@ changes what was stored.
   out of the same reader — and where the retailer also sent a statement of what
   each visit cost, against that too. A receipt that fails either check is named
   in a warning and its visit keeps the total it already had. On the response
-  this was built against, 43 of 44 receipts reconciled to the cent; the one that
-  did not was clipped when it was captured, so every amount on it lost its last
-  digit. Nothing can recover that, and nothing pretends to.
+  this was built against, all 44 receipts reconciled to the cent.
+
 
   Reading whole pages at once is not safe for this: the engine drops a minus
   sign often enough to matter, turning a discount into a charge and, once, a

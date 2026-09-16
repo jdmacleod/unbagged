@@ -496,18 +496,41 @@ def _itemise(
                     time.monotonic() - started <= CAPTURE_BUDGET_SECONDS
                 ):
                     adjudicated += 1
-                    second = _adjudicate(receipt, by_name, model)
+                    second = _adjudicate(
+                        receipt,
+                        by_name,
+                        model,
+                        anchor=_anchor_for(receipt, transactions, itemised),
+                    )
+
                 if second is None:
                     warnings.add(
                         _unreconciled(receipt, short, model, statement=statement),
                         locator=receipt.captures[0],
                     )
                     continue
+                # Which figure the answer was checked against is part of the
+                # claim, not a detail. Against the receipt's own printed total
+                # it is one document checking itself; against the statement it
+                # is two documents agreeing, which is the stronger of the two
+                # and the only one available when the total is unreadable.
+                # `second`, not `receipt`: the flag is set by the answer that
+                # was accepted, and `receipt` is still the engine's reading
+                # until the rebind below.
+                against = (
+                    "the total the points statement gives for that visit"
+                    if second.balance_from_statement
+                    else "the total printed on the receipt"
+                )
+
                 warnings.info(
                     f"{' and '.join(receipt.captures)} would not add up as read, "
-                    f"and {model.model} read it into a basket that does. Only "
-                    "an answer that reconciles is kept, so this one has been."
+                    f"and {model.model} read it into a basket that does. The "
+                    f"answer was checked against {against}, which nothing that "
+                    "read the picture had a hand in, and only an answer that "
+                    "reconciles is kept — so this one has been."
                 )
+
                 receipt = second
             index, by_filename = _match(receipt, transactions, itemised)
             if index is None:
@@ -530,10 +553,21 @@ def _itemise(
                 # for it. Both come from the response; neither is a guess. But
                 # "matched on the printed timestamp" and "matched on a filename
                 # and an amount" are different claims.
+                # Said as a fact about the READING, not about the response. The
+                # second case used to read "prints a timestamp that matches no
+                # visit in the statement", which says the two halves of the
+                # response disagree. On the real corpus both instances were
+                # this tool misreading the stamp — a minute digit, and a year
+                # digit — and the retailer was consistent throughout. Blaming a
+                # response for our own OCR is the failure this adapter exists
+                # to avoid.
                 why = (
-                    "has no readable timestamp"
+                    "has no timestamp this could read"
                     if receipt.stamp is None
-                    else "prints a timestamp that matches no visit in the statement"
+                    else (
+                        "prints a timestamp this could not read into any visit "
+                        "in the statement, most likely a misread digit in it"
+                    )
                 )
                 warnings.info(
                     f"{' and '.join(receipt.captures)} {why}, so it was placed "
@@ -683,8 +717,45 @@ def _items(receipt: rc.Receipt) -> tuple[TxnItem, ...]:
     )
 
 
+def _anchor_for(
+    receipt: rc.Receipt,
+    transactions: list[Transaction],
+    taken: dict[int, Transaction],
+) -> Decimal | None:
+    """The statement's total for this visit, to check a model's answer against.
+
+    Only reached when the page's own printed total could not be read, which on
+    a right-clipped capture is the same event that cost every amount its last
+    digit. Something outside the reading has to supply the number, and the
+    statement is outside it: a different document, which the model never sees.
+
+    Matched on the date in the filename alone, and only when exactly one visit
+    that day has no receipt against it yet. That is a weaker key than the one
+    `_match` uses, deliberately: the receipt's own subtotal cannot help here
+    because the clip is what made it unreliable. It is safe to be weak because
+    of what the anchor is FOR — a wrong one does not attach a basket to the
+    wrong visit, it makes the arithmetic fail and the visit stay quarantined.
+    """
+    date = rc.capture_date(receipt.captures[0])
+    if date is None:
+        return None
+    fits = [
+        txn
+        for index, txn in enumerate(transactions)
+        if index not in taken
+        and txn.occurred_at.startswith(date)
+        and txn.total_pre_discount is not None
+    ]
+    if len(fits) != 1:
+        return None
+    return Decimal(str(fits[0].total_pre_discount))
+
+
 def _adjudicate(
-    receipt: rc.Receipt, by_name: dict, where: ollama.Availability
+    receipt: rc.Receipt,
+    by_name: dict,
+    where: ollama.Availability,
+    anchor: Decimal | None = None,
 ) -> rc.Receipt | None:
     """Ask a local model about a page the engine could not read into a basket.
 
@@ -713,7 +784,8 @@ def _adjudicate(
     reply = vision.read_receipt(pages, where)
     if reply is None:
         return None
-    candidate = rc.from_reply(reply, receipt)
+    candidate = rc.from_reply(reply, receipt, anchor=anchor)
+
     if candidate is None or rc.foots(candidate) is not None:
         return None
     return candidate
@@ -925,6 +997,20 @@ def _unreconciled(receipt: rc.Receipt, short: Decimal, model, *, statement: bool
     tried = (
         f" {model.model} was asked about it as well and could not either." if model.usable else ""
     )
+    if receipt.clipped:
+        # Checked BEFORE the no-total branch, because a clip causes that too
+        # and the reader would otherwise be sent looking for a second capture
+        # that was never taken. The amount column runs into the right edge, so
+        # the last digit of every amount is cut through — including the total's,
+        # which is why there is nothing to check the rest against.
+        return (
+            f"{where} is cut off at its right edge: the column of amounts runs "
+            "into the edge of the picture, so the last digit of every amount on "
+            "it is sliced through — including the total's. What can be read of "
+            "it does not add up, and nothing from it is in this report. The "
+            "receipt itself is fine; the capture of it is too narrow. A wider "
+            f"capture of the same receipt would be read.{tried}{kept}"
+        )
     if receipt.balance is None:
         # A different finding, and it was being reported as the first one. A
         # page with no total on it produced "its lines come to +0.00 against

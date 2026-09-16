@@ -43,10 +43,23 @@ PROMPT = (
     "printed — a negative line is a discount or a cancelled item and it matters. "
     "Do not merge lines. Do not include the TAX line or the BALANCE line or the "
     "payment method among the purchases; report the tax and the balance in "
-    "their own fields. Report amounts as decimal numbers with two places and no "
-    "currency symbol. Ignore anything written over the receipt by hand, and "
-    "ignore the card details at the bottom entirely."
+    "their own fields. A line reading like `1.54 lb @ 3.99 / lb` is the weight "
+    "of the item BELOW it and is not a purchase of its own — do not give it an "
+    "amount and do not list it. Report amounts as decimal numbers with two "
+    "places and no currency symbol. Where the right edge of the capture cuts "
+    "through the last digit of an amount, read the digit from the part of it "
+    "that is there rather than dropping it. Ignore anything written over the "
+    "receipt by hand, and ignore the card details at the bottom entirely."
 )
+
+#: What the prompt asks for and what a model returns are different things, and
+#: the difference is not recoverable by asking more firmly. Measured against a
+#: 30B vision model on the real corpus: it returned the TAX line, the BALANCE
+#: line and a weight qualifier as purchases despite two sentences forbidding
+#: exactly that, and prefixed every amount with `: ` despite being told to send
+#: no currency symbol. `receipt.from_reply` drops the furniture and `_decimal`
+#: tolerates the mark, because a reader that depends on a model obeying is a
+#: reader that does not work.
 
 
 def read_receipt(pages: list[bytes], where: ollama.Availability, opener=None) -> dict | None:

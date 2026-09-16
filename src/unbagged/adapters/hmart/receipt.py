@@ -97,6 +97,10 @@ AMOUNT = re.compile(r"^[$§s]?\s*(?P<value>-?\d{1,3}(?:,\d{3})*\.\d{2}|-?\d+\.\d
 TAX = re.compile(r"\bTAX\b", re.IGNORECASE)
 BALANCE = re.compile(r"\bBAL[A-Z]*E\b", re.IGNORECASE)
 CARD_BLOCK = re.compile(r"^\W*Card\b", re.IGNORECASE)
+#: How the receipt names what paid. Only used to recognise the tender line in a
+#: MODEL's answer — the engine's reading finds it by position, because the last
+#: two equal amounts on a page are the balance and its echo whatever they say.
+TENDER = re.compile(r"\b(CREDIT|DEBIT|CASH|CHECK|EBT|GIFT)\b", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -149,6 +153,15 @@ class Receipt:
     #: What that line actually said, kept so that restoring it as a purchase
     #: restores the name the retailer printed on it too.
     tax_description: str = ""
+    #: True when the amount column runs into the right edge of the capture, so
+    #: the last digit of every amount on the page is cut through. See `_clipped`.
+    clipped: bool = False
+    #: True when the total this was checked against came from the points
+
+    #: statement rather than off the page. Still a figure no transcriber
+    #: produced — see `from_reply` — but a different document, and the reader
+    #: is told which.
+    balance_from_statement: bool = False
 
     def with_tax_as_item(self) -> Receipt:
         """The same receipt, read with the tax line taken as a purchase.
@@ -245,6 +258,7 @@ def read_capture(transcript: Transcript, capture: str) -> Receipt:
         complete=balance is not None,
         tax_inferred=inferred,
         tax_description=taxed,
+        clipped=_clipped(transcript),
     )
 
 
@@ -333,6 +347,38 @@ def _purchases(rows) -> tuple[ReceiptLine, ...]:
         )
         for row in rows
     )
+
+
+#: How close an amount may sit to the right edge before the page is suspected of
+#: having been cut through its own digits. Measured across the real corpus: the
+#: one capture clipped at the source leaves 0px, and the next-tightest of the
+#: other 45 leaves 4px, rising to 24px. There is nothing between 0 and 4, so
+#: this is a physical fact about the capture rather than a tuned threshold.
+CLIP_MARGIN = 2
+
+
+def _clipped(transcript: Transcript) -> bool:
+    """Does the amount column run into the right edge of the page?
+
+    Worth knowing because of how the failure presents. A clip does not blank
+    the last digit, it cuts through it, and the engine reads the surviving part
+    as SOME digit — measured on the real capture, `7.49` came back as `7.45`
+    and `0.39` as `0.35`, five silent corruptions on one page. Where the
+    fragment resolves to no digit at all the amount stops matching at all and
+    the row is dropped whole, which on that page took the BALANCE line with it.
+
+    So the page fails in two ways at once and neither says what happened: some
+    amounts are quietly wrong, and the total that would have caught them is
+    gone. The margin is the only honest signal, and it is a fact about pixels
+    rather than about anything the engine believed.
+    """
+    if transcript.money_column is None:
+        return False
+    right = max(
+        (word.right for line in transcript.lines for word in line.within(transcript.money_column)),
+        default=None,
+    )
+    return right is not None and (transcript.width - right) < CLIP_MARGIN
 
 
 def _reached_the_end(transcript: Transcript) -> bool:
@@ -542,6 +588,9 @@ def _joined(parts: list[Receipt], *, greedy: bool = False, trims: tuple = ()) ->
             tax_description=(
                 part.tax_description if part.tax is not None else joined.tax_description
             ),
+            # One clipped half clips the join: the amounts it contributed are
+            # cut whatever the other half looked like.
+            clipped=joined.clipped or part.clipped,
         )
     return joined
 
@@ -715,7 +764,7 @@ def _stem(filename: str) -> str:
     return filename.rsplit("/", 1)[-1].rsplit(".", 1)[0]
 
 
-def from_reply(reply: dict, like: Receipt) -> Receipt | None:
+def from_reply(reply: dict, like: Receipt, *, anchor: Decimal | None = None) -> Receipt | None:
     """A receipt built from a model's answer, keeping what was read off the page.
 
     A candidate, and nothing more. The caller puts it through `foots` exactly as
@@ -740,11 +789,20 @@ def from_reply(reply: dict, like: Receipt) -> Receipt | None:
     rather than corrected: the two read the same pixels and reached different
     numbers, and nothing here can say which is right.
 
-    A page whose own balance could not be read returns None. There is nothing
-    to check the model against, and an answer that cannot be checked is not
-    one this stores — the captures arrive by mail from outside the trust
-    boundary, and text rendered into one is an instruction the model may read.
+    A page whose own balance could not be read falls back to `anchor`, the
+    total the points statement gives for that visit, and returns None when
+    there is no anchor either. The fallback is not a relaxation: the statement
+    is a separate document that the model never saw, so it checks the answer
+    exactly as the printed total does. It exists because the two failures are
+    the same failure — a capture clipped at its right edge loses the printed
+    total along with the last digit of every amount, so the page that most
+    needs a second reader is the page with nothing left to check one against.
+
+    An answer that can be checked by neither is not stored. The captures arrive
+    by mail from outside the trust boundary, and text rendered into one is an
+    instruction the model may read.
     """
+
     lines = []
     rows = reply.get("lines") or []
     if not isinstance(rows, list) or len(rows) > MAX_REPLY_LINES:
@@ -754,6 +812,16 @@ def from_reply(reply: dict, like: Receipt) -> Receipt | None:
     for index, row in enumerate(rows, start=1):
         if not isinstance(row, dict):
             return None
+        if _is_furniture(str(row.get("description") or "")):
+            # The prompt asks for purchases only and says so twice. A 30B model
+            # returned the TAX line, the BALANCE line and the weight qualifier
+            # above a weighed item as three more purchases, the last of them
+            # carrying a copy of the amount below it — 14 rows for an 11-item
+            # receipt, summing to more than twice what was paid. Nothing here
+            # trusts the answer, so nothing here should depend on it obeying:
+            # these are the receipt's own furniture and the format layer
+            # already knows their shape.
+            continue
 
         amount = _decimal(row.get("amount"))
         if amount is None:
@@ -770,14 +838,39 @@ def from_reply(reply: dict, like: Receipt) -> Receipt | None:
         )
     if not lines:
         return None
-    if like.balance is None:
-        # Nothing printed to check the answer against.
+    # The most a tax can be. Against the printed total where there is one, and
+    # against the statement's own figure where there is not — never None, so
+    # the bound is never quietly skipped on the path that has no printed total.
+    ceiling = like.balance if like.balance is not None else anchor
+    if ceiling is None:
         return None
+    tax = _tax_for(reply, like, ceiling)
+    if tax is None:
+        return None
+    if like.balance is None:
+        if anchor is None:
+            # Nothing to check the answer against.
+            return None
+        # The statement's figure standing in for the printed one. It is the
+        # SAME kind of fact: a number no transcriber produced, from a document
+        # the model never saw. On a right-clipped capture it is the only one
+        # left, because the clip takes the printed total along with everything
+        # else — and that is exactly the page the model is being asked about.
+        #
+        # Expressed as a balance so `foots()` is unchanged, and note what that
+        # makes the check: subtotal + tax - (anchor + tax), which is
+        # subtotal - anchor. The tax cancels, so the one figure still authored
+        # by the model cannot move the result.
+        return replace(
+            like,
+            lines=tuple(lines),
+            tax=tax,
+            balance=anchor + tax,
+            complete=True,
+            balance_from_statement=True,
+        )
     claimed = _decimal(reply.get("balance"))
     if claimed is None or claimed != like.balance:
-        return None
-    tax = _tax_for(reply, like)
-    if tax is None:
         return None
     return Receipt(
         captures=like.captures,
@@ -799,7 +892,15 @@ def from_reply(reply: dict, like: Receipt) -> Receipt | None:
 MAX_REPLY_LINES = 200
 
 
-def _tax_for(reply: dict, like: Receipt) -> Decimal | None:
+def _is_furniture(description: str) -> bool:
+    """A line that is the receipt talking about itself, not something bought."""
+    text = description.strip()
+    return bool(
+        TAX.search(text) or BALANCE.search(text) or QUANTITY.match(text) or TENDER.search(text)
+    )
+
+
+def _tax_for(reply: dict, like: Receipt, ceiling: Decimal) -> Decimal | None:
     """The tax to check this answer against, or None to refuse the answer.
 
     Pinning the balance alone left the gate with one equation and two unknowns
@@ -820,18 +921,33 @@ def _tax_for(reply: dict, like: Receipt) -> Decimal | None:
     tax = _decimal(reply.get("tax"))
     if tax is None:
         return Decimal("0.00") if like.tax is None else like.tax
-    if tax < 0 or tax > like.balance:
+    if tax < 0 or tax > ceiling:
         # Not a tax. An answer reaching for one of these is reaching for the
         # residual, which is the thing the printed total exists to pin.
         return None
     return tax
 
 
+#: What a currency mark comes back as. The engine returns `§` and `s` for `$`
+#: often enough to be named, and a vision model asked for "no currency symbol"
+#: returns `: 7.50` — it transcribes the mark it can see rather than dropping
+#: it. Measured against the corpus: every amount in a 30B model's answer came
+#: back with a leading colon, `_decimal` returned None for all of them, and
+#: `from_reply` voids the whole answer on one unreadable amount — so the
+#: adjudication tier read every page correctly and stored nothing, ever.
+_CURRENCY_MARKS = "$§s:  "
+
+
 def _decimal(value: object) -> Decimal | None:
     if value is None:
         return None
     try:
-        found = Decimal(str(value).replace("$", "").replace(",", "").strip())
+        text = str(value).replace(",", "").strip()
+        # Only from the FRONT, and only marks. A stray character in the middle
+        # of a number still voids it: `7.5O` is not 7.50 here, it is a reading
+        # nobody should act on.
+        found = Decimal(text.lstrip(_CURRENCY_MARKS).strip())
+
         # `Decimal("NaN")` parses without raising, and NaN compares false
         # against everything — so it survives to the gate and only fails there
         # by accident. The gate should not be load-bearing for type safety.

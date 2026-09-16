@@ -675,6 +675,26 @@ def extract_all(documents: tuple[SourceDocument, ...]) -> list[ExtractedDocument
     for document in documents:
         try:
             extracted.append(extract(document))
-        except ExtractionError:
-            log.warning("could not extract %s", document.original_filename)
+        except ExtractionError as exc:
+            # Two different events, logged two different ways.
+            #
+            # An image ALWAYS raises here: this layer turns bytes into text and
+            # a receipt capture is read by the transcription tier instead, so
+            # the exception is the routing working. It was being logged as a
+            # warning anyway, once per file — a healthy upload of a statement
+            # and 46 captures wrote 46 lines saying a PNG could not be
+            # extracted, which is both untrue and the loudest thing in the log.
+            #
+            # Anything else is a real failure, and it is logged with the REASON
+            # rather than the filename alone. `extract` raises with a sentence
+            # written for a person: which kind of file this is, what would have
+            # had to read it, and what to do next. "could not extract <file>"
+            # threw all of that away and left nothing anyone could act on.
+            if looks_like_image(Path(document.path)) if document.path else False:
+                log.debug(
+                    "%s is an image; this layer does not read one, the transcription tier does",
+                    document.original_filename,
+                )
+            else:
+                log.warning("could not read %s: %s", document.original_filename, exc)
     return extracted

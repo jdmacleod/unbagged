@@ -339,11 +339,28 @@ therefore decided some other way, and the decisions are worth keeping:
   `#0000FF`. The page itself never uses that colour, so it is masked back to
   white before the engine sees it. Unmasked, one capture read 14 lines summing
   to 85.28 against a stated 100.23; masked, 16 summing to 100.23 exactly.
-- **One capture is clipped at the source.** It cut the last
-  digit off every amount in the column, so `$ 7.49` is rendered as `$ 7.4`. It
-  is legible, every figure on it is plausible, and it cannot be read. It is the
-  one receipt of the 44 that is permanently quarantined, and it is the reason
-  the arithmetic gate is not optional.
+- **One capture is clipped at the source**, and the earlier note here was wrong
+  about what that means. It is the narrowest page in the corpus and its amount
+  column runs into the right edge, so the last digit of every amount is cut —
+  but cut THROUGH, not cut off. Enough of each glyph survives that a person
+  reads the page without difficulty.
+
+  That is worse than losing the digit outright, and it fails in two directions
+  at once. Where the surviving sliver resolves to another digit the engine
+  returns a plausible wrong number and says nothing: five amounts on that page
+  came back altered, one of them by four cents. Where it resolves to no digit
+  the amount stops matching at all and the whole row is dropped, which on that
+  page took the BALANCE line with it — so the total that would have caught the
+  other five was gone too.
+
+  A vision model reads the page correctly, every clipped digit included. What
+  stopped it being used was not the model: the gate needs a figure the reader
+  had no hand in, and the clip had taken the only one on the page. The points
+  statement supplies it instead, and the capture now itemises. See
+  `from_reply`'s `anchor`, and `_clipped` for the physical signal — the gap
+  between the last amount pixel and the right edge is 0px on that capture and
+  4px to 24px on the other 45.
+
 - **Two captures sharing a date may be two visits.** One pair in the corpus is
   two separate trips on one day, at different lanes, for different amounts.
   Their filenames are indistinguishable from a continuation pair; only reading
