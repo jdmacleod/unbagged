@@ -210,6 +210,36 @@ Every test in `tests/container/` gets a 180-second cap automatically, and
 everything else gets 60. Both are backstops sized against measured worst cases,
 not budgets — if a test approaches either, the test is wrong, not the cap.
 
+## Writing a test that needs the OCR engine
+
+Captures are read by `tesseract`, which is an apt package rather than a pip one
+(see the `Dockerfile` for why), so `pip install -e ".[dev]"` does not put it on
+your machine. Install it yourself:
+
+```bash
+brew install tesseract                                    # macOS
+sudo apt-get install tesseract-ocr tesseract-ocr-eng       # Debian / Ubuntu
+```
+
+Gate a test that needs it on `transcription.words.available()`, not on an import
+check — the Python side is a subprocess wrapper and imports cleanly on a machine
+with no engine at all, which is the same trap the browser tests have above.
+
+```python
+needs_engine = pytest.mark.skipif(
+    not tr_words.available(), reason=f"{tr_words.ENGINE} is not installed"
+)
+```
+
+**Without it, those suites skip and `pytest -q` still says green.** That is the
+failure this repository keeps re-learning: a gate that never opens is a suite
+reporting success having run nothing. Two guards in `tests/test_packaging.py`
+hold the line where it can be held — one asserts the engine really is present in
+the tier that is contractually meant to run it, the other asserts CI installs the
+package that guard needs. Neither can help you locally. If you are touching
+anything that reads a capture, check the skip count before you believe a green
+run.
+
 ## Writing a safeguard
 
 A safeguard is any check whose job is to fail: the PII scanner, the fixture

@@ -192,7 +192,9 @@ supplemental-request path, and a refusal on verification grounds.
 
 `extraction.py` hands you one of two things. A PDF or a text file arrives as
 `pages`; a spreadsheet arrives as `tables`, and `text` renders those on demand so
-code that only wants words never has to know the difference.
+code that only wants words never has to know the difference. There is a third
+classification, `image`, and it is the one shape that never arrives through
+`extract()` at all — see the next section.
 
 A `Table` is a sheet: `rows`, the size the sheet declares of itself, and
 `locator(row, column)` for the A1 cell reference this guide has always promised
@@ -235,6 +237,54 @@ if extracted.spent_budget:
 
 A budget spent looking and a file that is somebody else's format both score
 0.0, and the person holding the file is the one who cannot tell them apart.
+
+## When the response is a capture, not a document
+
+Some retailers answer with screen captures of a receipt viewer rather than with a
+file that has text in it. `classify()` routes those to a third kind, `image`,
+decided by magic bytes rather than by suffix — a capture reaches this tool through
+whatever the operating system's screenshot key produced and whatever the mail
+client renamed it to, so the extension is the least reliable thing about it.
+
+**An image does not reach you through `extract()`.** Calling it on one raises
+`ExtractionError` on purpose. Pixels to text is a different reader with a
+different failure mode, and it lives in `unbagged.transcription`:
+
+```python
+from unbagged import transcription as tr
+
+transcript = tr.transcribe(path.read_bytes())  # lines, and where each word sits
+```
+
+It raises two different things and the difference decides how far the damage
+spreads. `OcrUnavailable` is a fact about the **machine** — no engine installed —
+and applies to every capture in the upload at once. `UnreadableImage` is a fact
+about **one file**. Catch the second per file and keep going; the first is not
+something the next capture will do better at.
+
+That package knows about images and nothing about retailers, the same split
+`extraction.py` draws for bytes. Read its module docstring before you use it; the
+one thing to know going in is that a page is read **twice** — once unrestricted
+for the words, and once over the money column under a restricted character set,
+because the unrestricted pass drops minus signs and a discount read as a charge
+is not a rounding error.
+
+Three rules if your adapter reads captures.
+
+**Claim them in `sniff()` or leave them alone.** An image no adapter claims is
+refused with a message naming the file, because a photograph taken by hand and an
+export nobody wrote a reader for are the same thing from here and the person
+holding the file is the one who can tell them apart.
+
+**Check the transcription against a number that did not come out of the same
+reader.** A receipt prints its own total, which is exactly such a number. Store
+nothing that does not reconcile: a basket that does not add up is a guess wearing
+the costume of a fact, and the visit still has whatever total it already had.
+
+**One capture is one page.** `probe()` reports a page count of `1` rather than
+`None`, so a `Cite` across a set of captures reads "page 2 of 3" — which is what a
+reader needs when a single receipt was captured in pieces. `None` means the format
+has no pages to count, which is true of a spreadsheet and false of an image.
 
 ## Fixtures
 

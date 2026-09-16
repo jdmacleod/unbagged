@@ -33,7 +33,6 @@ ever appear as negative lines, so a response whose figure you wrote down before
 may show a different one now. Both changes make the number match the page it
 heads; neither changes what was stored.
 
-
 ### Added
 
 - **A response can arrive as screen captures of a receipt, and be read.** One
@@ -71,7 +70,6 @@ heads; neither changes what was stored.
   is not this machine is refused until you acknowledge that it would receive
   pictures of your shopping. See `.env.example`.
 
-
 - **Products and Prices work for a retailer that names what you bought without
   coding it.** Both views identified a product by its barcode, so a response
   disclosing descriptions and amounts and no codes rendered two empty pages over
@@ -90,14 +88,12 @@ heads; neither changes what was stored.
   to finish is never read: a basket cut off partway through still adds up
   against whatever total came with it.
 
-
 - **Reading captures has a time budget.** The upload cap bounds bytes, not
   images, and every per-item timeout multiplied with nothing capping the whole
   inside a request a person is waiting on. The budget is tested between pages
   and before each question put to a model, not only between visits — a hundred
   captures can share one visit, and asking a model about eight receipts is
   twenty minutes that used to sit after the last check.
-
 
 - **A visit placed by its filename rather than by the timestamp printed on the
   receipt now says so.** Measured on the response this was built against, that
