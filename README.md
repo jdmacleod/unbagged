@@ -201,8 +201,8 @@ Security issues go through GitHub's private vulnerability reporting; see
 One store could only supply screen captures of its receipt viewer, one or two
 per visit. Those are read, and they are read carefully:
 
-- Drop the images in alongside the rest of the response. Unzip the folder first
-  and select all of them; they belong to one upload, not one each.
+- Drop the images in alongside the rest of the response — or drop the zip they
+  arrived in, which is expanded here. They belong to one upload, not one each.
 - **Nothing is stored unless the basket adds up.** A receipt prints its own
   total, so a transcription can be checked against something that did not come
   out of the same reader. One that does not reconcile is named in a warning and

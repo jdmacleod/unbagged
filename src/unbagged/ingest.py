@@ -16,17 +16,19 @@ the data-handling rules are enforced rather than assumed:
 from __future__ import annotations
 
 import hashlib
+import io
 import os
 import re
 import sqlite3
 import unicodedata
+import zipfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
 from unbagged import repository
 from unbagged.adapters.registry import Match, registry
-from unbagged.extraction import ExtractionError, extract, probe
+from unbagged.extraction import ZIP_MAGIC, ExtractionError, extract, probe
 from unbagged.models import AdapterError, ParseResult, SourceBundle, SourceDocument
 
 DEFAULT_INCOMING = Path("data/incoming")
@@ -36,6 +38,27 @@ INCOMING_ENV = "UNBAGGED_INCOMING"
 # colliding with a sibling. The original name is kept in the database.
 SAFE_NAME = re.compile(r"[^A-Za-z0-9._-]+")
 MAX_NAME_LENGTH = 80
+
+#: What an archive is allowed to become once it is open.
+#:
+#: The upload cap in `api.py` is 64 MB and it bounds the COMPRESSED bytes, which
+#: is the wrong end of a decompression bomb: a few hundred kilobytes of zeroes
+#: expands to gigabytes. These bound what comes out.
+#:
+#: 256 MB is four times what may be uploaded uncompressed, so nothing a person
+#: could have sent as loose files is refused for arriving zipped. A bomb runs at
+#: a thousand to one and more, so it is nowhere near this.
+MAX_ARCHIVE_BYTES = 256 * 1024 * 1024
+
+#: A response of screen captures is dozens of files; the observed one is 46.
+#: This is generous against that and still a bound.
+MAX_ARCHIVE_MEMBERS = 512
+
+#: Metadata an archiver adds that is not part of anybody's response. Skipped
+#: silently rather than reported: a macOS zip carries a `__MACOSX` shadow of
+#: every file in it, and naming each one would bury the upload's real warnings
+#: under a pile of notes about resource forks.
+ARCHIVE_NOISE = ("__MACOSX/", ".DS_Store", "Thumbs.db", "desktop.ini")
 
 
 class IngestError(Exception):
@@ -101,6 +124,148 @@ def store_upload(filename: str, content: bytes, *, directory: Path | None = None
     return StoredFile(
         path=path, sha256=digest, original_filename=filename or safe, size=len(content)
     )
+
+
+def looks_like_archive(content: bytes) -> bool:
+    return content[: len(ZIP_MAGIC)] == ZIP_MAGIC
+
+
+def store_upload_many(
+    filename: str,
+    content: bytes,
+    *,
+    directory: Path | None = None,
+    budget: int = MAX_ARCHIVE_BYTES,
+) -> list[StoredFile]:
+    """One uploaded file, stored — or an archive, stored as its members.
+
+    A response can arrive as a folder of screen captures, a page or two per
+    visit, dozens of files. It arrives as a zip, and the alternative to this is
+    telling the reader to unpack it and select every file by hand: miss one and
+    the response is short a visit, with nothing on screen saying which.
+
+    **Members become separate documents, never one.** `SourceBundle` is what
+    carries per-document provenance, and `_document_id_resolver` maps a bundle
+    index onto a stored row — so flattening an archive into a single document
+    would put every record in it behind one citation, and a reader following one
+    would land on a zip rather than on the page their basket came from.
+
+    `budget` is what this archive may expand to. The caller passes what is LEFT
+    of the request's allowance rather than the whole of it, because the cap has
+    to hold across an upload and not merely within one file: ten archives each
+    honouring a per-file cap is ten times the cap on disk.
+    """
+    if not looks_like_archive(content):
+        return [store_upload(filename, content, directory=directory)]
+    return [
+        store_upload(name, member, directory=directory)
+        for name, member in _archive_members(filename, content, budget)
+    ]
+
+
+def _archive_members(filename: str, content: bytes, budget: int) -> list[tuple[str, bytes]]:
+    """What is inside an archive, once it has been shown to be safe to open.
+
+    Every guard here bounds something the archive itself declares, because an
+    archive is a description of files written by whoever sent it and none of it
+    is true until it has been read.
+
+    * **A member whose name escapes the extraction root is refused** — absolute
+      paths, `..`, and Windows drive letters. Nothing here writes to a member's
+      own name (`store_upload` hashes and sanitises it), so this is defence in
+      depth rather than the only thing standing in the way. It is refused
+      loudly: a response should not contain one, and quietly dropping it would
+      hide that it did.
+    * **The uncompressed total is capped**, which the upload limit cannot do —
+      it bounds the compressed bytes, and that is the wrong end of a bomb.
+      Measured as members are read rather than trusted from the header, because
+      the header is written by the sender too, and tested BEFORE the member is
+      written so a bomb is refused rather than stored and then complained about.
+    * **An archive inside an archive is refused rather than recursed.** It is a
+      real shape and a reader can unpack it; recursion here would be a second
+      unbounded thing to bound.
+
+    `extraction.py` refuses a DTD before parsing XML for the same class of
+    reason, and that guard is the model this follows.
+    """
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(content))
+    except zipfile.BadZipFile as exc:
+        raise IngestError(
+            f"{filename} looks like a zip but could not be opened ({exc}). "
+            "If it was downloaded, the download may be incomplete."
+        ) from exc
+
+    found: list[tuple[str, bytes]] = []
+    total = 0
+    for info in archive.infolist():
+        name = info.filename
+        if info.is_dir() or _is_noise(name):
+            continue
+        if _escapes(name):
+            raise IngestError(
+                f"{filename} contains an entry whose name points outside the "
+                f"archive ({name!r}). Nothing in it has been read."
+            )
+        if len(found) >= MAX_ARCHIVE_MEMBERS:
+            raise IngestError(
+                f"{filename} holds more than {MAX_ARCHIVE_MEMBERS} files. A "
+                "right-to-know response is a document, not a data lake."
+            )
+        try:
+            member = archive.read(info)
+        except (zipfile.BadZipFile, RuntimeError, OSError) as exc:
+            # RuntimeError is what `zipfile` raises for an encrypted member,
+            # which is a thing a person can fix and should be told about.
+            raise IngestError(
+                f"{filename} could not be unpacked ({exc}). If it is password "
+                "protected, unpack it yourself and upload what is inside."
+            ) from exc
+
+        total += len(member)
+        if total > budget:
+            raise IngestError(
+                f"{filename} expands to more than "
+                f"{MAX_ARCHIVE_BYTES // (1024 * 1024)} MB of files, which is "
+                "what one upload may unpack to in total. Nothing in it has "
+                "been kept."
+            )
+        if not member:
+            # An empty file carries nothing, and `store_upload` refuses one by
+            # name. Skipped rather than raised: an archive holding a stray empty
+            # file is not a response anybody needs to fix.
+            continue
+        if looks_like_archive(member):
+            raise IngestError(
+                f"{filename} contains another archive ({Path(name).name!r}). "
+                "Unpack the inner one and upload what is in it."
+            )
+        # The member's own name, without the folder it sat in. The adapter that
+        # reads screen captures takes the visit's date out of the filename the
+        # store's export produced, and a path prefix is not part of that name.
+        found.append((Path(name).name, member))
+
+    if not found:
+        raise IngestError(f"{filename} is an archive with nothing readable in it.")
+    return found
+
+
+def _is_noise(name: str) -> bool:
+    return name.startswith(ARCHIVE_NOISE) or Path(name).name in ARCHIVE_NOISE
+
+
+def _escapes(name: str) -> bool:
+    """Would this member's name reach outside the directory it belongs in?
+
+    Written against the NAME as the archive states it, using both separators:
+    a zip written on Windows may use backslashes, and `PurePosixPath` would read
+    `..\\..\\etc` as one harmless-looking filename.
+    """
+    if name.startswith("/") or name.startswith("\\"):
+        return True
+    if re.match(r"^[A-Za-z]:", name):
+        return True
+    return any(part == ".." for part in re.split(r"[/\\]", name))
 
 
 def _stored_document(f: StoredFile) -> SourceDocument:
@@ -241,7 +406,9 @@ def _why_nothing_matched(bundle: SourceBundle) -> str:
     not raise. The consequence was that a .zip and a scanned PDF — the two most
     likely things to arrive after a Kroger PDF — both produced a message telling
     the user to go read the adapter-authoring guide, while `extraction.py` had
-    already worked out that one needed unzipping and the other had no text layer.
+    already worked out that one needed unpacking and the other had no text
+    layer. A zip no longer reaches here at all: `store_upload_many` expands one
+    into its members before a bundle exists.
 
     Re-extracting here is deliberate: a few wasted seconds on a file that was
     never going to parse, in exchange for telling the person what is actually
