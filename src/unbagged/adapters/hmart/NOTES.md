@@ -348,8 +348,9 @@ therefore decided some other way, and the decisions are worth keeping:
   two separate trips on one day, at different lanes, for different amounts.
   Their filenames are indistinguishable from a continuation pair; only reading
   them tells the two apart.
-- **The stamp's first field is a lane, not a store.** Values 1-8 appear against
-  both Thistlewick and Bramblemere. The branch comes from the statement.
+- **The stamp's first field is a lane, not a store.** The same values appear
+  against both of the branches in the corpus, so it cannot be one. The branch
+  comes from the statement, which names it; a capture never does.
 
 ### Deliberately not read
 
