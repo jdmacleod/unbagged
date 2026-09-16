@@ -162,11 +162,26 @@ constructed row, a merged `Branch` put the points value in the amount column
 and a $12.34 basket recorded as $12.00, silently. `tests/test_merged_cells.py`
 holds that case.
 
-**`ss:MergeDown` is not honoured, and that gap is open.** It swallows a column
-in the rows *beneath* the cell, so those rows omit it and everything after it
-in them shifts left — the same corruption across rows instead of along one.
-Handling it means carrying spans between rows, which `read_tables` has no place
-for today. The observed export contains none. Filed rather than guessed at.
+**`ss:MergeDown` is honoured too, and it rests on the specification rather than
+on the sample.** It swallows a column in the rows *beneath* the cell, so those
+rows omit it and everything after it in them shifts left — the same corruption
+across rows instead of along one. The observed export contains none, so there is
+no file here to check a fix against; the rule is the one `ss:MergeAcross`
+follows, which the SpreadsheetML documentation states independently of any
+response. #44 asks for exactly this footing.
+
+Handling it means `read_tables` carrying state between rows, which it had no
+place for. Open spans are kept as `{column: last row covered}` — numbers, never
+references into the tree, because every row is cleared as it is consumed and
+anything outliving a row would point at a cleared element. Keyed on the last row
+a span covers rather than as a countdown: `ss:Index` on a `Row` skips rows, and
+a countdown would hold a span open across the gap.
+
+The damage it prevents is the damage the `MergeAcross` case prevents, and it is
+quieter still. `Point == round(Amount)`, so a row shifted one column left reads
+the points value as the amount — a basket total wrong by less than a dollar,
+with nothing downstream able to catch it. `tests/test_merged_cells.py` holds
+that case at the adapter's own boundary.
 
 **A short row is defined in the header's columns, not as a count.** After
 placement, a row is short when a column the header named holds nothing. A count

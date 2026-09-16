@@ -28,6 +28,7 @@ from __future__ import annotations
 import logging
 import re
 import xml.etree.ElementTree as ET
+from collections.abc import Container
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -308,6 +309,10 @@ def read_tables(
     in_sheet = False
     spent_budget = False
     consumed = 0
+    #: Columns held by an open `ss:MergeDown`, as {column: last row covered}.
+    #: Numbers rather than elements: every row is cleared as it is consumed, so
+    #: nothing that outlives a row may be a reference into the tree.
+    spans: dict[int, int] = {}
 
     def flush() -> None:
         nonlocal rows, in_sheet, declared_rows, declared_columns
@@ -338,13 +343,26 @@ def read_tables(
                         in_sheet = True
                         name = element.get(f"{{{SS}}}Name") or ""
                         row_number = 0
+                        # A span cannot reach out of the sheet it was written in.
+                        spans = {}
                     elif tag == "Table":
                         declared_rows = _as_int(element.get(f"{{{SS}}}ExpandedRowCount"))
                         declared_columns = _as_int(element.get(f"{{{SS}}}ExpandedColumnCount"))
                 elif event == "end":
                     if tag == "Row":
                         row_number = _as_int(element.get(f"{{{SS}}}Index")) or (row_number + 1)
-                        rows.append(Row(cells=_cells_of(element), number=row_number))
+                        # Dropped as they expire, which also makes `spans` the
+                        # set of columns blocked in THIS row. Keyed on the last
+                        # row a span covers rather than a countdown, because
+                        # `ss:Index` on a Row skips rows and a countdown would
+                        # hold a span open across the gap.
+                        spans = {
+                            column: last for column, last in spans.items() if last >= row_number
+                        }
+                        cells, opened = _cells_of(element, spans.keys())
+                        for column, down in opened.items():
+                            spans[column] = row_number + down
+                        rows.append(Row(cells=cells, number=row_number))
                         element.clear()
                         if max_rows is not None and len(rows) >= max_rows:
                             stopping = True
@@ -390,14 +408,18 @@ def _as_int(value: str | None) -> int | None:
         return None
 
 
-def _cells_of(row: ET.Element) -> tuple[str | None, ...]:
+def _cells_of(
+    row: ET.Element, blocked: Container[int] = frozenset()
+) -> tuple[tuple[str | None, ...], dict[int, int]]:
     """Place a row's cells at the columns they declare, filling the gaps.
 
-    Two attributes move a cell away from its position in encounter order, and
-    ignoring either shifts every value after it one or more columns left.
+    Three things move a cell away from its position in encounter order, and
+    ignoring any of them shifts every value after it one or more columns left.
 
     `ss:Index` names a cell's real column, because SpreadsheetML omits an empty
-    cell entirely rather than writing a blank one.
+    cell entirely rather than writing a blank one. It is written against real
+    columns, so it overrides all of the arithmetic below rather than adding to
+    it.
 
     `ss:MergeAcross` names how many further columns this cell occupies. The
     columns it swallows are not written either, so the next cell along is the
@@ -406,29 +428,58 @@ def _cells_of(row: ET.Element) -> tuple[str | None, ...]:
     is column 3. The observed H Mart export merges its banner cell across four
     columns, so this is a shape the format really does arrive in.
 
-    Against a dense header row neither omission raises anything: the values
-    simply land one field to the left. Measured on a constructed row, a merged
-    `Branch` moved the points value into the amount column, so a $12.34 basket
-    recorded as $12.00 with no error anywhere.
+    `blocked` is the same omission arriving from a PREVIOUS row. A cell carrying
+    `ss:MergeDown` occupies its column in the rows beneath it, and those
+    positions are left out of their rows exactly as a merged-across column is
+    left out of its own — so a row under a span has one fewer element than it
+    has columns, and every cell after the span lands to the left of where it
+    belongs. The caller carries the open spans, because a row cannot see them.
+
+    Against a dense header row none of this raises anything: the values simply
+    land one field to the left. Measured on a constructed row, a merged `Branch`
+    moved the points value into the amount column, so a $12.34 basket recorded
+    as $12.00 with no error anywhere.
+
+    Returns the placed cells and any spans this row OPENS, as
+    `{column: rows below}`. A merged region carries its value once, in its
+    top-left cell; every other position in it is empty, which is what the
+    swallowed columns already read as.
 
     Cells carry their text in an `ss:Data` child rather than directly, and that
     child may itself hold markup — the banner cell's `ss:Data` wraps its text in
     `html:B` and `html:U` — so the text is gathered from the whole subtree.
     """
     placed: list[str | None] = []
+    opened: dict[int, int] = {}
     column = 0
     for cell in row:
         if cell.tag.rpartition("}")[2] != "Cell":
             continue
-        column = _as_int(cell.get(f"{{{SS}}}Index")) or (column + 1)
+        index = _as_int(cell.get(f"{{{SS}}}Index"))
+        if index:
+            column = index
+        else:
+            column += 1
+            # A column held by a span from above is not written in this row, so
+            # the implicit "next column" steps over it. Without this the cell
+            # lands in the span's column and everything after it follows.
+            while column in blocked:
+                column += 1
         while len(placed) < column - 1:
             placed.append(None)
         data = cell.find(f"{{{SS}}}Data")
         placed.append(None if data is None else "".join(data.itertext()))
         # Clamped at zero: a negative span would walk the next cell backwards
         # over one already placed, which is worse than ignoring the attribute.
-        column += max(0, _as_int(cell.get(f"{{{SS}}}MergeAcross")) or 0)
-    return tuple(placed)
+        across = max(0, _as_int(cell.get(f"{{{SS}}}MergeAcross")) or 0)
+        down = max(0, _as_int(cell.get(f"{{{SS}}}MergeDown")) or 0)
+        if down:
+            # A region merged both ways blocks every column it spans, not just
+            # the one its value sits in.
+            for held in range(column, column + across + 1):
+                opened[held] = down
+        column += across
+    return tuple(placed), opened
 
 
 def looks_like_pdf(path: Path) -> bool:
