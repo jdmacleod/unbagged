@@ -23,49 +23,7 @@ from a specific response. See `CONTRIBUTING.md`.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/
 
-## [Unreleased]
-
-### Fixed
-
-- **The local vision model could never help, on any page.** It was asked, it
-  answered correctly, and every answer was thrown away. Two reasons, both in
-  how the answer was read rather than in the model: it prefixes each amount
-  with a currency mark the number reader did not tolerate, and one unreadable
-  amount voids a whole answer — so the first line of every reply killed it. And
-  it returns the receipt's own TAX, BALANCE and weight-qualifier lines among
-  the purchases however firmly the question says not to, which more than
-  doubled the basket. Both are now handled where the answer is read, because a
-  reader that works only when a model obeys is a reader that does not work.
-
-- **A capture cut off at its right edge is read, and said so.** A capture whose
-  amount column runs into the edge of the picture cuts
-
-  cutting through the last digit of every amount rather than removing it. Some
-  came back as a different digit with nothing to show they had changed; others
-  stopped looking like amounts at all and their rows were dropped, the printed
-  total among them. The page is now recognised as clipped from the position of
-  its own ink, and told apart from a receipt that simply ran past the bottom of
-  the picture. Such a capture is not itemised: the clip takes the printed total
-  along with the digits, so there is nothing left on the page to check any
-  reading against, and a reading nothing can check is not one this stores. The
-  visit keeps the total the statement gave it. The warning names the capture,
-  says the receipt is fine and the picture of it too narrow, and no longer tells
-  you to upload a second half that does not exist.
-
-
-
-- **Three messages blamed the response for this tool's own misreadings.** A
-  capture whose printed timestamp reached no visit was reported as disagreeing
-  with the statement, when the cause was a single digit misread off the till's
-  own stamp. A file that could not be read logged its name and discarded the
-  sentence explaining what to do about it. And an image logged as a failure
-  every time, though an image reaching the transcription tier is the routing
-  working, so an upload of captures wrote one such warning per file and buried
-  the ones that mattered.
-
-
 ## [0.15.0] - 2026-09-16
-
 
 **This release changes what already-ingested responses display.** Nothing needs
 re-loading and no migration runs, but three figures move: a product is now
@@ -77,7 +35,6 @@ has one and by its own lines where it does not — rather than summing only the
 visits that were itemised. So a figure you wrote down before may show a
 different one now. All three make the number match the page it heads; none
 changes what was stored.
-
 
 ### Added
 
@@ -96,8 +53,6 @@ changes what was stored.
   that did not was clipped when it was captured, so every amount on it lost
   part of its last digit.
 
-
-
   Reading whole pages at once is not safe for this: the engine drops a minus
   sign often enough to matter, turning a discount into a charge and, once, a
   decimal point into a factor of a hundred. The column holding money is read
@@ -112,9 +67,12 @@ changes what was stored.
   same gate every other reading passes and the whole basis for asking. Both
   figures that check it — the printed total and the tax — are taken off the page
   rather than out of the answer, so the sum has nothing left in it for an answer
-  to adjust. Where the tax line itself could not be read, a figure outside the
-  range a tax can occupy is refused outright, which bounds a basket to what the
-  receipt says was paid. Off unless `UNBAGGED_OLLAMA_HOST` is set; a host that
+  to adjust. A page that printed no total is not asked about at all: there would
+  be nothing to check the answer against. And because a sum says nothing about
+  its parts, the basket's gross is bounded too — otherwise a pair of offsetting
+  lines nets to zero and carries two invented products through every arithmetic
+  check there is. Off unless `UNBAGGED_OLLAMA_HOST` is set; a host that
+
   is not this machine is refused until you acknowledge that it would receive
   pictures of your shopping. See `.env.example`.
 
@@ -169,6 +127,39 @@ changes what was stored.
 
 ### Fixed
 
+- **The local vision model could never help, on any page.** It was asked, it
+  answered correctly, and every answer was thrown away. Two reasons, both in
+  how the answer was read rather than in the model: it prefixes each amount
+  with a currency mark the number reader did not tolerate, and one unreadable
+  amount voids a whole answer — so the first line of every reply killed it. And
+  it returns the receipt's own TAX, BALANCE and weight-qualifier lines among
+  the purchases however firmly the question says not to, which more than
+  doubled the basket. Both are now handled where the answer is read, because a
+  reader that works only when a model obeys is a reader that does not work.
+
+- **A capture cut off at its right edge is recognised, and said so.** Such a
+  capture runs its amount column into the edge of the picture, slicing through
+  the last digit of every amount rather than removing it. Some
+  came back as a different digit with nothing to show they had changed; others
+  stopped looking like amounts at all and their rows were dropped, the printed
+  total among them. The page is now recognised as clipped from the position of
+  its own ink, and told apart from a receipt that simply ran past the bottom of
+  the picture. Such a capture is not itemised: the clip takes the printed total
+  along with the digits, so there is nothing left on the page to check any
+  reading against, and a reading nothing can check is not one this stores. The
+  visit keeps the total the statement gave it. The warning names the capture,
+  says the receipt is fine and the picture of it too narrow, and no longer tells
+  you to upload a second half that does not exist.
+
+- **Three messages blamed the response for this tool's own misreadings.** A
+  capture whose printed timestamp reached no visit was reported as disagreeing
+  with the statement, when the cause was a single digit misread off the till's
+  own stamp. A file that could not be read logged its name and discarded the
+  sentence explaining what to do about it. And an image logged as a failure
+  every time, though an image reaching the transcription tier is the routing
+  working, so an upload of captures wrote one such warning per file and buried
+  the ones that mattered.
+
 - **A model's reading was checked against the model's own numbers.** The total
   printed on the receipt was read and then discarded, so the check that
   justifies asking a model anything reduced to self-consistency and any
@@ -201,7 +192,6 @@ changes what was stored.
   most of them.** The engine failing on one image raises the same thing as the
   engine not being installed, so a single timeout reported the whole upload as
   unreadable in the same report as the baskets it had just read.
-
 
 - **Two readings of a joined receipt both added up, and the wrong one won.** A
   product and its cancellation straddling a seam sum to zero, so keeping both
@@ -666,7 +656,6 @@ differently.
   included.
 
 ### Fixed
-
 
 - **The favicon and logo never appeared, because the assets were never wired to
   anything.** They were committed to `resources/` in a commit named "add the
