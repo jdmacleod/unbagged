@@ -23,7 +23,16 @@ from a specific response. See `CONTRIBUTING.md`.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/
 
-## [Unreleased]
+## [0.15.0] - 2026-09-16
+
+**This release changes what already-ingested responses display.** Nothing needs
+re-loading and no migration runs, but two figures move: a product is now
+identified by the code the retailer disclosed *or*, where it disclosed none, by
+the name it printed — and the Products count no longer includes items that only
+ever appear as negative lines, so a response whose figure you wrote down before
+may show a different one now. Both changes make the number match the page it
+heads; neither changes what was stored.
+
 
 ### Added
 
