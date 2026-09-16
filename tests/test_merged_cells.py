@@ -100,7 +100,7 @@ class TestAMergedCellDoesNotCostABasketItsCents:
         # Branch spans Branch and Amount, so Amount is inside the merge and the
         # points value sits at column 5 where the header says Point.
         branch = _cell("SOME BRANCH", merge=1) if merge else _cell("SOME BRANCH")
-        data = _cell("40100200300") + _cell("2020-01-18 09:59:00.0") + branch
+        data = _cell("40100200300") + _cell("2019-03-04 11:07:00.0") + branch
         if not merge:
             data += _cell("12.34")
         data += _cell("12")
@@ -141,7 +141,7 @@ class TestTheBannerCellAsTheExportActuallyWritesIt:
             + _row("".join(_cell(h) for h in HEADERS))
             + _row(
                 _cell("40100200300")
-                + _cell("2020-01-18 09:59:00.0")
+                + _cell("2019-03-04 11:07:00.0")
                 + _cell("SOME BRANCH")
                 + _cell("12.34")
                 + _cell("12")
