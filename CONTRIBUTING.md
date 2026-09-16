@@ -218,6 +218,31 @@ which sets `pythonpath = ["src", "."]`. That is the worst version of this to
 discover, and `tests/test_packaging.py` now asserts that no Makefile, CI workflow
 or pre-commit hook uses the path form.
 
+## Measuring a vision model
+
+`tools/bakeoff_vision.py` scores the local vision models on a host against
+receipt-shaped pages, so `UNBAGGED_OLLAMA_VISION_MODEL` can carry a measured
+default rather than a guess. It needs a host and pulled models, so it is not a
+gate and does not run in CI; `src/unbagged/adapters/hmart/NOTES.md` carries the
+results and the date they were taken on.
+
+    python -m tools.bakeoff_vision --screen --host http://10.0.0.2:11434
+    python -m tools.bakeoff_vision --models qwen3-vl:8b --out results.json
+
+**Its inputs are synthetic by construction and there is no flag that takes a
+file.** Every page comes from `tools/bakeoff_cases.py`, which draws it from rows
+written in source, and that is what makes a score publishable: the ground truth
+is the code. A capture's filename alone encodes a date, so pointing this at the
+real corpus would put somebody's shopping into a rendered page and a saved
+answer at once. Do not add an input path to it. Anything it writes is still
+yours to run `make check-pii` over before committing.
+
+It reports two tiers. **Tier A** drives the lane as it ships — the real prompt,
+the real schema, and `from_reply` plus `foots` for the verdict. **Tier B** drops
+the schema and widens the context window. A model that fails A and passes B is
+capable and tripped by the schema rather than a weak reader, which is a
+different thing to fix.
+
 ## Writing a test that needs a browser
 
 Mark it with `requires_browser` from `tests/container/conftest.py`, not
