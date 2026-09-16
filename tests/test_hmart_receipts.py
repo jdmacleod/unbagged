@@ -196,7 +196,6 @@ class TestTheLayoutOfAPage:
         assert tail, "the fixture must carry a card block or this proves nothing"
         assert tail not in repr(found)
         assert all("Card" not in line.description for line in found.lines)
-        assert all("Card" not in line.description for line in found.lines)
 
     def test_the_customer_id_and_the_stamp_are_recovered(self):
         found = read(BASKET)
@@ -276,3 +275,63 @@ class TestWhatIsTrimmedFromAName:
         assert rc._clean("BLH B FRESH POTATO.") == "BLH B FRESH POTATO."
         assert rc._clean("MRNG HI-CHEW GRN A.") == "MRNG HI-CHEW GRN A."
         assert rc._clean("SC - MRN CHK BNLS") == "SC - MRN CHK BNLS"
+
+
+@needs_engine
+class TestWhichLineWasTheTax:
+    """Found by the adversarial pass on 2026-09-16.
+
+    `foots()` adds tax back, so `sum(items) + tax` is the same number whether
+    the line above the balance was tax or a purchase. A receipt with no TAX line
+    therefore loses its last purchase and reconciles perfectly — the exact
+    "foots and is still wrong" case the gate exists to prevent, and one the gate
+    is structurally blind to. Measured on the real corpus: the TAX word reads
+    off only 34 of 46 captures, and on at least one the line above the balance
+    is a product.
+    """
+
+    def page(self, rows):
+        return rc.read_capture(tr.transcribe(build_receipt(rows)), "Transaction_030419.png")
+
+    NO_TAX_LINE = [
+        ("", "Customer ID: 40100200300", None),
+        ("", "APPLE", "1.00"),
+        ("", "PEAR", "2.00"),
+        ("", "MILK", "3.00"),
+        ("***", "BALANCE", "6.00"),
+        ("", "CREDIT CARD", "6.00"),
+        ("", "2019-03-04 11:07:00  2  118  0042", None),
+    ]
+
+    def test_a_receipt_with_no_tax_line_still_foots_after_eating_a_purchase(self):
+        """The bug, asserted as it actually behaves.
+
+        This is NOT the fix — it records that the gate cannot see this, which is
+        why something outside the receipt has to choose.
+        """
+        found = self.page(self.NO_TAX_LINE)
+        assert rc.foots(found) is None, "the gate reconciles either reading"
+        assert found.tax == Decimal("3.00"), "the purchase was taken as tax"
+
+    def test_the_receipt_says_whether_it_read_the_word_or_guessed(self):
+        """What lets the adapter know it has a choice to make."""
+        assert self.page(self.NO_TAX_LINE).tax_inferred is True
+
+    def test_a_receipt_that_prints_TAX_is_not_a_guess(self):
+        with_tax = [
+            ("", "Customer ID: 40100200300", None),
+            ("", "APPLE", "1.00"),
+            ("", "TAX", "0.00"),
+            ("***", "BALANCE", "1.00"),
+            ("", "CREDIT CARD", "1.00"),
+            ("", "2019-03-04 11:07:00  2  118  0042", None),
+        ]
+        found = self.page(with_tax)
+        assert found.tax_inferred is False
+        assert found.tax == Decimal("0.00")
+
+    def test_the_other_reading_is_available_and_keeps_the_purchase(self):
+        restored = self.page(self.NO_TAX_LINE).with_tax_as_item()
+        assert restored.tax == Decimal("0.00")
+        assert sum(line.amount for line in restored.lines) == Decimal("6.00")
+        assert rc.foots(restored) is None, "both readings reconcile — that is the point"

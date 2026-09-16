@@ -312,7 +312,7 @@ def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
     they are, and `total_saved` is the difference between them.
     """
     row = conn.execute(
-        """
+        f"""
         SELECT COUNT(DISTINCT t.id) AS basket_count,
                MIN(t.occurred_at) AS first_visit,
                MAX(t.occurred_at) AS last_visit,
@@ -343,13 +343,13 @@ def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
                -- page under it did not list.
                COUNT(DISTINCT CASE
                    WHEN i.retail_amt > 0
-                   THEN COALESCE(NULLIF(i.upc, ''), NULLIF(i.description_raw, ''))
+                   THEN {PRODUCT_KEY}
                END) AS distinct_products,
                SUM(CASE WHEN i.retail_amt = 0 THEN 1 ELSE 0 END) AS zero_value_lines,
                SUM(CASE WHEN i.retail_amt < 0 THEN 1 ELSE 0 END) AS negative_lines
         FROM txn t LEFT JOIN txn_item i ON i.txn_id = t.id
         WHERE t.request_id = ?
-        """,
+        """,  # noqa: S608 - PRODUCT_KEY is a module literal, never caller input
         (request_id,),
     ).fetchone()
     result = dict(row)
@@ -681,16 +681,16 @@ def price_history(
     """
     rows = _rows(
         conn,
-        """
-        SELECT COALESCE(NULLIF(i.upc, ''), NULLIF(i.description_raw, '')) AS product_key,
+        f"""
+        SELECT {PRODUCT_KEY} AS product_key,
                i.upc, i.description_raw, i.retail_amt, i.loyalty_amt,
                substr(t.occurred_at, 1, 10) AS on_date
         FROM txn_item i JOIN txn t ON t.id = i.txn_id
         WHERE t.request_id = ?
-          AND COALESCE(NULLIF(i.upc, ''), NULLIF(i.description_raw, '')) IS NOT NULL
+          AND {PRODUCT_KEY} IS NOT NULL
           AND i.retail_amt > 0
         ORDER BY t.occurred_at, i.id
-        """,
+        """,  # noqa: S608 - PRODUCT_KEY is a module literal, never caller input
         (request_id,),
     )
 
@@ -1053,18 +1053,18 @@ def product_index(
     """
     rows = _rows(
         conn,
-        """
-        SELECT COALESCE(NULLIF(i.upc, ''), NULLIF(i.description_raw, '')) AS product_key,
+        f"""
+        SELECT {PRODUCT_KEY} AS product_key,
                i.upc, i.description_raw, COUNT(*) AS purchases,
                MIN(substr(t.occurred_at, 1, 10)) AS first_seen,
                MAX(substr(t.occurred_at, 1, 10)) AS last_seen
         FROM txn_item i JOIN txn t ON t.id = i.txn_id
         WHERE t.request_id = ?
-          AND COALESCE(NULLIF(i.upc, ''), NULLIF(i.description_raw, '')) IS NOT NULL
+          AND {PRODUCT_KEY} IS NOT NULL
           AND i.retail_amt > 0
-        GROUP BY COALESCE(NULLIF(i.upc, ''), NULLIF(i.description_raw, '')),
+        GROUP BY {PRODUCT_KEY},
                  i.upc, i.description_raw
-        """,
+        """,  # noqa: S608 - PRODUCT_KEY is a module literal, never caller input
         (request_id,),
     )
 

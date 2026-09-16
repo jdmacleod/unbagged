@@ -17,7 +17,15 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, replace
 
-from unbagged.transcription.image import Box, Line, assemble, load, rightmost_column, to_png
+from unbagged.transcription.image import (
+    UPSCALE,
+    Box,
+    Line,
+    assemble,
+    load,
+    rightmost_column,
+    to_png,
+)
 from unbagged.transcription.words import (
     ENGINE,
     MONEY_ALPHABET,
@@ -82,8 +90,6 @@ class Transcript:
 
 def transcribe(data: bytes) -> Transcript:
     """Read one capture. Raises `OcrUnavailable` if the engine will not run."""
-    from unbagged.transcription.image import UPSCALE
-
     try:
         image = load(data)
     except OcrUnavailable:
@@ -94,14 +100,25 @@ def transcribe(data: bytes) -> Transcript:
         # with the library. What matters to the caller is the same either way:
         # this one file cannot be read.
         raise UnreadableImage(str(exc)) from exc
-    page = to_png(image)
-    lines = assemble(read(page))
-    if not lines:
-        return Transcript((), image.width, image.height, None, ENGINE, version())
 
-    column = rightmost_column(lines, width=image.width)
-    if column is not None:
-        lines = _reread_money(image, lines, column, upscale=UPSCALE)
+    # The WHOLE pixel pipeline, not just the decode. `to_png` and
+    # `_reread_money` call `convert`, `resize` and `save`, every one of which
+    # raises on its own — and anything escaping here is rewrapped by `ingest` as
+    # an adapter bug, which is how one damaged file among forty-six used to lose
+    # the entire response. Guarding only `load()` left that hole open for every
+    # failure after the first byte was read.
+    try:
+        page = to_png(image)
+        lines = assemble(read(page))
+        if not lines:
+            return Transcript((), image.width, image.height, None, ENGINE, version())
+        column = rightmost_column(lines, width=image.width)
+        if column is not None:
+            lines = _reread_money(image, lines, column, upscale=UPSCALE)
+    except (OcrUnavailable, UnreadableImage):
+        raise
+    except Exception as exc:
+        raise UnreadableImage(str(exc)) from exc
     return Transcript(lines, image.width, image.height, column, ENGINE, version())
 
 
@@ -116,10 +133,7 @@ def _reread_money(image, lines: tuple[Line, ...], column: Box, *, upscale: int) 
     fiction.
     """
     strip = to_png(image, box=column, upscale=upscale)
-    try:
-        found = read(strip, alphabet=MONEY_ALPHABET)
-    except OcrUnavailable:
-        raise
+    found = read(strip, alphabet=MONEY_ALPHABET)
     # Back into the parent's coordinates: the crop's own origin, then the
     # enlargement the engine was given.
     rescaled = tuple(
@@ -168,8 +182,3 @@ def _body(line: Line) -> float:
 
 def _in_column(word: Word, column: Box) -> bool:
     return word.left + word.width / 2 >= column.left
-
-
-def _overlaps(word: Word, line: Line) -> bool:
-    """Does this word sit in the same horizontal band as this line?"""
-    return line.top - 2 <= word.middle <= line.bottom + 2

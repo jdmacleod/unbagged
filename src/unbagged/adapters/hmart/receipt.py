@@ -45,7 +45,7 @@ not transcribed and not stored.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
@@ -90,7 +90,7 @@ STAMP = re.compile(
 
 #: An amount, with whatever the engine made of the currency mark in front of it.
 #: `§` is what it returns for `$` often enough to be worth naming.
-AMOUNT = re.compile(r"^[$§s]?\s*(?P<value>-?\d+\.\d{2})\s*[$§]?$")
+AMOUNT = re.compile(r"^[$§s]?\s*(?P<value>-?\d{1,3}(?:,\d{3})*\.\d{2}|-?\d+\.\d{2})\s*[$§]?$")
 
 #: Lines that are the receipt's own furniture rather than a purchase.
 TAX = re.compile(r"\bTAX\b", re.IGNORECASE)
@@ -142,6 +142,33 @@ class Receipt:
     stamp: Stamp | None = None
     #: A capture with no balance on it is the top half of a taller receipt.
     complete: bool = False
+    #: True when the tax line was identified by POSITION alone — the line above
+    #: the balance, whatever it turned out to say. See `with_tax_as_item`.
+    tax_inferred: bool = False
+
+    def with_tax_as_item(self) -> Receipt:
+        """The same receipt, read with the tax line taken as a purchase.
+
+        **`foots()` cannot tell these two readings apart.** It adds tax back, so
+        `sum(items) + tax` is the same number either way — which is exactly how a
+        receipt with no TAX line on it loses its last purchase and still
+        reconciles perfectly. Measured on the real corpus: the TAX word reads off
+        only 34 of 46 captures, and on at least one the line above the balance is
+        a product.
+
+        Only a figure from OUTSIDE the receipt can choose between them, and the
+        points statement is one: it reports the pre-tax subtotal, so it agrees
+        with exactly one of the two readings. The adapter does the choosing.
+        """
+        if self.tax is None:
+            return self
+        restored = ReceiptLine(description="", amount=self.tax, row=0)
+        return replace(
+            self,
+            lines=self.lines + (restored,),
+            tax=Decimal("0.00"),
+            tax_inferred=False,
+        )
 
     @property
     def subtotal(self) -> Decimal:
@@ -194,7 +221,7 @@ def read_capture(transcript: Transcript, capture: str) -> Receipt:
             )
         )
 
-    items, tax, balance, tender = _settle(rows, complete=_reached_the_end(transcript))
+    items, tax, balance, tender, inferred = _settle(rows, complete=_reached_the_end(transcript))
     return Receipt(
         captures=(capture,),
         lines=items,
@@ -204,6 +231,7 @@ def read_capture(transcript: Transcript, capture: str) -> Receipt:
         tender=tender,
         stamp=stamp,
         complete=balance is not None,
+        tax_inferred=inferred,
     )
 
 
@@ -220,7 +248,7 @@ class _Row:
 
 def _settle(
     rows: list[_Row], *, complete: bool
-) -> tuple[tuple[ReceiptLine, ...], Decimal | None, Decimal | None, str | None]:
+) -> tuple[tuple[ReceiptLine, ...], Decimal | None, Decimal | None, str | None, bool]:
     """Split the amount lines into purchases, tax, the balance and the tender.
 
     By POSITION first and by what the line says second, which is the opposite
@@ -238,7 +266,7 @@ def _settle(
     so the cost of this being fooled is a quarantined visit, never a wrong one.
     """
     if not rows:
-        return (), None, None, None
+        return (), None, None, None, False
     if not complete:
         # The top half of a taller receipt: it runs off the bottom of the
         # screen mid-list, so every amount on it is a purchase and none of the
@@ -250,7 +278,7 @@ def _settle(
         # two products that happen to cost the same, which reads exactly like a
         # balance and its tender echo. It was taken as a complete receipt, the
         # second half was never joined to it, and the visit split in two.
-        return _purchases(rows), None, None, None
+        return _purchases(rows), None, None, None, False
 
     tender = None
     balance = None
@@ -264,12 +292,17 @@ def _settle(
         body = rows[:-1]
 
     tax = None
+    tax_inferred = False
     if balance is not None and body:
-        # The line above the balance, whatever the engine made of the word.
+        # The line above the balance. Whether the engine could READ the word is
+        # recorded, because the two readings are indistinguishable to `foots()`
+        # and something outside the receipt has to choose — see
+        # `Receipt.with_tax_as_item`.
         tax = body[-1].amount
+        tax_inferred = not TAX.search(body[-1].description)
         body = body[:-1]
 
-    return _purchases(body), tax, balance, tender
+    return _purchases(body), tax, balance, tender, tax_inferred
 
 
 def _purchases(rows) -> tuple[ReceiptLine, ...]:
@@ -347,9 +380,11 @@ def _description_column(transcript: Transcript) -> int:
             continue
         outside = [w for w in line.words if w.left + w.width / 2 < transcript.money_column.left]
         if outside:
-            starts.append(
-                max(w.left for w in outside if w.left <= min(o.left for o in outside) + 2)
-            )
+            # Hoisted: the inner bound does not depend on the word being tested,
+            # and recomputing it per candidate made this quadratic in the words
+            # left of the money column for no reason.
+            leftmost = min(word.left for word in outside)
+            starts.append(max(w.left for w in outside if w.left <= leftmost + 2))
     if not starts:
         return 0
     return max(set(starts), key=starts.count)
@@ -482,7 +517,7 @@ def _amount_in(line: Line, column: Box | None) -> Decimal | None:
     for word in line.within(column):
         if found := AMOUNT.match(word.text.strip()):
             try:
-                return Decimal(found.group("value"))
+                return Decimal(found.group("value").replace(",", ""))
             except InvalidOperation:
                 return None
     return None
@@ -609,10 +644,22 @@ def from_reply(reply: dict, like: Receipt) -> Receipt | None:
     reading from an invention. The receipt's own printed total is the one fact in
     the room the model had no hand in.
 
-    The timestamp, the customer number and the captures come from `like` rather
-    than from the reply. They were read off the page by something deterministic
-    and they are what the visit is joined on; a model is asked about the part
-    that was genuinely unreadable, not invited to restate the rest.
+    The timestamp, the customer number, the captures **and the balance** come
+    from `like` rather than from the reply. That last one is the whole gate:
+    taking the balance out of the reply too made `foots()` a check of three
+    model-authored numbers against each other, so any self-consistent JSON
+    passed — a fabricated basket of 1000.00 was accepted against a page the
+    engine had read as 87.65. The printed total is the one fact the model had
+    no hand in, and it only works as a check if it comes from the page.
+
+    A reply whose balance disagrees with the printed one is refused outright
+    rather than corrected: the two read the same pixels and reached different
+    numbers, and nothing here can say which is right.
+
+    A page whose own balance could not be read returns None. There is nothing
+    to check the model against, and an answer that cannot be checked is not
+    one this stores — the captures arrive by mail from outside the trust
+    boundary, and text rendered into one is an instruction the model may read.
     """
     lines = []
     for index, row in enumerate(reply.get("lines") or [], start=1):
@@ -631,16 +678,22 @@ def from_reply(reply: dict, like: Receipt) -> Receipt | None:
                 row=index,
             )
         )
-    tax = _decimal(reply.get("tax"))
-    balance = _decimal(reply.get("balance"))
-    if not lines or balance is None:
+    if not lines:
         return None
+    if like.balance is None:
+        # Nothing printed to check the answer against.
+        return None
+    claimed = _decimal(reply.get("balance"))
+    if claimed is None or claimed != like.balance:
+        return None
+    tax = _decimal(reply.get("tax"))
     return Receipt(
         captures=like.captures,
         lines=tuple(lines),
         customer_id=like.customer_id,
         tax=tax if tax is not None else Decimal("0.00"),
-        balance=balance,
+        # The page's, never the reply's.
+        balance=like.balance,
         tender=like.tender,
         stamp=like.stamp,
         complete=True,
@@ -651,8 +704,12 @@ def _decimal(value: object) -> Decimal | None:
     if value is None:
         return None
     try:
-        return Decimal(str(value).replace("$", "").replace(",", "").strip()).quantize(
-            Decimal("0.01")
-        )
+        found = Decimal(str(value).replace("$", "").replace(",", "").strip())
+        # `Decimal("NaN")` parses without raising, and NaN compares false
+        # against everything — so it survives to the gate and only fails there
+        # by accident. The gate should not be load-bearing for type safety.
+        if not found.is_finite():
+            return None
+        return found.quantize(Decimal("0.01"))
     except (InvalidOperation, ValueError):
         return None

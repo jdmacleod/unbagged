@@ -11,7 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from unbagged.adapters.hmart.adapter import HMartAdapter
+from unbagged.adapters.hmart import receipt as rc
+from unbagged.adapters.hmart.adapter import HMartAdapter, _settle_tax_against
 from unbagged.extraction import read_tables
 from unbagged.models import (
     DisclosureCategory,
@@ -546,3 +547,77 @@ class TestAFileThatIsNotWhatItLooksLike:
         parsed = HMartAdapter().parse(SourceBundle(documents=(self.photo(tmp_path),)))
         assert not any("spreadsheet carried a header row" in w.message for w in parsed.warnings)
         assert any("receipt captures in this upload" in w.message for w in parsed.warnings)
+
+
+class TestWhenTheStatementSettlesTheTaxLine:
+    """The statement is the only figure that can choose between two readings.
+
+    Found by the adversarial pass on 2026-09-16. `foots()` adds tax back, so it
+    reconciles whether the line above the balance was tax or a purchase. The
+    points statement reports the PRE-tax subtotal, so it agrees with exactly one
+    of them.
+    """
+
+    def receipt(self, *, lines, tax, balance, inferred):
+        return rc.Receipt(
+            captures=("Transaction_030419.png",),
+            lines=tuple(rc.ReceiptLine(f"ITEM {n}", a) for n, a in enumerate(lines, 1)),
+            tax=tax,
+            balance=balance,
+            complete=True,
+            tax_inferred=inferred,
+        )
+
+    def txn(self, stated):
+        from unbagged.models import Transaction
+
+        return Transaction(occurred_at="2019-03-04T11:07:00", total_pre_discount=float(stated))
+
+    def test_a_purchase_eaten_as_tax_is_given_back(self):
+        """The statement says 6.00 pre-tax; the reading that kept only 3.00 of
+        purchases is the wrong one, and nothing inside the receipt could tell."""
+        misread = self.receipt(
+            lines=[Decimal("1.00"), Decimal("2.00")],
+            tax=Decimal("3.00"),
+            balance=Decimal("6.00"),
+            inferred=True,
+        )
+        settled = _settle_tax_against(self.txn(Decimal("6.00")), misread)
+        assert settled.subtotal == Decimal("6.00")
+        assert settled.tax == Decimal("0.00")
+
+    def test_a_real_tax_line_is_left_alone(self):
+        """The statement agrees with the as-read reading, so nothing moves."""
+        correct = self.receipt(
+            lines=[Decimal("1.00"), Decimal("2.00")],
+            tax=Decimal("0.50"),
+            balance=Decimal("3.50"),
+            inferred=True,
+        )
+        settled = _settle_tax_against(self.txn(Decimal("3.00")), correct)
+        assert settled.tax == Decimal("0.50")
+        assert settled.subtotal == Decimal("3.00")
+
+    def test_a_receipt_that_printed_the_word_is_never_reinterpreted(self):
+        """A legible TAX line disagreeing with the statement has a different
+        problem, and `_disagrees` should report it rather than have it quietly
+        reinterpreted into agreement."""
+        read_it = self.receipt(
+            lines=[Decimal("1.00")],
+            tax=Decimal("5.00"),
+            balance=Decimal("6.00"),
+            inferred=False,
+        )
+        settled = _settle_tax_against(self.txn(Decimal("6.00")), read_it)
+        assert settled is read_it
+
+    def test_neither_reading_agreeing_changes_nothing(self):
+        """So `_disagrees` still sees it and quarantines the visit."""
+        wrong = self.receipt(
+            lines=[Decimal("1.00")],
+            tax=Decimal("2.00"),
+            balance=Decimal("3.00"),
+            inferred=True,
+        )
+        settled = _settle_tax_against(self.txn(Decimal("99.00")), wrong)
+        assert settled is wrong

@@ -60,6 +60,15 @@ LOOPBACK = frozenset({"localhost", "127.0.0.1", "::1"})
 TIMEOUT_SECONDS = 180
 PREFLIGHT_TIMEOUT_SECONDS = 10
 
+#: The most of a model's reply this will read.
+#:
+#: The one inbound channel from a process outside this app — and, with the
+#: remote acknowledgement given, from another machine. Every other failure of
+#: this transport is mapped to a ConnectionError the caller handles; an
+#: unbounded body was not bounded at all, and got read fully into memory inside
+#: a request someone is waiting on. A transcribed receipt is kilobytes.
+MAX_REPLY_BYTES = 4 * 1024 * 1024
+
 #: Context the encoded image spends, which a prompt measured in characters
 #: cannot see. Over-estimated on purpose: too large costs memory, too small
 #: gets the prompt rejected outright with nothing to read in the reply.
@@ -332,7 +341,12 @@ def _send(request, timeout: float, opener=None) -> dict:
     # rather than one receipt.
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
-            return json.loads(response.read().decode("utf-8"))
+            body = response.read(MAX_REPLY_BYTES + 1)
+            if len(body) > MAX_REPLY_BYTES:
+                raise ConnectionError(
+                    f"the model at this host sent more than {MAX_REPLY_BYTES} bytes"
+                )
+            return json.loads(body.decode("utf-8"))
     except (TimeoutError, urllib.error.URLError, OSError, ValueError) as exc:
         if isinstance(exc, urllib.error.HTTPError):
             raise

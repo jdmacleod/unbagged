@@ -138,15 +138,19 @@ class TestAnOverlayIsNotText:
         scrawled = amounts(tr.transcribe(build_receipt(BASKET, scrawl=True)))
         assert scrawled == clean
 
-    def test_without_the_mask_the_same_scrawl_does_damage(self):
-        """The control. Without it the test above passes on a harmless scrawl."""
+    def test_without_the_mask_the_same_scrawl_does_damage(self, monkeypatch):
+        """The control. Without it the test above passes on a harmless scrawl.
+
+        `monkeypatch`, not a hand-restored global. The try/finally that used to
+        sit here restored it correctly, but masking's whole job is to be
+        invisible when it works — so the day an early return or a second assert
+        slips in above the finally, every test collected after this one silently
+        runs with masking off and nothing announces it.
+        """
         page = build_receipt(BASKET, scrawl=True)
-        original = tr_image.OVERLAY_COLOURS
-        tr_image.OVERLAY_COLOURS = ()
-        try:
-            unmasked = amounts(tr.transcribe(page))
-        finally:
-            tr_image.OVERLAY_COLOURS = original
+        monkeypatch.setattr(tr_image, "OVERLAY_COLOURS", ())
+        unmasked = amounts(tr.transcribe(page))
+        monkeypatch.undo()
         assert unmasked != amounts(tr.transcribe(build_receipt(BASKET)))
 
     def test_masking_costs_a_clean_page_nothing(self):

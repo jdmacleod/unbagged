@@ -94,9 +94,11 @@ def _captures(bundle: SourceBundle) -> list:
     about which retailer sent it, and a name alone says nothing about what is
     in the file.
 
-    Cheap enough for `sniff` on purpose — it reads the first sixteen bytes of
-    each file and no more. Transcribing one costs the better part of a second,
-    and `sniff` is called on every adapter for every upload.
+    Cheap enough for `sniff` on purpose. `classify()` tries SpreadsheetML before
+    images, so the real cost is the 4 KB prolog that check decodes, not the
+    sixteen magic bytes this one needs. Either way it is nothing beside
+    transcribing a capture, which costs the better part of a second, and `sniff`
+    runs for every adapter on every upload.
     """
     from pathlib import Path
 
@@ -447,6 +449,7 @@ def _itemise(
                 else:
                     added.append(receipt)
                 continue
+            receipt = _settle_tax_against(transactions[index], receipt)
             disagreement = _disagrees(transactions[index], receipt)
             if disagreement is not None:
                 warnings.add(disagreement, locator=receipt.captures[0])
@@ -637,6 +640,33 @@ def _match(
     return None
 
 
+def _settle_tax_against(txn: Transaction, receipt: rc.Receipt) -> rc.Receipt:
+    """Decide whether the line above the balance was tax or a purchase.
+
+    `foots()` cannot: it adds tax back, so both readings reconcile to the same
+    number. A receipt with no TAX line therefore loses its last purchase and
+    still adds up perfectly — verified on a capture whose line above the balance
+    is a product, and the TAX word reads off only 34 of 46 real captures, so
+    reading it is not a reliable answer either.
+
+    The statement is a figure from outside the receipt, and it reports the
+    PRE-tax subtotal — so it agrees with exactly one of the two readings. Where
+    the receipt's own word was legible this only ever confirms it; where it was
+    not, this is the whole check.
+
+    Only consulted when the word could not be read. A receipt that says TAX and
+    disagrees with the statement has a different problem, and `_disagrees`
+    should report it rather than have it silently reinterpreted.
+    """
+    if not receipt.tax_inferred or txn.total_pre_discount is None:
+        return receipt
+    stated = Decimal(str(txn.total_pre_discount))
+    if _close(stated, receipt.subtotal):
+        return receipt
+    restored = receipt.with_tax_as_item()
+    return restored if _close(stated, restored.subtotal) else receipt
+
+
 def _disagrees(txn: Transaction, receipt: rc.Receipt) -> str | None:
     """Do the two halves of the response agree about what this visit cost?
 
@@ -694,19 +724,7 @@ def _with_items(txn: Transaction, receipt: rc.Receipt, by_name: dict) -> Transac
     document = by_name.get(receipt.captures[0])
     return replace(
         txn,
-        items=tuple(
-            TxnItem(
-                description_raw=line.description,
-                quantity=float(line.quantity) if line.quantity is not None else None,
-                retail_amt=float(line.amount),
-                # Left None throughout. A weight discount and a cancellation are
-                # their own negative lines on this receipt, the way a return is
-                # in a Kroger export — folding either into a loyalty price is
-                # the failure `models.py` spends thirty lines warning about.
-                loyalty_amt=None,
-            )
-            for line in receipt.lines
-        ),
+        items=_items(receipt),
         tender_type=receipt.tender or txn.tender_type,
         division_code=receipt.stamp.lane if receipt.stamp else txn.division_code,
         external_order_id=receipt.stamp.number if receipt.stamp else txn.external_order_id,

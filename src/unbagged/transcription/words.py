@@ -84,17 +84,6 @@ class Word:
         """Vertical centre. What lines are clustered on."""
         return self.top + self.height / 2
 
-    def shifted(self, dx: int, dy: int) -> Word:
-        """The same word in the parent image's coordinates.
-
-        A word read out of a crop knows only where it sat in the crop. Without
-        this, a re-read column's words cannot be matched back to the lines they
-        belong to.
-        """
-        from dataclasses import replace
-
-        return replace(self, left=self.left + dx, top=self.top + dy)
-
 
 def available() -> bool:
     """Is the engine installed? Cheap, and never raises."""
@@ -183,5 +172,10 @@ def _parse_tsv(text: str) -> tuple[Word, ...]:
         except (KeyError, TypeError, ValueError):
             # A malformed row costs that word, never the page. The engine has
             # been seen to emit a short row at the end of its output.
-            log.debug("skipping unreadable TSV row: %r", row)
+            #
+            # The geometry, never the text. A row's `text` is a word read off
+            # the receipt — a product name or an amount — and this project's
+            # whole posture is that itemised purchases do not leave the
+            # database. A log line is not that database.
+            log.debug("skipping unreadable TSV row (%d fields)", len(row))
     return tuple(words)

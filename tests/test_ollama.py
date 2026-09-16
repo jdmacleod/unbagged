@@ -198,34 +198,81 @@ class TestWhatIsAsked:
 class TestWhatIsDoneWithTheAnswer:
     """The rule the whole path turns on."""
 
-    LIKE = rc.Receipt(captures=("a.png",), lines=(), customer_id="40100200300")
+    #: A page the engine DID read a total off. That number is the gate.
+    LIKE = rc.Receipt(
+        captures=("a.png",),
+        lines=(rc.ReceiptLine("REAL", Decimal("87.65")),),
+        customer_id="40100200300",
+        tax=Decimal("0.00"),
+        balance=Decimal("87.65"),
+        complete=True,
+    )
 
-    def test_a_reading_that_adds_up_becomes_a_receipt(self):
+    def test_a_reading_that_matches_the_printed_total_becomes_a_receipt(self):
         found = rc.from_reply(
             {
                 "lines": [
-                    {"description": "PEELED GARLIC 1 LB", "amount": "6.99"},
+                    {"description": "PEELED GARLIC 1 LB", "amount": "91.40"},
                     {"description": "SC - CHK BNLS", "amount": "-3.75"},
                 ],
                 "tax": "0.00",
-                "balance": "3.24",
+                "balance": "87.65",
             },
             self.LIKE,
         )
         assert rc.foots(found) is None
         assert found.customer_id == "40100200300", "what was read off the page is kept"
 
-    def test_a_reading_that_does_not_add_up_is_still_rejected_by_the_gate(self):
-        """A model asked to read a number always returns one, confidently.
+    def test_an_invented_basket_is_refused_however_self_consistent(self):
+        """Found by the adversarial pass. The gate was checking the model
+        against its own numbers.
 
-        Nothing in the reply separates a reading from an invention, so the
-        receipt's own printed total is the only thing allowed to decide.
+        `from_reply` took `balance` out of the reply too, so `foots()` compared
+        three model-authored figures to each other and any self-consistent JSON
+        passed. A fabricated basket of 1000.00 was accepted against a page the
+        engine had read as 87.65 — while the module docstring claimed the
+        printed total was "the one fact in the room the model had no hand in".
         """
+        assert (
+            rc.from_reply(
+                {
+                    "lines": [{"description": "FABRICATED", "amount": "1000.00"}],
+                    "tax": "0.00",
+                    "balance": "1000.00",
+                },
+                self.LIKE,
+            )
+            is None
+        )
+
+    def test_a_page_with_no_printed_total_is_never_adjudicated(self):
+        """Nothing to check the answer against, so there is no answer to keep.
+
+        Also the only thing standing between a capture and prompt injection:
+        the images arrive by mail from outside the trust boundary, and a page
+        the engine found no receipt on is exactly where text rendered into the
+        image would have nothing contradicting it.
+        """
+        blank = rc.Receipt(captures=("a.png",), lines=(), balance=None)
+        assert (
+            rc.from_reply(
+                {
+                    "lines": [{"description": "X", "amount": "5.00"}],
+                    "tax": "0.00",
+                    "balance": "5.00",
+                },
+                blank,
+            )
+            is None
+        )
+
+    def test_a_reading_whose_lines_do_not_reach_the_printed_total_is_rejected(self):
         found = rc.from_reply(
-            {"lines": [{"description": "X", "amount": "6.99"}], "tax": "0.00", "balance": "99.00"},
+            {"lines": [{"description": "X", "amount": "6.99"}], "tax": "0.00", "balance": "87.65"},
             self.LIKE,
         )
-        assert rc.foots(found) == Decimal("-92.01")
+        assert found is not None, "the balance matched, so the shape is accepted"
+        assert rc.foots(found) == Decimal("-80.66"), "and the arithmetic then refuses it"
 
     def test_one_unreadable_amount_voids_the_whole_answer(self):
         """Not just that line.
@@ -242,8 +289,20 @@ class TestWhatIsDoneWithTheAnswer:
                         {"description": "Y", "amount": "about four dollars"},
                     ],
                     "tax": "0.00",
-                    "balance": "6.99",
+                    "balance": "87.65",
                 },
+                self.LIKE,
+            )
+            is None
+        )
+
+    def test_a_not_a_number_amount_is_not_an_amount(self):
+        """`Decimal("NaN")` parses without raising and compares false against
+        everything, so it used to survive to the gate and fail there by
+        accident. The gate should not be load-bearing for type safety."""
+        assert (
+            rc.from_reply(
+                {"lines": [{"description": "X", "amount": "NaN"}], "tax": "0", "balance": "87.65"},
                 self.LIKE,
             )
             is None
@@ -253,4 +312,4 @@ class TestWhatIsDoneWithTheAnswer:
         assert rc.from_reply({"lines": [{"description": "X", "amount": "1.00"}]}, self.LIKE) is None
 
     def test_an_empty_answer_is_not_a_receipt(self):
-        assert rc.from_reply({"lines": [], "tax": "0.00", "balance": "0.00"}, self.LIKE) is None
+        assert rc.from_reply({"lines": [], "tax": "0.00", "balance": "87.65"}, self.LIKE) is None

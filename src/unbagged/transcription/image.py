@@ -34,6 +34,18 @@ OVERLAY_COLOURS: tuple[tuple[int, int, int], ...] = ((0, 0, 255),)
 
 PAPER = (255, 255, 255)
 
+#: The most pixels a capture may decode to.
+#:
+#: A screen capture of a receipt is around 550x2000 — roughly a megapixel. The
+#: upload cap is 64 MB of BYTES (`api.py`), which says nothing about what those
+#: bytes decode to: a solid-colour PNG under a megabyte expands to hundreds of
+#: megapixels, and `convert("RGB")` then `mask_overlay`'s several full-size
+#: buffers put peak allocation in the gigabytes. Pillow's own default only warns
+#: below twice its limit, and an OOM kill of the container is not catchable.
+#:
+#: Twenty megapixels is twenty times the real thing and far under the cliff.
+MAX_PIXELS = 20_000_000
+
 #: The engine reads small type better with more pixels under it. 3x was the
 #: smallest factor that read the amount column exactly on every real capture;
 #: beyond it accuracy is flat and the subprocess gets slower.
@@ -107,6 +119,14 @@ def load(data: bytes):
     from PIL import Image
 
     image = Image.open(io.BytesIO(data))
+    pixels = image.size[0] * image.size[1]
+    if pixels > MAX_PIXELS:
+        # Checked BEFORE `load()`, which is what actually decodes: the point is
+        # to refuse the allocation, not to survive it.
+        raise ValueError(
+            f"image is {pixels // 1_000_000} megapixels, over the "
+            f"{MAX_PIXELS // 1_000_000} this reads"
+        )
     image.load()
     image = image.convert("RGB")
     return mask_overlay(image)
