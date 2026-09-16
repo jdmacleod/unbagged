@@ -983,3 +983,60 @@ class TestWhatTheClipCheckMustNotMeasure:
         page = rc.read_capture(tr.transcribe(build_receipt(rows)), "Transaction_030419.png")
         assert page.balance == Decimal("7.49"), "the page read fine"
         assert page.clipped is False, "the stamp is not the amount column"
+
+
+class TestWhatAnEngineReadingOfNothingCorroborates:
+    """Found attacking the fix on 2026-09-16, and it is the same hole again.
+
+    `_corroborates` walks the amounts the engine read. An engine reading of
+    NOTHING means the loop never runs and every answer passes — which put the
+    anchored route straight back to the single equation it was written to
+    escape. Probed: with the engine reading no lines, a one-line answer worth
+    exactly the statement's total was accepted.
+    """
+
+    def page(self, engine_amounts):
+        return rc.Receipt(
+            captures=("Transaction_030419.png",),
+            lines=tuple(line(f"I{i}", a) for i, a in enumerate(engine_amounts)),
+            balance=None,
+            complete=False,
+            clipped=True,
+        )
+
+    def answer(self, amounts):
+        return {
+            "lines": [{"description": f"M{i}", "amount": a} for i, a in enumerate(amounts)],
+            "tax": "0.00",
+            "balance": "100.23",
+        }
+
+    def test_a_page_nothing_could_be_read_off_has_no_second_fact(self):
+        found = rc.from_reply(self.answer(["100.23"]), self.page([]), anchor=Decimal("100.23"))
+        assert found is None
+
+    def test_an_answer_that_replaces_every_amount_the_engine_read_is_refused(self):
+        engine = [f"{10.00 + i:.2f}" for i in range(10)]
+        found = rc.from_reply(self.answer(["100.23"]), self.page(engine), anchor=Decimal("100.23"))
+        assert found is None
+
+    def test_an_answer_may_not_bury_the_engines_reading_in_invented_lines(self):
+        """One matched amount does not license a hundred unmatched ones."""
+        flood = ["7.49"] + ["0.9274"] * 100
+        found = rc.from_reply(self.answer(flood), self.page(["7.45"]), anchor=Decimal("100.23"))
+        assert found is None
+
+    def test_the_shape_a_real_clip_produces_is_still_accepted(self):
+        """The clip corrupts last digits and destroys a row or two; it does not
+        invent lines. Ten read, eleven claimed, every read amount reappearing."""
+        engine = [f"{5.00 + i:.2f}" for i in range(10)]
+        claimed = engine + ["5.23"]
+        total = sum(Decimal(a) for a in claimed)
+        reply = {
+            "lines": [{"description": f"M{i}", "amount": a} for i, a in enumerate(claimed)],
+            "tax": "0.00",
+            "balance": str(total),
+        }
+        found = rc.from_reply(reply, self.page(engine), anchor=total)
+        assert found is not None
+        assert rc.foots(found) is None

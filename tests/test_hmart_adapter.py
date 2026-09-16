@@ -1161,6 +1161,31 @@ class TestWhenTheModelsAnswerIsAccepted:
     def answers(self, monkeypatch, reply):
         monkeypatch.setattr(HMART.vision, "read_receipt", lambda pages, where, opener=None: reply)
 
+    def reads_like_the_real_clip(self, monkeypatch, visit):
+        """Stand in the shape the real clipped capture produces.
+
+        The drawn clip is harsher than the real one: `clip_digits=1` removes a
+        whole digit-width, so nothing parses at all and the page has no second
+        fact on it to corroborate against — which the gate now refuses, rightly.
+        A real clip slices THROUGH the last glyph, so most amounts still read
+        with a corrupted final digit and only the worst rows are lost. That is
+        the state the anchor route exists for, and OCR's own fidelity is pinned
+        at the unit level, so it is stood in here rather than drawn.
+        """
+        half = (visit["amount"] / 2).quantize(Decimal("0.01"))
+        real = rc.Receipt(
+            captures=(visit["name"],),
+            # The last digit corrupted, the way a clip corrupts it.
+            lines=(
+                rc.ReceiptLine("ITEM ONE", half - Decimal("0.04")),
+                rc.ReceiptLine("ITEM TWO", visit["amount"] - half - Decimal("0.04")),
+            ),
+            balance=None,
+            complete=False,
+            clipped=True,
+        )
+        monkeypatch.setattr(HMART.rc, "read_capture", lambda transcript, capture: real)
+
     def honest(self, visit) -> dict:
         """Two lines summing to what the statement says the visit cost."""
         half = (visit["amount"] / 2).quantize(Decimal("0.01"))
@@ -1180,6 +1205,7 @@ class TestWhenTheModelsAnswerIsAccepted:
         """The page the engine lost the total off is itemised anyway, because
         the statement supplies a total the model never saw."""
         self.answers(monkeypatch, self.honest(visit))
+        self.reads_like_the_real_clip(monkeypatch, visit)
         parsed = holder.parse(tmp_path, source, self.clipped(tmp_path, visit))
         txn = holder.visit_row(parsed, visit)
         assert [item.description_raw for item in txn.items] == ["ITEM ONE", "ITEM TWO"]
@@ -1193,6 +1219,7 @@ class TestWhenTheModelsAnswerIsAccepted:
         Against the statement it is two documents agreeing, which is a stronger
         thing to say than one document checking itself."""
         self.answers(monkeypatch, self.honest(visit))
+        self.reads_like_the_real_clip(monkeypatch, visit)
         parsed = holder.parse(tmp_path, source, self.clipped(tmp_path, visit))
         said = " ".join(w.message for w in parsed.warnings)
         assert "the total the points statement gives for that visit" in said

@@ -949,8 +949,14 @@ MAX_REPLY_LINES = 200
 MAX_GROSS = 5
 
 
-#: How far a clip can move an amount. It cuts the last digit, so the most it can
+#: How many rows a clip may destroy outright before an answer claiming to have
+#: recovered them stops being believable. On the real capture it cost two of
+#: twelve — the amounts whose surviving sliver resolved to no digit at all, so
+#: the row stopped looking like an amount and was dropped whole.
+MAX_UNSEEN = 2
 
+
+#: How far a clip can move an amount. It cuts the last digit, so the most it can
 #: change is that digit's place: `7.49` came back as `7.45`, `0.39` as `0.35`.
 #: A tenth covers every corruption measured on the real corpus with room to
 #: spare, and is far tighter than the gap between a real line and an invented one.
@@ -974,7 +980,27 @@ def _corroborates(read: tuple, claimed: list, tax: Decimal) -> bool:
     statement's total is a single number and the page prints it — but it cannot
     also reproduce ten amounts a different reader independently pulled off the
     same pixels.
+
+    Two bounds carry the weight, and the first is the one this got wrong the
+    first time. An engine reading of NOTHING corroborates everything: the loop
+    below never runs and every answer passes, which puts the whole path back to
+    the single equation it was written to escape. A page nothing could be read
+    off is a page with no second fact on it, and it is refused.
+
+    The second bounds how much an answer may add. A clip destroys rows — on the
+    real capture it cost two of twelve — so the answer legitimately holds more
+    lines than the engine got. It does not hold a hundred more.
+
+    Be clear about what this does NOT promise: it constrains an answer in
+    proportion to what the engine managed to read. Where that is one line of
+    twelve, one line is pinned and the rest rest on the sum. That is the honest
+    ceiling of this route, and it is why the route exists only for a page whose
+    total was lost to a clip rather than as a general fallback.
     """
+    if not read:
+        return False
+    if len(claimed) > 2 * len(read) + MAX_UNSEEN:
+        return False
     candidates = [item.amount for item in claimed] + [tax]
     for amount in (item.amount for item in read):
         nearest = min(candidates, key=lambda c: abs(c - amount), default=None)
