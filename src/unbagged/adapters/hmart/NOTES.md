@@ -44,7 +44,9 @@ Measured across the response, as counts and ratios only:
 - seconds are `00` on 67 of 67 rows, so the real resolution is minutes
 - no negative amounts, no zero amounts, no blank cells
 - **`Point == round(Amount)` on 67 of 67 rows.** Not floor (24/67), not ceil
-  (43/67)
+  (43/67). Emitted as a single `FIRST_PARTY_MODEL` inference — a value the
+  retailer computed from another column in the same file. See the caveat below
+  for why the check is written as a distance rather than as a rounding
 - two distinct branches, one dominant
 
 ## What it does not contain
@@ -266,14 +268,25 @@ exists because the scale is meant to differ from the reference file, which makes
 a width change plausible, and `PAYMENT_CARD` stays armed inside a generated
 fixtures directory while `LOYALTY_NUMBER` stands down.
 
-### One caveat worth carrying
+### One caveat worth carrying, and how the inference works around it
 
 Python's `round()` is half-even; a Java portal is near-certainly half-up. At 67
 rows a half-cent case is unlikely to have occurred, so a single response cannot
 distinguish them. The generator and the fixture both use Python's `round()`, so
-a test asserting that relationship would be self-consistent and would prove
-nothing about the format. Nothing asserts it. It matters more if the deferred
-`FIRST_PARTY_MODEL` inference is ever built.
+a test asserting `point == round(amount)` would be self-consistent and would
+prove nothing about the format.
+
+The `FIRST_PARTY_MODEL` inference is now built, and it sidesteps the question
+rather than answering it. `_point_inferences` never rounds anything. What it
+checks is the property every tie-break rule agrees on — **a rounded value is
+within half a unit of what it was rounded from** — which holds under half-up,
+half-even, half-away-from-zero and the rest. So the claim needs no view about
+which rule the portal uses, a half-cent row cannot falsify it, and the test
+demonstrates exactly that by feeding the same tie broken both ways and
+asserting both are accepted.
+
+What is still unknown is which rule it is. That needs a tie, and no response has
+carried one.
 
 ## The second response: screen captures of the receipt viewer
 

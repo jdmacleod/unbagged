@@ -21,6 +21,7 @@ from unbagged.models import (
     DisclosureStatus,
     FollowUpKind,
     IdType,
+    InferenceOrigin,
     SourceBundle,
     SourceDocument,
     Transaction,
@@ -169,6 +170,113 @@ class TestSparseRows:
         without_store = [t for t in parsed.transactions if t.store_code is None]
         assert without_store
         assert all(t.total_pre_discount is not None for t in without_store)
+
+
+class TestThePointColumnCarriesNothingNew:
+    """`Point == Amount` rounded, emitted as a first-party inference.
+
+    A checkable statement about the quality of the disclosure: the retailer sent
+    a column it could have computed from another column in the same file. Its
+    own published terms state the rule independently — "$1 of purchase
+    (excluding tax) equals 1 point".
+
+    The thing these tests are really about is the rounding rule. Python's
+    `round()` is half-even; a Java-backed portal is near-certainly half-up. If
+    the adapter asserted `point == round(amount)` and the fixture generator
+    produced its points with `round()` — which it does — the pair would agree
+    with itself and prove nothing whatever about the format.
+    """
+
+    SS = "urn:schemas-microsoft-com:office:spreadsheet"
+    HEADERS = ("Smartcard", "Date of Purchase", "Branch", "Amount", "Point")
+
+    def _sheet(self, rows: list[tuple[str, str]]) -> str:
+        def cell(text: str) -> str:
+            return f'<ss:Cell><ss:Data ss:Type="String">{text}</ss:Data></ss:Cell>'
+
+        def row(cells: tuple[str, ...]) -> str:
+            return "<ss:Row>" + "".join(cell(c) for c in cells) + "</ss:Row>"
+
+        body = "".join(
+            row(("40100200300", f"2019-03-{day:02d} 11:07:00.0", "SOME BRANCH", amount, point))
+            for day, (amount, point) in enumerate(rows, start=1)
+        )
+        return (
+            f'<?xml version="1.0" encoding="utf-8"?><ss:Workbook xmlns:ss="{self.SS}">'
+            f'<ss:Worksheet ss:Name="Workbook"><ss:Table>'
+            f"{row(self.HEADERS)}{body}"
+            f"</ss:Table></ss:Worksheet></ss:Workbook>"
+        )
+
+    def _inferences(self, tmp_path, rows):
+        return HMartAdapter().parse(bundle(tmp_path, self._sheet(rows))).inferences
+
+    def test_the_relationship_is_reported_as_a_first_party_inference(self, parsed):
+        (found,) = [i for i in parsed.inferences if i.label == "Point"]
+        assert found.origin is InferenceOrigin.FIRST_PARTY_MODEL
+        # The whole finding: the retailer disclosed a column derivable from
+        # another column it also disclosed.
+        assert found.derivable_from_txns is True
+        assert "rounded" in found.value_raw
+        # The Point header cell itself. A reader following a citation about a
+        # named column should land on that column, not on the corner of the
+        # sheet — which is what the response-wide citation would have given.
+        assert found.provenance.locator.endswith("!E2")
+
+    def test_the_claim_holds_whichever_way_a_tie_was_broken(self, tmp_path):
+        """The point of the exercise.
+
+        A half-cent amount is the ONLY row that tells half-up from half-even,
+        and the observed response has never contained one. So the claim is the
+        thing both rules agree on — a rounded value is within half a unit of
+        what it was rounded from — and both readings of a tie satisfy it.
+        """
+        half_even = self._inferences(tmp_path, [("12.50", "12"), ("1.00", "1"), ("3.00", "3")])
+        half_up = self._inferences(tmp_path, [("12.50", "13"), ("1.00", "1"), ("3.00", "3")])
+        assert len(half_even) == 1
+        assert len(half_up) == 1
+
+    def test_a_column_that_is_not_the_amount_rounded_says_nothing(self, tmp_path):
+        # Off by more than half on one row out of three. One row where it does
+        # not hold is the interesting case; a claim that tolerated it would be
+        # worth less than no claim.
+        assert self._inferences(tmp_path, [("1.00", "1"), ("2.00", "2"), ("3.00", "9")]) == ()
+
+    def test_a_point_that_is_not_a_whole_number_says_nothing(self, tmp_path):
+        # Whatever that column is, it is not a rounded anything.
+        assert self._inferences(tmp_path, [("1.00", "1.5"), ("2.00", "2"), ("3.00", "3")]) == ()
+
+    def test_too_few_rows_to_mean_anything_says_nothing(self, tmp_path):
+        assert self._inferences(tmp_path, [("1.00", "1"), ("2.00", "2")]) == ()
+
+    def test_a_statement_whose_point_cells_are_empty_claims_nothing(self, tmp_path):
+        """The column is there and holds nothing, so there is nothing to say.
+
+        SpreadsheetML omits an empty cell rather than writing it blank, which is
+        why this is spelled as a four-cell row rather than a fifth empty one.
+        """
+
+        def cell(text):
+            return f'<ss:Cell><ss:Data ss:Type="String">{text}</ss:Data></ss:Cell>'
+
+        rows = "".join(
+            "<ss:Row>"
+            + "".join(
+                cell(c)
+                for c in ("40100200300", f"2019-03-{day:02d} 11:07:00.0", "SOME BRANCH", "1.00")
+            )
+            + "</ss:Row>"
+            for day in range(1, 5)
+        )
+        header = "<ss:Row>" + "".join(cell(h) for h in self.HEADERS) + "</ss:Row>"
+        document = (
+            f'<?xml version="1.0" encoding="utf-8"?><ss:Workbook xmlns:ss="{self.SS}">'
+            f'<ss:Worksheet ss:Name="Workbook"><ss:Table>{header}{rows}'
+            f"</ss:Table></ss:Worksheet></ss:Workbook>"
+        )
+        parsed = HMartAdapter().parse(bundle(tmp_path, document))
+        assert parsed.transactions, "the rows must still read as visits"
+        assert parsed.inferences == ()
 
 
 class TestTheFixtureIsUnfaithfulInOneDimension:
