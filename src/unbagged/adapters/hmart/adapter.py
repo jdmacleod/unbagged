@@ -484,7 +484,7 @@ def _itemise(
                     "an answer that reconciles is kept, so this one has been."
                 )
                 receipt = second
-            index = _match(receipt, transactions, itemised)
+            index, by_filename = _match(receipt, transactions, itemised)
             if index is None:
                 if statement:
                     unmatched.append(receipt)
@@ -496,6 +496,22 @@ def _itemise(
             if disagreement is not None:
                 warnings.add(disagreement, locator=receipt.captures[0])
                 continue
+            if by_filename:
+                # Said out loud, because it is a weaker key and a reader auditing
+                # this archive cannot otherwise tell which visits rest on it. The
+                # timestamp is the least legible line on a capture — measured,
+                # 15 of the 43 real ones it could not be read from at all — so
+                # the date in the filename and the basket's own total stood in
+                # for it. Both come from the response; neither is a guess. But
+                # "matched on the printed timestamp" and "matched on a filename
+                # and an amount" are different claims.
+                warnings.info(
+                    f"{' and '.join(receipt.captures)} has no readable timestamp, "
+                    "so it was placed by the date in its filename together with "
+                    "its own total. Both come from the response, and they agree "
+                    "with this visit; no other visit matches them.",
+                    locator=receipt.captures[0],
+                )
             itemised[index] = _with_items(transactions[index], receipt, by_name)
 
     if engine:
@@ -663,7 +679,7 @@ def _match(
 
     The timestamp the receipt prints matches the points statement to the
     second, so that is the join. It is also the least legible line on the page
-    — a digit of it comes back wrong on about a ninth of the real captures — so
+    — measured, 15 of the 43 real visits could not be placed by it at all — so
     where it cannot be read, the date in the capture's filename and the
     receipt's own subtotal stand in for it together.
 
@@ -675,18 +691,18 @@ def _match(
         if index in taken:
             continue
         if receipt.stamp and txn.occurred_at == receipt.stamp.occurred_at:
-            return index
+            return index, False
     date = rc.capture_date(receipt.captures[0])
     if date is None:
-        return None
+        return None, False
     for index, txn in enumerate(transactions):
         if index in taken or not txn.occurred_at.startswith(date):
             continue
         if txn.total_pre_discount is not None and _close(
             Decimal(str(txn.total_pre_discount)), receipt.subtotal
         ):
-            return index
-    return None
+            return index, True
+    return None, False
 
 
 def _settle_tax_against(txn: Transaction, receipt: rc.Receipt) -> rc.Receipt:

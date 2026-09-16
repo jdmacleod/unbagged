@@ -67,6 +67,23 @@ from a specific response. See `CONTRIBUTING.md`.
 
 ### Changed
 
+- **A local vision model is asked a question the transcription layer does not
+  own.** The prompt and the schema moved to the adapter, because a package
+  documenting that nothing in it knows what a receipt is should not contain a
+  receipt prompt. A model that cannot read images is now refused at the
+  preflight rather than failing on every page, and a prompt rejected for size
+  gets a larger window and one more try.
+
+- **Reading captures has a time budget.** The upload cap bounds bytes, not
+  images, and every per-item timeout multiplied with nothing capping the whole
+  inside a request a person is waiting on.
+
+- **A visit placed by its filename rather than by the timestamp printed on the
+  receipt now says so.** Measured on the response this was built against, that
+  is a third of the itemised visits — both facts come from the response and
+  neither is a guess, but they are different claims and only one of them was
+  ever visible.
+
 - **The timeline explains a response that itemised only some of its visits.**
   There are three states, not two, and the third had no sentence: a retailer
   that says what every visit cost and what was in two thirds of them. The rows
@@ -78,6 +95,35 @@ from a specific response. See `CONTRIBUTING.md`.
   you gave back.
 
 ### Fixed
+
+- **A model's reading was checked against the model's own numbers.** The total
+  printed on the receipt was read and then discarded, so the check that
+  justifies asking a model anything reduced to self-consistency and any
+  self-consistent answer passed. It is checked against the printed total now,
+  and a page with no readable total is not put to a model at all — there would
+  be nothing to check the answer against, and the captures arrive from outside
+  the trust boundary.
+
+- **A receipt with no tax line lost its last purchase and still added up.** The
+  line above the total was taken as tax whatever it said, and since tax is added
+  back the two readings are the same number — so the arithmetic could not tell
+  them apart. Where the retailer also sent a statement of what each visit cost,
+  that figure now chooses.
+
+- **Joining three or more captures of one receipt.** A single overlap was
+  applied at every seam, so with three captures the correct join was not among
+  the candidates at all. One unreadable capture also fused a whole day into a
+  single receipt, quarantining two real visits at once.
+
+- **The headline figure covered only the itemised visits** while the count
+  beside it covered all of them.
+
+- **Clicking a product filtered by name where the retailer disclosed no codes**,
+  which over-counts — the timeline no longer claims those are the visits that
+  included it.
+
+- **A damaged image could still lose a whole upload.** The guard added for this
+  covered only the decode, not the work after it.
 
 - **A record now cites the document it was actually read from.** Every row in a
   response was credited to the first file uploaded, regardless of which one it

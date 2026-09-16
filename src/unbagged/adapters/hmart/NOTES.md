@@ -285,6 +285,21 @@ Three columns, and the line pitch is about 20px:
 In order: `Customer ID: <smartcard>`, the purchase lines, `TAX`, `*** BALANCE`,
 the tender line, a stamp `2019-03-04 11:07:00  2  118  0042`, then a card block.
 
+### How often the printed timestamp is actually readable
+
+Not often. Measured through the shipped reader on the real corpus, **15 of 43
+visits could not be placed by their printed timestamp at all** and fell back to
+the date in the capture's filename together with the basket's own total. An
+early prototype suggested five; it read the stamp from a different crop, and the
+figure did not survive contact with the code that ships.
+
+Each fallback now raises an INFO warning naming the capture. "Matched on the
+printed timestamp" and "matched on a filename and an amount" are different
+claims, and a reader auditing this archive cannot otherwise tell which visits
+rest on the weaker one. Both facts come from the response and neither is a
+guess — but a third of the itemised visits resting on the second is worth
+knowing.
+
 ### The three reconciliations
 
 These are the whole reason reading these by machine is defensible.

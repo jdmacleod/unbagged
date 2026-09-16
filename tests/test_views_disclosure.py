@@ -412,3 +412,71 @@ class TestTheHeadlineFigureOnAMixedResponse:
         stats = views.stats(conn, request_id)
         assert stats["total_shelf"] == 20.0
         assert stats["line_count"] == 2
+
+
+class TestThePriceHistoryContract:
+    """`price_history` changed SQL and gained a `key` field with no test at any
+    tier. Found by /ship's testing and coverage passes on 2026-09-16.
+
+    The frontend keys its rows, its selection and its category colours on `key`
+    (`PriceHistory.tsx`). If it stopped being emitted, every Python test and the
+    TypeScript build still pass and the UI silently renders duplicate undefined
+    React keys with every dot the same colour.
+    """
+
+    def _bought(self, conn, purchases):
+        from unbagged.models import TxnItem
+
+        return repository.save_parse_result(
+            conn,
+            ParseResult(
+                request=RequestMeta(retailer_id="r", display_name="R"),
+                disclosures=(
+                    Disclosure(
+                        category=DisclosureCategory.SPECIFIC_PIECES,
+                        status=DisclosureStatus.PARTIAL,
+                        provenance=PROV,
+                    ),
+                ),
+                transactions=tuple(
+                    Transaction(
+                        occurred_at=f"2019-03-{day:02d}T10:00:00",
+                        total_pre_discount=amount,
+                        items=(TxnItem(description_raw=name, upc=upc, retail_amt=amount),),
+                    )
+                    for day, (name, upc, amount) in enumerate(purchases, start=1)
+                ),
+            ),
+        )
+
+    def test_a_product_with_no_code_gets_a_price_series(self, conn):
+        request_id = self._bought(conn, [("GREEN ONION", None, 0.49), ("GREEN ONION", None, 0.79)])
+        series = views.price_history(conn, request_id, min_observations=2)["products"]
+        assert len(series) == 1
+        assert series[0]["description"] == "GREEN ONION"
+        assert series[0]["upc"] is None, "absent, not filled with the name"
+
+    def test_every_series_carries_an_identity_the_view_can_key_on(self, conn):
+        """A relationship, not a literal: as many distinct keys as series."""
+        request_id = self._bought(
+            conn,
+            [
+                ("MINT", None, 1.0),
+                ("MINT", None, 1.5),
+                ("BASIL", "00000001", 2.0),
+                ("BASIL", "00000001", 2.5),
+            ],
+        )
+        series = views.price_history(conn, request_id, min_observations=2)["products"]
+        assert all(entry.get("key") for entry in series)
+        assert len({entry["key"] for entry in series}) == len(series)
+
+    def test_the_index_and_the_series_agree_on_what_a_product_is(self, conn):
+        """The two views key products the same way, which is the whole reason
+        `PRODUCT_KEY` exists as one definition."""
+        request_id = self._bought(conn, [("MINT", None, 1.0), ("MINT", None, 1.5)])
+        index_keys = {p["key"] for p in views.product_index(conn, request_id)["products"]}
+        series_keys = {
+            s["key"] for s in views.price_history(conn, request_id, min_observations=2)["products"]
+        }
+        assert series_keys <= index_keys

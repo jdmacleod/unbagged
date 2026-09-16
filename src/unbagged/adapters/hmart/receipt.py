@@ -618,7 +618,8 @@ def capture_date(filename: str) -> str | None:
 
     The receipt prints its own timestamp, and that is the better source — but
     it is the least legible line on the page, and a digit of it comes back
-    wrong on about a ninth of the real captures (`2022-62-21`, `2821-07-18`).
+    unreadable on 15 of the 43 real visits — measured through this reader, not
+    the prototype that suggested five.
     The filename carries the same date in a form that cannot be misread, so the
     two corroborate each other.
 

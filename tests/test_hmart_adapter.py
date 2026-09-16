@@ -32,6 +32,7 @@ from unbagged.transcription import words as tr_words
 #: `import ... as mod` and a monkeypatch string target land on the instance and
 #: fail with AttributeError. `sys.modules` holds the real module.
 HMART = sys.modules["unbagged.adapters.hmart.adapter"]
+adapter_module = HMART
 
 needs_engine = pytest.mark.skipif(
     not tr_words.available(), reason=f"{tr_words.ENGINE} is not installed"
@@ -723,3 +724,101 @@ class TestWhenAModelIsAskedAboutACapture:
         )
         HMartAdapter().parse(SourceBundle(documents=(self.unreadable_capture(tmp_path),)))
         assert asked == [], "a model was asked with no model configured"
+
+
+class TestHowAnImageOnlyBundleFindsThisAdapter:
+    """ISSUE-001's actual mechanism, which its regression test did not exercise.
+
+    That test calls `HMartAdapter().parse()` directly, so it proves the adapter
+    reads a capture bundle — not that the registry hands it one. An image yields
+    no text, so the generic fallback scores nothing on it; if `sniff` stopped
+    claiming captures, the bundle would be refused outright and the parse test
+    would still pass. Found by /ship's coverage pass on 2026-09-16.
+    """
+
+    def capture(self, tmp_path, name="Transaction_030419.png"):
+        from tests.receiptimage import build_receipt
+
+        path = tmp_path / name
+        path.write_bytes(
+            build_receipt(
+                [
+                    ("", "Customer ID: 40100200300", None),
+                    ("", "ITEM 1", "6.99"),
+                    ("", "TAX", "0.00"),
+                    ("***", "BALANCE", "6.99"),
+                    ("", "CREDIT CARD", "6.99"),
+                    ("", "2019-03-04 11:07:00  2  118  0042", None),
+                ]
+            )
+        )
+        return path
+
+    def test_the_registry_picks_h_mart_for_a_bundle_of_captures(self, tmp_path):
+        from unbagged import ingest
+        from unbagged.adapters import registry
+
+        stored = ingest.store_upload(
+            "Transaction_030419.png", self.capture(tmp_path).read_bytes(), directory=tmp_path
+        )
+        match = registry.select(ingest.bundle_from([stored]))
+        assert match is not None, "no adapter claimed a bundle of receipt captures"
+        assert match.adapter.retailer_id == "hmart"
+        assert match.confidence == adapter_module.CAPTURE_CONFIDENCE
+
+    def test_it_scores_well_under_a_matching_header_row(self, tmp_path, source):
+        """A filename convention is not a positive identification, and the two
+        must not be worth the same."""
+        assert adapter_module.CAPTURE_CONFIDENCE < 0.9
+
+    def test_an_image_with_no_capture_date_in_its_name_is_not_claimed(self, tmp_path):
+        from unbagged import ingest
+
+        stored = ingest.store_upload(
+            "holiday-photo.png", self.capture(tmp_path).read_bytes(), directory=tmp_path
+        )
+        assert HMartAdapter().sniff(ingest.bundle_from([stored])) == 0.0
+
+
+class TestWhenTheEngineIsNotInstalled:
+    """One message for the upload, not one per capture — and the response still
+    ingests. Found by /ship's coverage pass: the `OcrUnavailable` branch had no
+    test, which is the quiet failure the container test's own docstring names.
+    """
+
+    def test_one_message_for_the_whole_upload_and_the_statement_survives(
+        self, tmp_path, source, monkeypatch
+    ):
+        from tests.receiptimage import build_receipt
+        from unbagged.transcription import OcrUnavailable
+
+        def refuse(_data):
+            raise OcrUnavailable("tesseract is not installed, so an image cannot be read.")
+
+        monkeypatch.setattr(HMART, "transcribe", refuse)
+
+        history = tmp_path / "history.xls"
+        history.write_text(source, encoding="utf-8")
+        captures = []
+        for name in ("Transaction_030419.png", "Transaction_040419.png"):
+            path = tmp_path / name
+            path.write_bytes(build_receipt([("", "ITEM", "1.00")]))
+            captures.append(
+                SourceDocument(original_filename=name, sha256=name.ljust(64, "0"), path=str(path))
+            )
+        parsed = HMartAdapter().parse(
+            SourceBundle(
+                documents=(
+                    SourceDocument(
+                        original_filename="history.xls",
+                        sha256="1" * 64,
+                        path=str(history),
+                        id=0,
+                    ),
+                    *captures,
+                )
+            )
+        )
+        engine = [w for w in parsed.warnings if "install" in w.message.lower()]
+        assert len(engine) == 1, "one message about the machine, not one per capture"
+        assert len(parsed.transactions) > 1, "the statement was lost with the captures"
