@@ -122,8 +122,9 @@ CI green.
 ### The local denylist
 
 The denylist holds literal strings that must never appear in this repository — your
-street, your phone number, your loyalty card number, your report reference. Build it
-from your own report:
+street, your phone number, your loyalty card number, your report reference, and the
+dates and times you went shopping. Build it from your own report:
+
 
 ```bash
 python tools/build_denylist.py data/incoming/your-report.pdf
@@ -135,7 +136,8 @@ tool that echoes your address into a terminal has defeated its own purpose: scro
 gets screenshotted and transcripts get pasted into issues. Read
 `tools/denylist.txt` yourself if you want to check it.
 
-Two behaviours worth knowing:
+Three behaviours worth knowing:
+
 
 - It asks the adapters for your identifiers first, and only falls back to a regex
   sweep if none returns any. An adapter that knows the format returns exactly the
@@ -145,11 +147,29 @@ Two behaviours worth knowing:
 - Candidates that **already appear in committed files** are dropped, and reported.
   A value sitting in the repository is a format constant or an ordinary word, not
   your secret. If you think one of them really is your data, it is already in git
-  history — stop and read the top of this file.
+  history — stop and read the top of this file. Visit dates are the exception:
+  they are derived rather than guessed, so one already in a committed file is the
+  bug rather than proof of innocence. Those are reported and **kept**.
+
+- **Every visit's date and time goes on the list**, taken from the transactions the
+  adapter read rather than matched by a pattern. There is no pattern that could do
+  it: `2026-01-04` in a generated fixture, `%Y-%m-%d` in a format string and a
+  release date in the CHANGELOG are the same characters, and only the response can
+  say which date came out of one. This is why the list is worth building even for a
+  response holding no name, address or card number at all — a points statement is
+  visits and nothing else, and a visit is when a real person was somewhere.
+
+  It has a cost, and it is the right way round: a release that lands on a day you
+  shopped will stop `make check-pii` on the CHANGELOG line, and a person has to look
+  at it once. A real shopping date reaching a public branch is the alternative, and
+  it has happened.
+
 
 The denylist is gitignored and `build_denylist.py` refuses to write anywhere that is
 not. Keep it local, and know that it protects only your machine — the pattern rules
-are what protect everyone else's.
+are what protect everyone else's. Run it again whenever a new response arrives: the
+list only knows about the visits it has been shown.
+
 
 ## Test data
 

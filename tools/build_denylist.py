@@ -164,6 +164,64 @@ def _worth_keeping(value: str) -> bool:
 
 BARE_NUMBER_LINE = re.compile(r"^[ \t]*\d{1,4}[ \t]*$", re.M)
 
+#: The buckets a harvest fills. One definition, because `main` and `harvest`
+#: each built their own and a bucket added to one was silently dropped by the
+#: other.
+BUCKETS = (
+    "email addresses",
+    "phone numbers",
+    "street addresses",
+    "ZIP+4 codes",
+    "long digit runs",
+    "identifying JSON fields",
+    "identifiers the adapter found",
+    "report references",
+    "dates and times of a visit",
+)
+
+
+def buckets() -> dict[str, set[str]]:
+    return {name: set() for name in BUCKETS}
+
+
+#: `2020-01-18T09:59:00`, and the same instant however it is written down.
+TIMESTAMP = re.compile(r"^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2}))?")
+
+
+def from_visit_times(occurred_at: str, found: dict[str, set[str]]) -> None:
+    """When someone shopped, in every form a source file might quote it.
+
+    ISSUE-086. Nine rule families and a date is none of them, so a real visit
+    date sat in a docstring and a test fixture through every gate this repo has
+    — and reached a public branch. A date has no shape that separates it from
+    fiction: `2026-01-04` in a generated fixture, `%Y-%m-%d` in a format string
+    and a release date in `CHANGELOG.md` are all the same characters. The signal
+    is not the date, it is a date **that came from a response**, and only the
+    response can say which.
+
+    So it is derived rather than guessed. An adapter has already read the visit;
+    its `occurred_at` is by construction a fact about a real person's day, and
+    putting it on a per-reader gitignored list has no false positives that are
+    not also true findings.
+
+    Three renderings, because the scanner matches literal substrings and the
+    same instant is written three ways: the date alone, and the date with its
+    time in each of the two separators a report and an ISO string use. The date
+    alone subsumes the other two for matching; it is the one with a cost, since
+    a release that lands on a day you shopped will now stop `make check-pii`
+    with a finding a person has to look at once. That is the right way round.
+    Being asked about a CHANGELOG line is cheap; the alternative already cost
+    an afternoon and a rewritten branch.
+    """
+    match = TIMESTAMP.match(occurred_at.strip())
+    if match is None:
+        return
+    date, time = match.group(1), match.group(2)
+    found["dates and times of a visit"].add(date)
+    if time:
+        found["dates and times of a visit"].add(f"{date} {time}")
+        found["dates and times of a visit"].add(f"{date}T{time}")
+
 
 def from_json_values(text: str, found: dict[str, set[str]]) -> None:
     """Pull identifying values out of any JSON embedded in the report.
@@ -227,20 +285,22 @@ def from_adapter(report: Path, found: dict[str, set[str]]) -> bool:
                 found["identifiers the adapter found"].add(part.strip())
     if result.request.report_reference and _worth_keeping(result.request.report_reference):
         found["report references"].add(result.request.report_reference.strip())
+    for txn in result.transactions:
+        # Not behind `_worth_keeping`: a bare date strips to eight digits and
+        # that check wants nine, so every one of these was being dropped before
+        # it reached the list. See `from_visit_times`.
+        from_visit_times(txn.occurred_at, found)
+    # Still only about IDENTIFIERS, because that is the only thing the caller
+    # uses it for: whether to skip the text sweep. Visits are collected either
+    # way and survive the merge. Returning true for visits alone meant that a
+    # retailer changing its identity section while its transactions still parsed
+    # would silently lose the sweep that was the fallback for exactly that.
     return bool(found["identifiers the adapter found"])
 
 
 def harvest(text: str, filename: str, *, sweep: bool = True) -> dict[str, set[str]]:
-    found: dict[str, set[str]] = {
-        "email addresses": set(),
-        "phone numbers": set(),
-        "street addresses": set(),
-        "ZIP+4 codes": set(),
-        "long digit runs": set(),
-        "identifying JSON fields": set(),
-        "identifiers the adapter found": set(),
-        "report references": set(),
-    }
+    found = buckets()
+
     for token in FILENAME_TOKEN.findall(Path(filename).stem):
         if _worth_keeping(token):
             found["report references"].add(token)
@@ -301,6 +361,15 @@ def main(argv: list[str] | None = None) -> int:
 
     totals: Counter[str] = Counter()
     values: set[str] = set()
+    #: Kept apart from `values` all the way to `merge`. Everything in `values` is
+    #: a GUESS at what might be personal, so one already sitting in a committed
+    #: file is evidence it was a format constant. These are not guesses — a visit
+    #: came out of a response — so that inference is exactly backwards for them:
+    #: a visit date already in the repository is the bug this rule exists to
+    #: catch, not proof the date was innocent. Dropping it would also unarm the
+    #: list against the same date arriving again later.
+    derived: set[str] = set()
+
     for report in args.reports:
         document = SourceDocument(report.name, sha256="", path=str(report))
         try:
@@ -308,20 +377,9 @@ def main(argv: list[str] | None = None) -> int:
         except ExtractionError as exc:
             print(f"  skipped {report.name}: {exc}", file=sys.stderr)
             continue
-        found: dict[str, set[str]] = {}
-        parsed = from_adapter(
-            report,
-            found := {
-                "email addresses": set(),
-                "phone numbers": set(),
-                "street addresses": set(),
-                "ZIP+4 codes": set(),
-                "long digit runs": set(),
-                "identifying JSON fields": set(),
-                "identifiers the adapter found": set(),
-                "report references": set(),
-            },
-        )
+        found = buckets()
+        parsed = from_adapter(report, found)
+
         swept = harvest(text, report.name, sweep=not parsed)
         for bucket, items in swept.items():
             found.setdefault(bucket, set()).update(items)
@@ -339,13 +397,17 @@ def main(argv: list[str] | None = None) -> int:
             if items:
                 print(f"      {len(items):>4}  {bucket}")
             totals[bucket] += len(items)
-            values |= items
+            if bucket == "dates and times of a visit":
+                derived |= items
+            else:
+                values |= items
 
-    if not values:
+    if not (values or derived):
         print("\nNothing found to denylist.", file=sys.stderr)
         return 1
 
-    values, already_present = split_known_values(values, repo_corpus())
+    corpus = repo_corpus()
+    values, already_present = split_known_values(values, corpus)
     if already_present:
         print(
             f"\n  {len(already_present)} candidate(s) already appear in committed "
@@ -355,11 +417,25 @@ def main(argv: list[str] | None = None) -> int:
             "  If you believe one of them really is personal data, it is already "
             "in git history. Stop and read CONTRIBUTING.md."
         )
-    if not values:
+    _, committed_visits = split_known_values(derived, corpus)
+    if committed_visits:
+        # Reported, never dropped. This is the one category where "already in a
+        # committed file" is a finding rather than a reason to stop looking.
+        print(
+            f"\n  {len(committed_visits)} date(s) from a visit ALREADY APPEAR in "
+            "committed files. They stay on the list."
+        )
+        print(
+            "  A release note that landed on a day you shopped is a coincidence "
+            "you can suppress on the line. Anything else is your shopping history "
+            "in the repository — run `make check-pii` and read what it names."
+        )
+    if not (values or derived):
         print("\nNothing left to denylist after that.", file=sys.stderr)
         return 1
 
-    before, after = merge(args.output, values)
+    before, after = merge(args.output, values | derived)
+
     try:
         where = args.output.relative_to(REPO_ROOT)
     except ValueError:
