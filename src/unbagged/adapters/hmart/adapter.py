@@ -486,11 +486,11 @@ def _itemise(
             continue
         for receipt in receipts:
             short = rc.foots(receipt)
-            #: The accepted model answer, and the visit its anchor came from.
-            #: Bound here rather than in the branch below, because both are read
-            #: after the join for a receipt that never needed a model at all.
+            #: The accepted model answer. Bound here rather than in the branch
+            #: below, because it is read after the join for a receipt that never
+            #: needed a model at all.
             second = None
-            anchored_to = None
+
             if short is not None:
                 # The budget covers the model too. Eight adjudications at the
                 # per-call timeout is over twenty minutes, and every one of them
@@ -500,8 +500,7 @@ def _itemise(
                     time.monotonic() - started <= CAPTURE_BUDGET_SECONDS
                 ):
                     adjudicated += 1
-                    anchored_to, anchor = _anchor_for(receipt, transactions, itemised)
-                    second = _adjudicate(receipt, by_name, model, anchor=anchor)
+                    second = _adjudicate(receipt, by_name, model)
 
                 if second is None:
                     warnings.add(
@@ -517,23 +516,6 @@ def _itemise(
                     unmatched.append(receipt)
                 else:
                     added.append(receipt)
-                continue
-            if receipt.balance_from_statement and index != anchored_to:
-                # The answer was checked against one visit and has landed on
-                # another, because the anchor is found by the filename's date
-                # and the join prefers the printed timestamp. Storing it would
-                # attach a basket validated against visit A to visit B; worse,
-                # A stays free to anchor the next capture that day, so one
-                # statement figure would vouch for two baskets. And where the
-                # totals differ, `_disagrees` fires and accuses the retailer of
-                # contradicting itself over a disagreement this tool invented.
-                warnings.add(
-                    f"{' and '.join(receipt.captures)} was read into a basket "
-                    "that adds up, and the visit it adds up against is not the "
-                    "visit its own timestamp points at. Nothing here can say "
-                    "which is right, so its contents have not been stored.",
-                    locator=receipt.captures[0],
-                )
                 continue
             receipt = _settle_tax_against(transactions[index], receipt)
 
@@ -585,23 +567,13 @@ def _itemise(
                 # that contradicted each other, with nothing retracting the
                 # first.
                 #
-                # Which figure the answer was checked against is part of the
-                # claim, not a detail. Against the receipt's own printed total
-                # it is the page checking itself; against the statement it is
-                # the statement's figure plus the engine's own reading of the
-                # page, which is what `from_reply` requires on that route.
-                against = (
-                    "the total the points statement gives for that visit, "
-                    "together with the amounts the engine did read off the page"
-                    if second.balance_from_statement
-                    else "the total printed on the receipt"
-                )
                 warnings.info(
                     f"{' and '.join(receipt.captures)} would not add up as read, "
                     f"and {model.model} read it into a basket that does. The "
-                    f"answer was checked against {against} — nothing that read "
-                    "the picture had a hand in it, and only an answer that "
-                    "reconciles is kept, so this one has been."
+                    "answer was checked against the total printed on the "
+                    "receipt, which nothing that read the picture had a hand "
+                    "in, and only an answer that reconciles is kept — so this "
+                    "one has been."
                 )
 
     if engine:
@@ -740,54 +712,10 @@ def _items(receipt: rc.Receipt) -> tuple[TxnItem, ...]:
     )
 
 
-def _anchor_for(
-    receipt: rc.Receipt,
-    transactions: list[Transaction],
-    taken: dict[int, Transaction],
-) -> tuple[int | None, Decimal | None]:
-    """The statement's total for this visit, and which visit it came from.
-
-    The index matters as much as the figure. The caller compares it against the
-    visit `_match` settles on and refuses the answer if they differ: this key
-    is the filename's date and `_match` prefers the printed timestamp, so the
-    two can name different visits, and a basket checked against one visit must
-    never be stored against another.
-
-
-    Only reached when the page's own printed total could not be read, which on
-    a right-clipped capture is the same event that cost every amount its last
-    digit. Something outside the reading has to supply the number, and the
-    statement is outside it: a different document, which the model never sees.
-
-    Matched on the date in the filename alone, and only when exactly one visit
-    that day has no receipt against it yet. That is a weaker key than the one
-    `_match` uses, deliberately: the receipt's own subtotal cannot help here
-    because the clip is what made it unreliable. It is safe to be weak because
-    of what the anchor is FOR — a wrong one does not attach a basket to the
-    wrong visit, it makes the arithmetic fail and the visit stay quarantined.
-    """
-    date = rc.capture_date(receipt.captures[0])
-    if date is None:
-        return None, None
-    fits = [
-        (index, txn)
-        for index, txn in enumerate(transactions)
-        if index not in taken
-        and txn.occurred_at.startswith(date)
-        and txn.total_pre_discount is not None
-    ]
-    if len(fits) != 1:
-        return None, None
-    index, txn = fits[0]
-    return index, Decimal(str(txn.total_pre_discount))
-
-
 def _adjudicate(
     receipt: rc.Receipt,
     by_name: dict,
     where: ollama.Availability,
-    *,
-    anchor: Decimal | None,
 ) -> rc.Receipt | None:
     """Ask a local model about a page the engine could not read into a basket.
 
@@ -816,7 +744,7 @@ def _adjudicate(
     reply = vision.read_receipt(pages, where)
     if reply is None:
         return None
-    candidate = rc.from_reply(reply, receipt, anchor=anchor)
+    candidate = rc.from_reply(reply, receipt)
 
     if candidate is None or rc.foots(candidate) is not None:
         return None
@@ -1035,14 +963,29 @@ def _unreconciled(receipt: rc.Receipt, short: Decimal, model, *, statement: bool
         # that was never taken. The amount column runs into the right edge, so
         # the last digit of every amount is cut through — including the total's,
         # which is why there is nothing to check the rest against.
+        # Deliberately NOT `tried`. On this page a model may well have read
+        # every amount correctly — the one in the real response did. What
+        # stopped it was not the reading: the clip takes the printed total
+        # along with the digits, so there is no figure left on the page to
+        # check any reading against, and an answer nothing can check is not one
+        # this stores. Saying the model "could not either" would report our own
+        # limit as its failure, which is the thing this adapter exists to avoid.
+        asked = (
+            f" {model.model} was asked about it as well; its answer could not "
+            "be checked against anything the page still states, so it was not "
+            "kept."
+            if model.usable
+            else ""
+        )
         return (
             f"{where} is cut off at its right edge: the column of amounts runs "
             "into the edge of the picture, so the last digit of every amount on "
-            "it is sliced through — including the total's. What can be read of "
-            "it does not add up, and nothing from it is in this report. The "
-            "receipt itself is fine; the capture of it is too narrow. A wider "
-            f"capture of the same receipt would be read.{tried}{kept}"
+            "it is sliced through — including the total's. That leaves nothing "
+            "on the page to check a reading against, so nothing from it is in "
+            "this report. The receipt itself is fine; the capture of it is too "
+            f"narrow. A wider capture of the same receipt would be read.{asked}{kept}"
         )
+
     if receipt.balance is None:
         # A different finding, and it was being reported as the first one. A
         # page with no total on it produced "its lines come to +0.00 against

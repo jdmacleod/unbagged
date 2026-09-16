@@ -44,15 +44,14 @@ from a specific response. See `CONTRIBUTING.md`.
   came back as a different digit with nothing to show they had changed; others
   stopped looking like amounts at all and their rows were dropped, the printed
   total among them. The page is now recognised as clipped from the position of
-  its own ink, and the reading is checked against two things neither of which
-  came out of the model: the total the points statement gives for that visit,
-  and the amounts the deterministic reader did manage to pull off the same
-  pixels. The statement's figure alone is not enough — it is the same number a
-  later check already compares against, so on its own it would let a single
-  invented line worth exactly that total through. A receipt that could not be
-  read at all now itemises, and the warning for one that still cannot says the
-  capture is too narrow rather than telling you to upload a second half that
-  does not exist.
+  its own ink, and told apart from a receipt that simply ran past the bottom of
+  the picture. Such a capture is not itemised: the clip takes the printed total
+  along with the digits, so there is nothing left on the page to check any
+  reading against, and a reading nothing can check is not one this stores. The
+  visit keeps the total the statement gave it. The warning names the capture,
+  says the receipt is fine and the picture of it too narrow, and no longer tells
+  you to upload a second half that does not exist.
+
 
 
 - **Three messages blamed the response for this tool's own misreadings.** A

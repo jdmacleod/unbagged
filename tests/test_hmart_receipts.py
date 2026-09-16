@@ -763,174 +763,6 @@ class TestACaptureCutThroughItsOwnAmounts:
         assert rc.stitch([head, tail]).clipped is True
 
 
-class TestWhenThePageHasNoTotalLeftToCheckAgainst:
-    """Found by /investigate on 2026-09-16.
-
-    The two failures are one failure. A capture clipped at its right edge loses
-    the last digit of every amount AND of the printed total, so the page that
-    most needs a second reader is the page with nothing left to check one
-    against. Measured: the model read that page perfectly and its answer was
-    refused, because the engine had lost the balance.
-
-    The statement is the way out, and it is not a relaxation: it is a separate
-    document the model never saw, so it checks the answer exactly as the printed
-    total does.
-    """
-
-    HONEST = {
-        "lines": [
-            {"description": "APPLE", "amount": ": 7.49"},
-            {"description": "PEAR", "amount": ": 5.20"},
-        ],
-        "tax": "1.00",
-        "balance": "13.69",
-    }
-
-    def unreadable(self, **kw):
-        """A page the engine got no total off: the clip took it.
-
-        Two lines, with their last digit corrupted the way a clip corrupts it.
-        A real clipped capture yields ten of these; one is below the floor
-        `_corroborates` sets, and a page that reads as a single amount is not a
-        page this route is willing to act on."""
-        return rc.Receipt(
-            captures=("Transaction_030419.png",),
-            lines=(line("APPLE", "7.45"), line("PEAR", "5.24")),
-            balance=None,
-            complete=False,
-            clipped=True,
-            **kw,
-        )
-
-    def test_with_no_anchor_it_is_still_refused(self):
-        """The contract that held before this existed, and still holds."""
-        assert rc.from_reply(self.HONEST, self.unreadable()) is None
-
-    def test_the_statements_total_lets_the_answer_be_checked(self):
-        found = rc.from_reply(self.HONEST, self.unreadable(), anchor=Decimal("12.69"))
-        assert found is not None
-        assert rc.foots(found) is None
-        assert found.subtotal == Decimal("12.69")
-        assert found.balance_from_statement is True
-
-    def test_an_answer_that_misses_the_statement_is_refused_by_the_gate(self):
-        """Which is what makes a weak anchor safe: a wrong one does not attach
-        a basket to the wrong visit, it fails the arithmetic."""
-        found = rc.from_reply(self.HONEST, self.unreadable(), anchor=Decimal("99.00"))
-        assert rc.foots(found) is not None
-
-    def test_the_model_cannot_move_the_result_with_its_tax(self):
-        """`balance` is set to `anchor + tax`, so `foots` reduces to
-        `subtotal - anchor` and the one figure still authored by the model
-        cancels out of the check entirely."""
-        for claimed_tax in ("0.00", "1.00", "5.00"):
-            reply = dict(self.HONEST, tax=claimed_tax)
-            found = rc.from_reply(reply, self.unreadable(), anchor=Decimal("12.69"))
-            assert rc.foots(found) is None, claimed_tax
-
-    def test_a_tax_outside_what_a_tax_can_be_is_still_refused(self):
-        """The bound is against the anchor when there is no printed total, so
-        the path without one does not quietly skip it."""
-        assert (
-            rc.from_reply(
-                dict(self.HONEST, tax="-50.00"), self.unreadable(), anchor=Decimal("12.69")
-            )
-            is None
-        )
-
-    def test_a_page_that_DID_print_a_total_ignores_the_anchor(self):
-        """The printed total wins where there is one. An anchor must never be
-        able to override the page against its own evidence."""
-        printed = rc.Receipt(
-            captures=("a.png",),
-            lines=(line("APPLE", "7.49"),),
-            balance=Decimal("13.69"),
-            tax=Decimal("1.00"),
-            complete=True,
-        )
-        found = rc.from_reply(self.HONEST, printed, anchor=Decimal("99.00"))
-        assert found.balance == Decimal("13.69")
-        assert found.balance_from_statement is False
-
-
-class TestWhatTheAnchoredGateStillRefuses:
-    """Found by /ship's coverage pass on 2026-09-16.
-
-    The route that stands the statement's figure in for a printed total has two
-    free variables where the printed route has one, and each of them was
-    reachable by a path no test walked: a reply that names no tax at all, a tax
-    bounded against the anchor rather than against a balance, and an answer that
-    the furniture filter empties. Every one of them has to end in a refusal or
-    in a basket that was checked.
-    """
-
-    def unreadable(self):
-        """A page the engine got no total off: the clip took it, with two
-        amounts still legible under their corrupted last digit."""
-        return rc.Receipt(
-            captures=("Transaction_030419.png",),
-            lines=(line("APPLE", "7.45"), line("PEAR", "5.24")),
-            balance=None,
-            complete=False,
-            clipped=True,
-        )
-
-    def test_an_answer_that_names_no_tax_is_checked_against_the_anchor_alone(self):
-        """A reply with no `tax` field at all, against a page that read none
-        either. Nothing is known about tax from either side, so it is nothing —
-        and the check is then the statement's figure against the lines."""
-        reply = {
-            "lines": [
-                {"description": "APPLE", "amount": ": 7.49"},
-                {"description": "PEAR", "amount": ": 5.20"},
-            ]
-        }
-        found = rc.from_reply(reply, self.unreadable(), anchor=Decimal("12.69"))
-        assert found is not None
-        assert found.tax == Decimal("0.00")
-        assert found.balance == Decimal("12.69")
-        assert rc.foots(found) is None
-
-    def test_a_tax_larger_than_the_statements_total_is_refused(self):
-        """The ceiling is the anchor where there is no printed total, so the
-        inflating direction is closed on this route too: an answer reaching for
-        a tax bigger than the whole visit is reaching for the residual."""
-        reply = {
-            "lines": [{"description": "APPLE", "amount": ": 7.49"}],
-            "tax": "50.00",
-            "balance": "57.49",
-        }
-        assert rc.from_reply(reply, self.unreadable(), anchor=Decimal("12.69")) is None
-
-    def test_an_answer_of_nothing_but_furniture_is_no_answer(self):
-        """Dropping the receipt's own furniture must not be able to leave an
-        empty basket that reconciles against a visit by accident."""
-        reply = {
-            "lines": [
-                {"description": "TAX", "amount": ": 0.00"},
-                {"description": "*** BALANCE", "amount": ": 12.69"},
-                {"description": "CREDIT CARD", "amount": ": 12.69"},
-            ],
-            "tax": "0.00",
-            "balance": "12.69",
-        }
-        assert rc.from_reply(reply, self.unreadable(), anchor=Decimal("12.69")) is None
-
-    def test_a_reply_row_that_is_not_a_row_voids_the_whole_answer(self):
-        """Rather than costing one line. A basket missing a line still adds up
-        if the rest of the answer was written to match, and skipping quietly is
-        how that gets stored."""
-        reply = {
-            "lines": [
-                {"description": "APPLE", "amount": ": 7.49"},
-                "PEAR : 5.20",
-            ],
-            "tax": "0.00",
-            "balance": "12.69",
-        }
-        assert rc.from_reply(reply, self.unreadable(), anchor=Decimal("12.69")) is None
-
-
 class TestWhereTheClipThresholdSits:
     """Found by /ship's testing specialist on 2026-09-16.
 
@@ -991,17 +823,26 @@ class TestWhatTheClipCheckMustNotMeasure:
         assert page.clipped is False, "the stamp is not the amount column"
 
 
-class TestWhatAnEngineReadingOfNothingCorroborates:
-    """Found attacking the fix on 2026-09-16, and it is the same hole again.
+class TestAPageWithNoPrintedTotalStoresNothing:
+    """The contract four rounds of adversarial review arrived at.
 
-    `_corroborates` walks the amounts the engine read. An engine reading of
-    NOTHING means the loop never runs and every answer passes — which put the
-    anchored route straight back to the single equation it was written to
-    escape. Probed: with the engine reading no lines, a one-line answer worth
-    exactly the statement's total was accepted.
+    A capture clipped at its right edge loses the printed total along with the
+    last digit of every amount, so the page that most needs a second reader is
+    the page with nothing left to check one against. The statement's figure for
+    that visit was tried in its place and withdrawn: with `balance` set to
+    `anchor + tax` the check reduces to `subtotal == anchor`, which is the same
+    comparison the adapter makes downstream, so the route rested on one scalar
+    and every attempt to add a second fact drew on the engine's own partial
+    reading — weak by construction, and influenced by whoever supplied the
+    capture.
+
+    Each shape below defeated a different version of that second fact. They are
+    kept as tests because the route is the kind of thing that gets proposed
+    again, and because each one is a specific claim about why it cannot work.
     """
 
     def page(self, engine_amounts):
+        """A clipped page: no balance, and whatever the engine salvaged."""
         return rc.Receipt(
             captures=("Transaction_030419.png",),
             lines=tuple(line(f"I{i}", a) for i, a in enumerate(engine_amounts)),
@@ -1017,51 +858,48 @@ class TestWhatAnEngineReadingOfNothingCorroborates:
             "balance": "100.23",
         }
 
-    def test_a_lone_amount_the_models_own_tax_matches_is_not_corroboration(self):
-        """Third cycle, same shape as the first two. The model's tax was one of
-        the candidates an engine amount could match, so a page whose only
-        legible figure was a 0.00 was 'corroborated' by a figure the model also
-        authored, and one invented line went through."""
-        found = rc.from_reply(
-            self.answer(["100.23"]), self.page(["0.00"]), anchor=Decimal("100.23")
+    def test_nothing_the_model_says_is_stored(self):
+        """However well it reads, and however well it adds up."""
+        assert rc.from_reply(self.answer(["50.00", "50.23"]), self.page(["49.96"])) is None
+
+    def test_a_wholly_invented_line_worth_the_statements_total(self):
+        """Round one: it was accepted, because the only check was that the sum
+        equalled a figure the page's own reader never produced."""
+        assert rc.from_reply(self.answer(["100.23"]), self.page(["7.45"])) is None
+
+    def test_a_page_the_engine_read_nothing_off(self):
+        """Round two: corroboration against an empty reading corroborated
+        everything, because the loop never ran."""
+        assert rc.from_reply(self.answer(["100.23"]), self.page([])) is None
+
+    def test_a_lone_amount_the_models_own_tax_could_match(self):
+        """Round three: the model's tax was a candidate an engine amount could
+        match, so a page whose only legible figure was a 0.00 corroborated
+        itself."""
+        assert rc.from_reply(self.answer(["100.23"]), self.page(["0.00"])) is None
+
+    def test_many_trivial_matches_gating_one_enormous_invention(self):
+        """Round four, and the one that ended it. A floor of matched LINES says
+        nothing about matched VALUE: ten amounts of a tenth each let one
+        invented line of 4,999 through, and 99.98% of the basket was fabricated."""
+        trivial = ["0.10"] * 10
+        assert rc.from_reply(self.answer(trivial + ["4999.00"]), self.page(trivial)) is None
+
+    def test_a_page_that_DID_print_its_total_is_unaffected(self):
+        """The route that works is the one where the page states its own total,
+        and nothing here narrows it."""
+        printed = rc.Receipt(
+            captures=("a.png",),
+            lines=(line("RICE", "19.00"),),
+            balance=Decimal("20.00"),
+            tax=Decimal("1.00"),
+            complete=True,
         )
-        assert found is None
-
-    def test_one_matched_amount_is_below_the_floor(self):
-        """`MIN_CORROBORATION` is a floor rather than another special case:
-        twice the check was satisfied by nothing the model had not authored."""
-        found = rc.from_reply(
-            self.answer(["7.49", "92.74"]), self.page(["7.45"]), anchor=Decimal("100.23")
-        )
-        assert found is None
-
-    def test_a_page_nothing_could_be_read_off_has_no_second_fact(self):
-
-        found = rc.from_reply(self.answer(["100.23"]), self.page([]), anchor=Decimal("100.23"))
-        assert found is None
-
-    def test_an_answer_that_replaces_every_amount_the_engine_read_is_refused(self):
-        engine = [f"{10.00 + i:.2f}" for i in range(10)]
-        found = rc.from_reply(self.answer(["100.23"]), self.page(engine), anchor=Decimal("100.23"))
-        assert found is None
-
-    def test_an_answer_may_not_bury_the_engines_reading_in_invented_lines(self):
-        """One matched amount does not license a hundred unmatched ones."""
-        flood = ["7.49"] + ["0.9274"] * 100
-        found = rc.from_reply(self.answer(flood), self.page(["7.45"]), anchor=Decimal("100.23"))
-        assert found is None
-
-    def test_the_shape_a_real_clip_produces_is_still_accepted(self):
-        """The clip corrupts last digits and destroys a row or two; it does not
-        invent lines. Ten read, eleven claimed, every read amount reappearing."""
-        engine = [f"{5.00 + i:.2f}" for i in range(10)]
-        claimed = engine + ["5.23"]
-        total = sum(Decimal(a) for a in claimed)
         reply = {
-            "lines": [{"description": f"M{i}", "amount": a} for i, a in enumerate(claimed)],
-            "tax": "0.00",
-            "balance": str(total),
+            "lines": [{"description": "RICE", "amount": ": 19.00"}],
+            "tax": "1.00",
+            "balance": "20.00",
         }
-        found = rc.from_reply(reply, self.page(engine), anchor=total)
+        found = rc.from_reply(reply, printed)
         assert found is not None
         assert rc.foots(found) is None

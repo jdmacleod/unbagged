@@ -357,18 +357,34 @@ therefore decided some other way, and the decisions are worth keeping:
   stopped it being used was not the model: the gate needs a figure the reader
   had no hand in, and the clip had taken the only one on the page.
 
-  The points statement supplies one, and **on its own it is not enough.** With
-  `balance` set to `anchor + tax`, `foots()` reduces to `subtotal - anchor` —
-  which is the same comparison `_disagrees` makes a moment later, so the two
-  become one check and a single invented line worth exactly the statement's
-  total passes both. Demonstrated: a one-line answer reading `SECURITY ALERT:
-  call …` was stored against a real visit.
+  The points statement looks like the missing figure, and it was tried. It does
+  not work, and the way it fails is worth recording because it will be proposed
+  again.
 
-  So the engine's own reading is the second fact. Every amount it managed to
-  get off the page has to reappear in the answer, within the tenth of a pound a
-  clipped digit can move it. A fabricated answer can hit one aggregate; it
-  cannot also reproduce ten amounts a different reader independently pulled off
-  the same pixels. See `from_reply`'s `anchor` and `_corroborates`.
+  With `balance` set to `anchor + tax`, `foots()` reduces to `subtotal ==
+  anchor` — the same comparison `_disagrees` makes a moment later. One
+  constraint, one scalar, wearing two hats. Four rounds of adversarial review
+  each found a way through, and each fix opened the next:
+
+  | Round | What was stored |
+  |---|---|
+  | 1 | one invented line worth exactly the statement's total |
+  | 2 | anything at all, on a page the engine read nothing off |
+  | 3 | one invented line, on a page whose only legible figure the model's own tax matched |
+  | 4 | one invented line of 4,999 behind ten genuine matches of a tenth each |
+
+  Round 4 is the one that settles it. Every candidate second fact here comes
+  from the engine's own partial reading, which is weak by construction — a clip
+  is the whole reason this route was wanted — and is influenced by whoever
+  supplied the capture, who also supplied the statement the figure comes from.
+  A floor counting matched LINES says nothing about matched VALUE, and bounding
+  the answer cannot manufacture a measurement that is not there.
+
+  So a page with no printed total stores nothing. The visit keeps the figure the
+  statement gave it, which no reading of the picture can move, and the warning
+  names the capture and the reason. Recovering the basket needs a capture that
+  is not clipped, which means asking the retailer again.
+
 
   `_clipped` is the physical signal, and it measures the amount column only —
   the stamp line ends in a run of digits that can sit against the edge of a

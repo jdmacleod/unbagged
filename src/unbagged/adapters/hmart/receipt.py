@@ -160,13 +160,6 @@ class Receipt:
     #: True when the amount column runs into the right edge of the capture, so
     #: the last digit of every amount on the page is cut through. See `_clipped`.
     clipped: bool = False
-    #: True when the total this was checked against came from the points
-    #: statement rather than off the page. On that route the statement's figure
-    #: is checked together with the engine's own reading of the page, because
-    #: on its own it is the same check `_disagrees` makes downstream — see
-    #: `from_reply` and `_corroborates`.
-
-    balance_from_statement: bool = False
 
     def with_tax_as_item(self) -> Receipt:
         """The same receipt, read with the tax line taken as a purchase.
@@ -630,7 +623,6 @@ def _joined(parts: list[Receipt], *, greedy: bool = False, trims: tuple = ()) ->
             # it is always False here today. Every field this function forgot
             # has become a bug — `tax_inferred` once, `clipped` a second time —
             # and the cost of naming one that cannot yet be set is nothing.
-            balance_from_statement=(joined.balance_from_statement or part.balance_from_statement),
         )
     return joined
 
@@ -804,7 +796,7 @@ def _stem(filename: str) -> str:
     return filename.rsplit("/", 1)[-1].rsplit(".", 1)[0]
 
 
-def from_reply(reply: dict, like: Receipt, *, anchor: Decimal | None = None) -> Receipt | None:
+def from_reply(reply: dict, like: Receipt) -> Receipt | None:
     """A receipt built from a model's answer, keeping what was read off the page.
 
     A candidate, and nothing more. The caller puts it through `foots` exactly as
@@ -829,18 +821,35 @@ def from_reply(reply: dict, like: Receipt, *, anchor: Decimal | None = None) -> 
     rather than corrected: the two read the same pixels and reached different
     numbers, and nothing here can say which is right.
 
-    A page whose own balance could not be read falls back to `anchor`, the
-    total the points statement gives for that visit, and returns None when
-    there is no anchor either. The fallback is not a relaxation: the statement
-    is a separate document that the model never saw, so it checks the answer
-    exactly as the printed total does. It exists because the two failures are
-    the same failure — a capture clipped at its right edge loses the printed
-    total along with the last digit of every amount, so the page that most
-    needs a second reader is the page with nothing left to check one against.
+    **A page whose own balance could not be read stores nothing**, and the
+    reason is worth keeping because it was tried the other way first.
 
-    An answer that can be checked by neither is not stored. The captures arrive
-    by mail from outside the trust boundary, and text rendered into one is an
-    instruction the model may read.
+    A capture clipped at its right edge loses the printed total along with the
+    last digit of every amount, so the page that most needs a second reader is
+    the page with nothing left to check one against. The statement's total for
+    that visit looks like the missing fact — a separate document the model never
+    saw — and it is not enough. With `balance` set to `anchor + tax`, `foots()`
+    reduces to `subtotal == anchor`, which is the SAME comparison `_disagrees`
+    makes downstream: one constraint, one scalar, wearing two hats.
+
+    Four rounds of adversarial review each found a different way through it, and
+    each fix opened the next. A wholly invented line worth exactly the statement
+    total. An engine reading of nothing, which corroborated everything. A lone
+    figure matched by the model's own tax. Finally a floor of two matched lines,
+    defeated by matching two trivial ones: ten amounts of a tenth each gated one
+    invented line of 4,999, and 99.98% of the stored basket was fabricated.
+
+    The pattern is structural rather than a missing bound. Every second fact
+    available here comes from the engine's own partial reading, which is weak by
+    construction — a clip is why the route exists at all — and influenced by
+    whoever supplied the capture, who also supplied the statement the anchor
+    comes from. Bounding the answer cannot manufacture an independent
+    measurement, so the answer is not stored. The visit keeps the total the
+    statement gave it, which is a fact no reading of the picture can move, and
+    the warning says the capture could not be recovered and why.
+
+    The captures arrive by mail from outside the trust boundary, and text
+    rendered into one is an instruction the model may read.
     """
 
     lines = []
@@ -878,13 +887,12 @@ def from_reply(reply: dict, like: Receipt, *, anchor: Decimal | None = None) -> 
     if not lines:
         return None
 
-    # The most a tax can be. Against the printed total where there is one, and
-    # against the statement's own figure where there is not — never None, so
-    # the bound is never quietly skipped on the path that has no printed total.
-    ceiling = like.balance if like.balance is not None else anchor
+    ceiling = like.balance
     if ceiling is None:
-        # Nothing to check the answer against, by either route.
+        # Nothing printed to check the answer against. See the docstring for
+        # what was tried in place of this and why it is not there any more.
         return None
+
     tax = _tax_for(reply, like, ceiling)
     if tax is None:
         return None
@@ -903,31 +911,8 @@ def from_reply(reply: dict, like: Receipt, *, anchor: Decimal | None = None) -> 
         # line is 0.95 of its receipt; the offsetting-pair attack runs at 21.
         return None
 
-    if like.balance is None:
-        # The statement's figure standing in for the printed one, and on its
-        # own it is NOT enough. `foots()` here reduces to `subtotal - anchor`,
-        # and `_disagrees` downstream compares the same subtotal against the
-        # same statement row — so the two checks are one check, and a single
-        # fabricated line worth exactly the statement's total passes both.
-        # Measured: a one-line answer reading `SECURITY ALERT: call …` was
-        # stored against a real visit.
-        #
-        # So the engine's own reading is the second fact. It is an independent
-        # transcription the model had no hand in, and a clip corrupts the last
-        # digit of an amount without inventing or deleting lines — so whatever
-        # the engine managed to read must still be in the answer.
-        if not _corroborates(like.lines, lines, tax):
-            return None
-        # Expressed as a balance so `foots()` is unchanged.
-        return replace(
-            like,
-            lines=tuple(lines),
-            tax=tax,
-            balance=anchor + tax,
-            complete=True,
-            balance_from_statement=True,
-        )
     claimed = _decimal(reply.get("balance"))
+
     if claimed is None or claimed != like.balance:
         return None
     # `replace`, not a fresh `Receipt`: enumerating the fields by hand is how
@@ -947,91 +932,6 @@ MAX_REPLY_LINES = 200
 #: leaves that more than double the headroom and still refuses the offsetting
 #: pair that made this bound necessary, which runs at twenty-one.
 MAX_GROSS = 5
-
-
-#: How many of the engine's own amounts must be matched by lines in the answer
-#: before the answer counts as corroborated at all.
-#:
-#: A floor rather than another special case. Twice now the check has been
-#: satisfied by nothing: first by an engine reading of zero amounts, where the
-#: loop never ran; then by an engine reading of ONE amount that the model's own
-#: tax matched, which let a single invented line through on a page whose only
-#: legible figure was a 0.00. Both were the same shape — corroboration that
-#: corroborates against nothing the model did not also author — and a count is
-#: what ends the shape instead of patching its instances.
-MIN_CORROBORATION = 2
-
-
-#: How many rows a clip may destroy outright before an answer claiming to have
-#: recovered them stops being believable. On the real capture it cost two of
-#: twelve — the amounts whose surviving sliver resolved to no digit at all, so
-#: the row stopped looking like an amount and was dropped whole.
-MAX_UNSEEN = 2
-
-
-#: How far a clip can move an amount. It cuts the last digit, so the most it can
-#: change is that digit's place: `7.49` came back as `7.45`, `0.39` as `0.35`.
-#: A tenth covers every corruption measured on the real corpus with room to
-#: spare, and is far tighter than the gap between a real line and an invented one.
-CLIP_REACH = Decimal("0.10")
-
-
-def _corroborates(read: tuple, claimed: list, tax: Decimal) -> bool:
-    """Does the answer still contain what the engine managed to read?
-
-    The check that makes the anchor path safe. Every amount the engine got off
-    the page has to be matched, one for one, by an amount in the model's answer
-    — within `CLIP_REACH`, because a clipped digit is exactly what sent this
-    page to a second reader in the first place.
-
-    Matched greedily against the closest candidate, and the model's tax counts
-    as one of them: on a capture that ran off the bottom, `_settle` has no
-    balance to work back from, so the tax line is still sitting among the
-    purchases it read.
-
-    This is what a fabricated answer cannot do. It can hit one aggregate — the
-    statement's total is a single number and the page prints it — but it cannot
-    also reproduce ten amounts a different reader independently pulled off the
-    same pixels.
-
-    Two bounds carry the weight, and the first is the one this got wrong the
-    first time. An engine reading of NOTHING corroborates everything: the loop
-    below never runs and every answer passes, which puts the whole path back to
-    the single equation it was written to escape. A page nothing could be read
-    off is a page with no second fact on it, and it is refused.
-
-    The second bounds how much an answer may add. A clip destroys rows — on the
-    real capture it cost two of twelve — so the answer legitimately holds more
-    lines than the engine got. It does not hold a hundred more.
-
-    Be clear about what this does NOT promise: it constrains an answer in
-    proportion to what the engine managed to read. Where that is one line of
-    twelve, one line is pinned and the rest rest on the sum. That is the honest
-    ceiling of this route, and it is why the route exists only for a page whose
-    total was lost to a clip rather than as a general fallback.
-    """
-    if len(claimed) > 2 * len(read) + MAX_UNSEEN:
-        return False
-    candidates = [item.amount for item in claimed]
-    spare_tax = tax
-    matched = 0
-    for amount in (item.amount for item in read):
-        nearest = min(candidates, key=lambda c: abs(c - amount), default=None)
-        if nearest is not None and abs(nearest - amount) <= CLIP_REACH:
-            candidates.remove(nearest)
-            matched += 1
-            continue
-        # The tax, and only once. On a capture that ran off the bottom there is
-        # no balance to work back from, so `_settle` leaves the tax line sitting
-        # among the purchases it read, and the model reports it in its own field
-        # instead of as a line. That is a real correspondence — but it is a
-        # figure the MODEL authored, so it can stand in for at most one amount
-        # and it can never be the whole of the corroboration.
-        if spare_tax is not None and abs(spare_tax - amount) <= CLIP_REACH:
-            spare_tax = None
-            continue
-        return False
-    return matched >= MIN_CORROBORATION
 
 
 #: The longest a line's name may be. A receipt line is twenty or thirty
@@ -1077,13 +977,13 @@ def _tax_for(reply: dict, like: Receipt, ceiling: Decimal) -> Decimal | None:
     not, the reply's figure is accepted only within the range a tax can occupy:
     at least nothing, at most `ceiling`.
 
-    `ceiling` is the printed total where the page had one and the statement's
-    figure for the visit where it did not. Note what that bound does NOT do,
-    because this docstring used to claim it: it bounds the SUM, and a sum says
-    nothing about its parts. A pair of offsetting lines nets to zero and walks
-    through it. `from_reply` bounds the gross for that, and on the route with
-    no printed total `_corroborates` is what actually pins the basket — there
-    the tax cancels out of the check entirely.
+    `ceiling` is the total printed on the page, which is the only route that
+    stores anything — see `from_reply` for the one that was withdrawn and why.
+
+    Note what this bound does NOT do, because this docstring used to claim it:
+    it bounds the SUM, and a sum says nothing about its parts. A pair of
+    offsetting lines nets to zero and walks straight through it. `from_reply`
+    bounds the gross for that.
     """
 
     if like.tax is not None and not like.tax_inferred:

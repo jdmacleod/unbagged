@@ -1011,47 +1011,6 @@ class TestWhenOneCaptureFailsAndTheRestDoNot:
         assert "none could be read" not in said
 
 
-class TestWhichVisitSuppliesTheAnchor:
-    """Found by /investigate on 2026-09-16. See `_anchor_for`."""
-
-    def receipt(self, name="Transaction_030419.png"):
-        return rc.Receipt(captures=(name,), lines=(rc.ReceiptLine("A", Decimal("1.00")),))
-
-    def visit(self, at, amount):
-        return Transaction(occurred_at=at, total_pre_discount=amount)
-
-    def test_one_visit_that_day_supplies_its_total(self):
-        visits = [self.visit("2019-03-04T11:07:00", 12.69)]
-        assert HMART._anchor_for(self.receipt(), visits, {}) == (0, Decimal("12.69"))
-
-    def test_two_visits_that_day_supply_nothing(self):
-        """Neither is more right, and guessing would check the answer against
-        the wrong trip's total."""
-        visits = [
-            self.visit("2019-03-04T09:12:00", 12.69),
-            self.visit("2019-03-04T17:40:00", 40.00),
-        ]
-        assert HMART._anchor_for(self.receipt(), visits, {}) == (None, None)
-
-    def test_a_visit_already_itemised_is_not_offered_again(self):
-        visits = [
-            self.visit("2019-03-04T09:12:00", 12.69),
-            self.visit("2019-03-04T17:40:00", 40.00),
-        ]
-        assert HMART._anchor_for(self.receipt(), visits, {0: visits[0]}) == (1, Decimal("40.00"))
-
-    def test_a_visit_with_no_amount_is_not_an_anchor(self):
-        assert HMART._anchor_for(self.receipt(), [self.visit("2019-03-04T11:07:00", None)], {}) == (
-            None,
-            None,
-        )
-
-    def test_a_filename_with_no_date_has_no_anchor(self):
-        assert HMART._anchor_for(
-            self.receipt("scan.png"), [self.visit("2019-03-04T11:07:00", 1.0)], {}
-        ) == (None, None)
-
-
 class TestSayingWhoseMistakeItWas:
     """Found by /investigate on 2026-09-16.
 
@@ -1199,31 +1158,37 @@ class TestWhenTheModelsAnswerIsAccepted:
         }
 
     @needs_engine
-    def test_an_anchored_answer_is_stored_against_its_visit(
+    def test_a_clipped_capture_is_quarantined_and_the_visit_keeps_its_total(
         self, tmp_path, source, visit, usable, monkeypatch, holder
     ):
-        """The page the engine lost the total off is itemised anyway, because
-        the statement supplies a total the model never saw."""
+        """The contract after four rounds of review withdrew the anchored route.
+
+        The model may read the page perfectly; its answer is still not stored,
+        because a page with no printed total has nothing on it a reading can be
+        checked against. What the reader gets instead is the truth: which
+        capture, why, and that the visit is not lost — it keeps the figure the
+        statement gave it, which no reading of the picture can move.
+        """
         self.answers(monkeypatch, self.honest(visit))
         self.reads_like_the_real_clip(monkeypatch, visit)
         parsed = holder.parse(tmp_path, source, self.clipped(tmp_path, visit))
         txn = holder.visit_row(parsed, visit)
-        assert [item.description_raw for item in txn.items] == ["ITEM ONE", "ITEM TWO"]
-        assert sum(item.retail_amt for item in txn.items) == txn.total_pre_discount
+        assert txn.items == (), "nothing the model said is stored"
+        assert txn.total_pre_discount == pytest.approx(float(visit["amount"])), (
+            "and the visit still carries what the statement said it cost"
+        )
 
     @needs_engine
-    def test_the_reader_is_told_the_statement_supplied_the_total(
+    def test_the_reader_is_told_which_capture_and_why(
         self, tmp_path, source, visit, usable, monkeypatch, holder
     ):
-        """Which figure the answer was checked against is part of the claim.
-        Against the statement it is two documents agreeing, which is a stronger
-        thing to say than one document checking itself."""
         self.answers(monkeypatch, self.honest(visit))
         self.reads_like_the_real_clip(monkeypatch, visit)
         parsed = holder.parse(tmp_path, source, self.clipped(tmp_path, visit))
         said = " ".join(w.message for w in parsed.warnings)
-        assert "the total the points statement gives for that visit" in said
-        assert "the total printed on the receipt" not in said
+        assert "cut off at its right edge" in said
+        assert "The visit still carries the total the points statement gave for it." in said
+        assert "read it into a basket that does" not in said, "nothing was kept"
 
     @needs_engine
     def test_an_answer_checked_against_the_printed_total_says_so(
