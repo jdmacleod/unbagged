@@ -926,3 +926,81 @@ class TestWhatACaptureWithNoTotalIsTold:
 class _NoModel:
     usable = False
     model = None
+
+
+class TestACaptureAloneCannotSayWhichLineWasTax:
+    """Found by the automated review on 2026-09-16.
+
+    `foots()` adds tax back, so a receipt reconciles whether the line above its
+    balance was tax or the last thing in the basket. On the statement path the
+    stated subtotal settles it. On a captures-only upload nothing does — and the
+    visit was stored one line short, with its total short by the same amount and
+    the lines summing to it exactly, so nothing on screen showed a gap.
+    """
+
+    def receipt(self, *, inferred: bool) -> rc.Receipt:
+        return rc.Receipt(
+            captures=("Transaction_030419.png",),
+            lines=(rc.ReceiptLine("RICE", Decimal("10.00")),),
+            tax=Decimal("3.00"),
+            balance=Decimal("13.00"),
+            complete=True,
+            tax_inferred=inferred,
+            stamp=rc.Stamp(occurred_at="2019-03-04T11:07:00", lane="2", number="0042"),
+        )
+
+    def said(self, *, inferred: bool):
+        warnings = HMART.WarningCollector()
+        txn = HMART._as_transaction(self.receipt(inferred=inferred), {}, warnings)
+        return txn, [warning.message for warning in warnings.as_tuple()]
+
+    def test_the_visit_is_kept_and_the_doubt_is_named(self):
+        txn, said = self.said(inferred=True)
+        assert txn is not None, "refusing it would cost a real basket for a label"
+        assert any("with no label this could read" in message for message in said)
+        assert any("short that one line" in message for message in said)
+
+    def test_a_receipt_that_printed_the_word_says_nothing(self):
+        txn, said = self.said(inferred=False)
+        assert txn is not None
+        assert said == []
+
+
+class TestWhenOneCaptureFailsAndTheRestDoNot:
+    """Found by the automated review on 2026-09-16.
+
+    `OcrUnavailable` is not only "the engine is not installed": it also carries
+    a per-image timeout and a nonzero exit on one file. The report then said
+    none of the captures could be read, in the same report as the baskets that
+    were.
+    """
+
+    def test_the_message_counts_what_failed_rather_than_the_whole_upload(
+        self, tmp_path, source, monkeypatch
+    ):
+        from unbagged.transcription import OcrUnavailable
+
+        holder = TestWhenTheCapturesArrive()
+        visit = {
+            "stamp": "2019-03-04 11:07:00",
+            "date": "2019-03-04",
+            "name": "Transaction_030419.png",
+            "amount": Decimal("12.34"),
+        }
+        good = holder.capture(tmp_path, visit)
+        bad = holder.capture(tmp_path, visit, name="Transaction_030519.png")
+
+        real = HMART.transcribe
+        seen: list[int] = []
+
+        def one_of_them_times_out(png, **kw):
+            seen.append(1)
+            if len(seen) > 1:
+                raise OcrUnavailable("tesseract did not finish within 60s on an image")
+            return real(png, **kw)
+
+        monkeypatch.setattr(HMART, "transcribe", one_of_them_times_out)
+        parsed = holder.parse(tmp_path, source, good, bad)
+        said = " ".join(warning.message for warning in parsed.warnings)
+        assert "1 of 2 receipt captures" in said
+        assert "none could be read" not in said

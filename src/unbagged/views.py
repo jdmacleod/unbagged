@@ -363,6 +363,23 @@ def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
         (request_id,),
     ).fetchone()["total"]
     result["total_stated"] = round(result["total_stated"], 2)
+    # What every visit came to, taking each one's stated total where it has one
+    # and what its own lines come to where it does not. `total_stated` alone
+    # drops a visit that was itemised but carries no total of its own, and the
+    # headline below substitutes it wholesale — so that visit's disclosed spend
+    # left the figure entirely while the row stayed on screen and in the count.
+    across_visits = round(
+        conn.execute(
+            "SELECT COALESCE(SUM(COALESCE(t.total_pre_discount, lines.summed)), 0) AS total"
+            " FROM txn t LEFT JOIN ("
+            "   SELECT txn_id, SUM(retail_amt) AS summed FROM txn_item"
+            "   WHERE retail_amt IS NOT NULL GROUP BY txn_id"
+            " ) lines ON lines.txn_id = t.id"
+            " WHERE t.request_id = ?",
+            (request_id,),
+        ).fetchone()["total"],
+        2,
+    )
 
     if not result["lines_disclosed"]:
         # Every figure above is built by summing line items, and there are
@@ -384,7 +401,7 @@ def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
         # The one exception, and the reason this branch exists: the stated
         # totals ARE disclosed money, so the headline figure carries them
         # rather than an em dash above a chart drawn from real numbers.
-        result["total_paid"] = result["total_stated"]
+        result["total_paid"] = across_visits
     else:
         result["total_shelf"] = round(result["total_shelf"], 2)
         result["total_paid"] = round(result["total_paid"], 2)
@@ -398,8 +415,11 @@ def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
             # dollars with nothing on screen naming its scope. The stated totals
             # are disclosed money for ALL of them, so the headline carries those
             # and `total_shelf`/`total_saved` keep the narrower scope they
-            # honestly describe.
-            result["total_paid"] = result["total_stated"]
+            # honestly describe. Per visit rather than from `total_stated`, so
+            # a visit that was itemised but carries no total of its own is
+            # counted by its lines instead of dropped.
+            result["total_paid"] = across_visits
+
     stores = _rows(
         conn,
         "SELECT store_code, COUNT(*) AS visits FROM txn WHERE request_id = ?"

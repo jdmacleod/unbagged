@@ -418,7 +418,9 @@ def _itemise(
         warnings.info(model.message)
 
     engine = None
+    engine_failed: list[str] = []
     by_name = {document.original_filename: document for document in captures}
+
     if len(by_name) < len(captures):
         # Two files of one name in one upload. The map keeps the last, and the
         # counts below would still report both as read, so a dropped capture
@@ -467,7 +469,9 @@ def _itemise(
             # is either there or it is not, and 46 copies of that is not more
             # informative than one.
             engine = engine or str(exc)
+            engine_failed.extend(names)
             continue
+
         except UnreadableImage as exc:
             # The opposite scope: one file, one warning, and the rest of the
             # upload is untouched. A truncated capture used to escape as an
@@ -544,11 +548,25 @@ def _itemise(
             )
 
     if engine:
-        warnings.error(
-            f"{len(captures)} receipt captures were part of this response and "
-            f"none could be read. {engine} Every visit still carries the total "
-            "the points statement gave for it."
-        )
+        # `OcrUnavailable` is not only "the engine is not installed" — it also
+        # carries a per-image timeout and a nonzero exit on one file. So this
+        # counts what actually failed instead of claiming the whole response
+        # did: with some captures read and one timing out, "none could be read"
+        # sat in the same report as the baskets that were.
+        read = len(captures) - len(engine_failed)
+        if read:
+            warnings.add(
+                f"{len(engine_failed)} of {len(captures)} receipt captures in "
+                f"this response could not be read. {engine} The other {read} "
+                "were read and are in this report."
+            )
+        else:
+            warnings.error(
+                f"{len(captures)} receipt captures were part of this response "
+                f"and none could be read. {engine} Every visit still carries "
+                "the total the points statement gave for it."
+            )
+
     if unread:
         warnings.add(
             f"{len(unread)} capture(s) in this upload were not read: this "
@@ -612,6 +630,25 @@ def _as_transaction(
             locator=receipt.captures[0],
         )
         return None
+    if receipt.tax_inferred:
+        # The line above the balance, with no word on it the engine could read
+        # and nothing outside the receipt to settle what it was. The gate is
+        # blind to this by construction — `foots()` adds tax back, so the same
+        # receipt reconciles whether that line was tax or the last thing in the
+        # basket — and on the statement path the stated subtotal decides. Here
+        # there is no statement. The arithmetic is still right either way; what
+        # is uncertain is whether this basket is one line short, so the visit
+        # is kept and the doubt is named rather than buried.
+        warnings.add(
+            f"{' and '.join(receipt.captures)} has a line of "
+            f"{receipt.tax} above its total with no label this could read. It "
+            "has been treated as tax, which is what it usually is. If it was a "
+            "purchase, this basket is short that one line and its total is "
+            "short by the same amount. A points statement uploaded alongside "
+            "the captures settles it; nothing on the receipt alone can.",
+            locator=receipt.captures[0],
+        )
+
     document = by_name.get(receipt.captures[0])
     return Transaction(
         occurred_at=receipt.stamp.occurred_at,
