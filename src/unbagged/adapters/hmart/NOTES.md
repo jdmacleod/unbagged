@@ -337,13 +337,61 @@ therefore decided some other way, and the decisions are worth keeping:
 
 - **A dozen captures carry a freehand scrawl** drawn across them in pure
   `#0000FF`. The page itself never uses that colour, so it is masked back to
-  white before the engine sees it. Unmasked, one capture read 14 lines summing
-  to 85.28 against a stated 100.23; masked, 16 summing to 100.23 exactly.
-- **One capture is clipped at the source.** It cut the last
-  digit off every amount in the column, so `$ 7.49` is rendered as `$ 7.4`. It
-  is legible, every figure on it is plausible, and it cannot be read. It is the
-  one receipt of the 44 that is permanently quarantined, and it is the reason
-  the arithmetic gate is not optional.
+  white before the engine sees it. Unmasked, one capture read 14 lines and came
+  up short of its stated total; masked, 16 lines reading exactly to it.
+
+
+- **One capture is clipped at the source**, and the earlier note here was wrong
+  about what that means. It is the narrowest page in the corpus and its amount
+  column runs into the right edge, so the last digit of every amount is cut —
+  but cut THROUGH, not cut off. Enough of each glyph survives that a person
+  reads the page without difficulty.
+
+  That is worse than losing the digit outright, and it fails in two directions
+  at once. Where the surviving sliver resolves to another digit the engine
+  returns a plausible wrong number and says nothing: five amounts on that page
+  came back altered, one of them by four cents. Where it resolves to no digit
+  the amount stops matching at all and the whole row is dropped, which on that
+  page took the BALANCE line with it — so the total that would have caught the
+  other five was gone too.
+
+  A vision model reads the page correctly, every clipped digit included. What
+  stopped it being used was not the model: the gate needs a figure the reader
+  had no hand in, and the clip had taken the only one on the page.
+
+  The points statement looks like the missing figure, and it was tried. It does
+  not work, and the way it fails is worth recording because it will be proposed
+  again.
+
+  With `balance` set to `anchor + tax`, `foots()` reduces to `subtotal ==
+  anchor` — the same comparison `_disagrees` makes a moment later. One
+  constraint, one scalar, wearing two hats. Four rounds of adversarial review
+  each found a way through, and each fix opened the next:
+
+  | Round | What was stored |
+  |---|---|
+  | 1 | one invented line worth exactly the statement's total |
+  | 2 | anything at all, on a page the engine read nothing off |
+  | 3 | one invented line, on a page whose only legible figure the model's own tax matched |
+  | 4 | one invented line of 4,999 behind ten genuine matches of a tenth each |
+
+  Round 4 is the one that settles it. Every candidate second fact here comes
+  from the engine's own partial reading, which is weak by construction — a clip
+  is the whole reason this route was wanted — and is influenced by whoever
+  supplied the capture, who also supplied the statement the figure comes from.
+  A floor counting matched LINES says nothing about matched VALUE, and bounding
+  the answer cannot manufacture a measurement that is not there.
+
+  So a page with no printed total stores nothing. The visit keeps the figure the
+  statement gave it, which no reading of the picture can move, and the warning
+  names the capture and the reason. Recovering the basket needs a capture that
+  is not clipped, which means asking the retailer again.
+
+  `_clipped` is the physical signal, and it measures the amount column only —
+  the stamp line ends in a run of digits that can sit against the edge of a
+  page whose amounts are well clear of it. Measured on amount ink: the gap is
+  0px on that capture and 4px to 24px on the other 45.
+
 - **Two captures sharing a date may be two visits.** One pair in the corpus is
   two separate trips on one day, at different lanes, for different amounts.
   Their filenames are indistinguishable from a continuation pair; only reading

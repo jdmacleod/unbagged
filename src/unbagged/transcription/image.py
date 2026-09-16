@@ -25,8 +25,9 @@ log = logging.getLogger(__name__)
 #: It is exactly `#0000FF` — pure blue — while the page itself is drawn in
 #: `#002D8C` navy, `#B55D00` ochre and black, so the scrawl shares no colour
 #: with any glyph and removing it costs nothing that was ever text. Measured on
-#: one capture: 14 lines summing to 85.28 against a stated 100.23 before, 16
-#: lines summing to 100.23 exactly after.
+#: one capture: fourteen lines short of its stated total before the mask, and
+#: every line reading exactly to that total after it.
+
 #:
 #: An EXACT match, not a near one. A tolerance wide enough to be worth having
 #: starts eating the navy the descriptions are set in.

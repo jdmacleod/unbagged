@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import pytest
@@ -350,3 +351,53 @@ class TestImages:
         # as pixels"), naming an internal shape and nothing a reader can act
         # on. Found by /qa on 2026-09-15.
         assert "transcript" not in message.lower()
+
+
+class TestWhatTheLogSaysAboutAFileItCouldNotRead:
+    """Found by /investigate on 2026-09-16.
+
+    `extract_all` logged `could not extract <name>` and nothing else. Two
+    problems at once: it threw away a sentence `extract` had written for a
+    person, and an image raises here BY DESIGN — the transcription tier reads
+    those — so a healthy upload of a statement and 46 captures wrote 46
+    warnings saying a PNG could not be extracted.
+    """
+
+    def document(self, tmp_path, name: str, data: bytes) -> SourceDocument:
+        path = tmp_path / name
+        path.write_bytes(data)
+        return SourceDocument(original_filename=name, sha256="0" * 64, path=str(path))
+
+    PNG = bytes.fromhex("89504e470d0a1a0a") + b"\x00" * 64
+
+    def test_a_capture_is_not_logged_as_a_failure(self, tmp_path, caplog):
+        with caplog.at_level(logging.WARNING):
+            extract_all((self.document(tmp_path, "Transaction_030419.png", self.PNG),))
+        assert caplog.records == [], "an image reaching the transcription tier is not a failure"
+
+    def test_and_says_where_it_went_instead(self, tmp_path, caplog):
+        with caplog.at_level(logging.DEBUG):
+            extract_all((self.document(tmp_path, "Transaction_030419.png", self.PNG),))
+        assert any("transcription tier" in r.getMessage() for r in caplog.records)
+
+    def test_a_real_failure_is_logged_with_the_reason(self, tmp_path, caplog):
+        """The message `extract` raises names the format, what would have had
+        to read it, and what to do next. None of it used to reach the log."""
+        legacy_xls = bytes.fromhex("d0cf11e0a1b11ae1") + b"\x00" * 200
+        with caplog.at_level(logging.WARNING):
+            extract_all((self.document(tmp_path, "history.xls", legacy_xls),))
+        (record,) = caplog.records
+        said = record.getMessage()
+
+        assert "history.xls" in said
+        assert "XML Spreadsheet 2003" in said, "the actionable half was being discarded"
+
+    def test_a_document_with_no_stored_path_is_still_logged(self, caplog):
+        """The guard in front of the image check, which exists because
+        `Path(None)` raises. A document with nowhere to read from is a real
+        failure and has to reach the log as one rather than as a TypeError."""
+        nowhere = SourceDocument(original_filename="history.xls", sha256="0" * 64, path=None)
+        with caplog.at_level(logging.WARNING):
+            extract_all((nowhere,))
+        (record,) = caplog.records
+        assert "no stored path" in record.getMessage()

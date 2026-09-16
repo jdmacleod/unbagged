@@ -485,9 +485,32 @@ def _itemise(
             )
             continue
         for receipt in receipts:
+            if receipt.clipped:
+                # Refused on the strength of the CLIP, not of the arithmetic.
+                #
+                # A clip cuts through the last digit of every amount, and the
+                # surviving fragment resolves to some other digit — so the page
+                # can still add up while every figure on it is wrong. Reaching
+                # this check only when the sum already failed meant the one
+                # signal that says "these digits are unreliable" was consulted
+                # only where the digits had already given themselves away.
+                # Verified: a clipped page whose corrupted amounts reconcile was
+                # stored, silently, with no mention of the clip.
+                #
+                # Before `foots`, because on this page the sum proves nothing.
+                warnings.add(
+                    _unreconciled(receipt, rc.foots(receipt), model, statement=statement),
+                    locator=receipt.captures[0],
+                )
+                continue
             short = rc.foots(receipt)
+
+            #: The accepted model answer. Bound here rather than in the branch
+            #: below, because it is read after the join for a receipt that never
+            #: needed a model at all.
+            second = None
+
             if short is not None:
-                second = None
                 # The budget covers the model too. Eight adjudications at the
                 # per-call timeout is over twenty minutes, and every one of them
                 # sits after the last capture was read — so the cap on how many
@@ -497,19 +520,16 @@ def _itemise(
                 ):
                     adjudicated += 1
                     second = _adjudicate(receipt, by_name, model)
+
                 if second is None:
                     warnings.add(
                         _unreconciled(receipt, short, model, statement=statement),
                         locator=receipt.captures[0],
                     )
                     continue
-                warnings.info(
-                    f"{' and '.join(receipt.captures)} would not add up as read, "
-                    f"and {model.model} read it into a basket that does. Only "
-                    "an answer that reconciles is kept, so this one has been."
-                )
                 receipt = second
             index, by_filename = _match(receipt, transactions, itemised)
+
             if index is None:
                 if statement:
                     unmatched.append(receipt)
@@ -517,6 +537,7 @@ def _itemise(
                     added.append(receipt)
                 continue
             receipt = _settle_tax_against(transactions[index], receipt)
+
             disagreement = _disagrees(transactions[index], receipt)
             if disagreement is not None:
                 warnings.add(disagreement, locator=receipt.captures[0])
@@ -530,10 +551,21 @@ def _itemise(
                 # for it. Both come from the response; neither is a guess. But
                 # "matched on the printed timestamp" and "matched on a filename
                 # and an amount" are different claims.
+                # Said as a fact about the READING, not about the response. The
+                # second case used to read "prints a timestamp that matches no
+                # visit in the statement", which says the two halves of the
+                # response disagree. On the real corpus both instances were
+                # this tool misreading the stamp — a minute digit, and a year
+                # digit — and the retailer was consistent throughout. Blaming a
+                # response for our own OCR is the failure this adapter exists
+                # to avoid.
                 why = (
-                    "has no readable timestamp"
+                    "has no timestamp this could read"
                     if receipt.stamp is None
-                    else "prints a timestamp that matches no visit in the statement"
+                    else (
+                        "prints a timestamp this could not read into any visit "
+                        "in the statement, most likely a misread digit in it"
+                    )
                 )
                 warnings.info(
                     f"{' and '.join(receipt.captures)} {why}, so it was placed "
@@ -546,6 +578,29 @@ def _itemise(
             itemised[index] = _with_items(
                 transactions[index], receipt, by_name, stamp_trusted=not by_filename
             )
+            if second is not None:
+                # `second is not None`, not `receipt is second`: settling the
+                # tax against the statement returns a REPLACEMENT receipt, so
+                # an identity test quietly suppressed this notice on exactly
+                # the baskets where a model contributed AND a tax line had to
+                # be restored as a purchase.
+                #
+                # Said AFTER the row is written, not before. Emitted at the
+
+                # point the answer was accepted, it claimed the basket had been
+                # kept while `_match` and `_disagrees` could still refuse it —
+                # and the report then carried two sentences about one capture
+                # that contradicted each other, with nothing retracting the
+                # first.
+                #
+                warnings.info(
+                    f"{' and '.join(receipt.captures)} would not add up as read, "
+                    f"and {model.model} read it into a basket that does. The "
+                    "answer was checked against the total printed on the "
+                    "receipt, which nothing that read the picture had a hand "
+                    "in, and only an answer that reconciles is kept — so this "
+                    "one has been."
+                )
 
     if engine:
         # `OcrUnavailable` is not only "the engine is not installed" — it also
@@ -684,7 +739,9 @@ def _items(receipt: rc.Receipt) -> tuple[TxnItem, ...]:
 
 
 def _adjudicate(
-    receipt: rc.Receipt, by_name: dict, where: ollama.Availability
+    receipt: rc.Receipt,
+    by_name: dict,
+    where: ollama.Availability,
 ) -> rc.Receipt | None:
     """Ask a local model about a page the engine could not read into a basket.
 
@@ -714,6 +771,7 @@ def _adjudicate(
     if reply is None:
         return None
     candidate = rc.from_reply(reply, receipt)
+
     if candidate is None or rc.foots(candidate) is not None:
         return None
     return candidate
@@ -925,6 +983,49 @@ def _unreconciled(receipt: rc.Receipt, short: Decimal, model, *, statement: bool
     tried = (
         f" {model.model} was asked about it as well and could not either." if model.usable else ""
     )
+    if receipt.clipped:
+        # Checked BEFORE the no-total branch, because a clip causes that too
+        # and the reader would otherwise be sent looking for a second capture
+        # that was never taken.
+        #
+        # Two shapes, because the page can lose its total to the clip or keep
+        # it. Keeping it is the more dangerous one: every amount is still cut,
+        # so the page can add up while each figure on it is wrong, and a
+        # message claiming the total was lost would be false.
+        if receipt.balance is not None:
+            return (
+                f"{where} is cut off at its right edge: the column of amounts "
+                "runs into the edge of the picture, so the last digit of every "
+                "amount on it is sliced through. What it adds up to cannot be "
+                "trusted — the figures can be consistent with each other and "
+                "still be the wrong figures — so nothing from it is in this "
+                "report. The receipt itself is fine; the capture of it is too "
+                f"narrow. A wider capture of the same receipt would be read.{kept}"
+            )
+
+        # Deliberately NOT `tried`. On this page a model may well have read
+        # every amount correctly — the one in the real response did. What
+        # stopped it was not the reading: the clip takes the printed total
+        # along with the digits, so there is no figure left on the page to
+        # check any reading against, and an answer nothing can check is not one
+        # this stores. Saying the model "could not either" would report our own
+        # limit as its failure, which is the thing this adapter exists to avoid.
+        asked = (
+            f" {model.model} was asked about it as well; its answer could not "
+            "be checked against anything the page still states, so it was not "
+            "kept."
+            if model.usable
+            else ""
+        )
+        return (
+            f"{where} is cut off at its right edge: the column of amounts runs "
+            "into the edge of the picture, so the last digit of every amount on "
+            "it is sliced through — including the total's. That leaves nothing "
+            "on the page to check a reading against, so nothing from it is in "
+            "this report. The receipt itself is fine; the capture of it is too "
+            f"narrow. A wider capture of the same receipt would be read.{asked}{kept}"
+        )
+
     if receipt.balance is None:
         # A different finding, and it was being reported as the first one. A
         # page with no total on it produced "its lines come to +0.00 against

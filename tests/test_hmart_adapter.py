@@ -7,6 +7,7 @@ record while cleaning up the input, and a hardcoded number cannot catch it.
 
 import re
 import sys
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 
@@ -708,9 +709,12 @@ class TestWhenAModelIsAskedAboutACapture:
         )
         parsed = HMartAdapter().parse(SourceBundle(documents=(self.unreadable_capture(tmp_path),)))
         assert all(not txn.items for txn in parsed.transactions)
-        assert any(
-            "could not be read" in w.message or "no receipt" in w.message for w in parsed.warnings
-        )
+        # The fixture is built with `clip_digits=1`, so the specific finding is
+        # available and is the one reported: the capture is cut through its own
+        # amounts. Before, this said the receipt ran past the bottom of the
+        # picture and told the reader to upload a second half that does not
+        # exist.
+        assert any("cut off at its right edge" in w.message for w in parsed.warnings)
 
     @needs_engine
     def test_a_model_is_never_asked_when_none_is_reachable(self, tmp_path, monkeypatch):
@@ -975,6 +979,7 @@ class TestWhenOneCaptureFailsAndTheRestDoNot:
     were.
     """
 
+    @needs_engine
     def test_the_message_counts_what_failed_rather_than_the_whole_upload(
         self, tmp_path, source, monkeypatch
     ):
@@ -1004,3 +1009,301 @@ class TestWhenOneCaptureFailsAndTheRestDoNot:
         said = " ".join(warning.message for warning in parsed.warnings)
         assert "1 of 2 receipt captures" in said
         assert "none could be read" not in said
+
+
+class TestSayingWhoseMistakeItWas:
+    """Found by /investigate on 2026-09-16.
+
+    Two captures in the real corpus print a timestamp that reached no visit.
+    Both were this tool misreading the stamp — one minute digit, one year digit
+    — and the retailer was consistent throughout. The warning said the capture
+    'prints a timestamp that matches no visit in the statement', which reads as
+    the response contradicting itself. Blaming a response for our own OCR is
+    the failure this adapter exists to avoid.
+    """
+
+    @needs_engine
+    def test_an_unmatched_stamp_is_reported_as_a_misreading(self, tmp_path, source, monkeypatch):
+        holder = TestWhenTheCapturesArrive()
+        # Built from the committed fixture's own first row, like the suite
+        # above: a hand-written visit matches no statement row, and the receipt
+        # then goes down the unmatched path instead of the one under test.
+        row = read_tables(source).tables[0].rows[2]
+        stamp = row.value(2)[:19]
+        visit = {
+            "stamp": stamp,
+            "date": stamp[:10],
+            "name": f"Transaction_{stamp[5:7]}{stamp[8:10]}{stamp[2:4]}.png",
+            "amount": Decimal(row.value(4)),
+        }
+        cap = holder.capture(tmp_path, visit)
+
+        real = rc.read_capture
+
+        def stamp_misread(transcript, capture):
+            page = real(transcript, capture)
+            # The same instant with one digit of the year wrong, which is what
+            # the engine actually did to one real capture.
+            broken = stamp[0] + "9" + stamp[2:].replace(" ", "T")
+
+            return replace(page, stamp=rc.Stamp(occurred_at=broken, lane="2", number="0042"))
+
+        monkeypatch.setattr(HMART.rc, "read_capture", stamp_misread)
+        parsed = holder.parse(tmp_path, source, cap)
+        said = " ".join(w.message for w in parsed.warnings)
+        assert "could not read into any visit" in said
+        assert "misread digit" in said
+        assert "matches no visit in the statement" not in said
+
+
+class TestWhenTheModelsAnswerIsAccepted:
+    """Found by /ship's coverage pass on 2026-09-16.
+
+    Every test on this branch stopped at a refusal. `_adjudicate` returning an
+    answer, the sentence naming the figure that answer was checked against, and
+    the rebind that puts the model's basket in front of the join were reached
+    by nothing — so the half of this path that actually WRITES rows was the
+    untested half, including the whole of the statement-anchored route the
+    branch was opened for.
+    """
+
+    @pytest.fixture()
+    def usable(self, monkeypatch):
+        """A model the adapter believes it can reach."""
+        from unbagged.transcription import ollama
+
+        where = ollama.Availability(ollama.Reachability.OK, "", "localhost:11434", "a-model")
+        monkeypatch.setattr(HMART.ollama, "availability", lambda: where)
+        return where
+
+    @pytest.fixture()
+    def holder(self):
+        """The suite above, for its capture builder and its statement bundle."""
+        return TestWhenTheCapturesArrive()
+
+    @pytest.fixture()
+    def visit(self, source) -> dict:
+        row = read_tables(source).tables[0].rows[2]
+        stamp = row.value(2)[:19]
+        return {
+            "stamp": stamp,
+            "date": stamp[:10],
+            "name": f"Transaction_{stamp[5:7]}{stamp[8:10]}{stamp[2:4]}.png",
+            "amount": Decimal(row.value(4)),
+        }
+
+    def clipped(self, tmp_path, visit) -> SourceDocument:
+        """A capture cut through its own amount column.
+
+        The page the anchor exists for: the clip takes the last digit of every
+        amount AND the printed total, so the engine reads no balance off it and
+        there is nothing on the page left to check a second reader against.
+        """
+        from tests.receiptimage import build_receipt
+
+        path = tmp_path / visit["name"]
+        path.write_bytes(
+            build_receipt(
+                [
+                    ("", "Customer ID: 40100200300", None),
+                    ("", "ITEM 1", str(visit["amount"])),
+                    ("", "TAX", "0.00"),
+                    ("***", "BALANCE", str(visit["amount"])),
+                    ("", "CREDIT CARD", str(visit["amount"])),
+                    ("", f"{visit['stamp']}  2  118  0042", None),
+                ],
+                clip_digits=1,
+            )
+        )
+        return SourceDocument(original_filename=path.name, sha256="0" * 64, path=str(path), id=1)
+
+    def answers(self, monkeypatch, reply):
+        monkeypatch.setattr(HMART.vision, "read_receipt", lambda pages, where, opener=None: reply)
+
+    def reads_like_the_real_clip(self, monkeypatch, visit):
+        """Stand in the shape the real clipped capture produces.
+
+        The drawn clip is harsher than the real one: `clip_digits=1` removes a
+        whole digit-width, so nothing parses at all and the page has no second
+        fact on it to corroborate against — which the gate now refuses, rightly.
+        A real clip slices THROUGH the last glyph, so most amounts still read
+        with a corrupted final digit and only the worst rows are lost. That is
+        the state the anchor route exists for, and OCR's own fidelity is pinned
+        at the unit level, so it is stood in here rather than drawn.
+        """
+        half = (visit["amount"] / 2).quantize(Decimal("0.01"))
+        real = rc.Receipt(
+            captures=(visit["name"],),
+            # The last digit corrupted, the way a clip corrupts it.
+            lines=(
+                rc.ReceiptLine("ITEM ONE", half - Decimal("0.04")),
+                rc.ReceiptLine("ITEM TWO", visit["amount"] - half - Decimal("0.04")),
+            ),
+            balance=None,
+            complete=False,
+            clipped=True,
+        )
+        monkeypatch.setattr(HMART.rc, "read_capture", lambda transcript, capture: real)
+
+    def honest(self, visit) -> dict:
+        """Two lines summing to what the statement says the visit cost."""
+        half = (visit["amount"] / 2).quantize(Decimal("0.01"))
+        return {
+            "lines": [
+                {"description": "ITEM ONE", "amount": f": {half}"},
+                {"description": "ITEM TWO", "amount": f": {visit['amount'] - half}"},
+            ],
+            "tax": "0.00",
+            "balance": str(visit["amount"]),
+        }
+
+    @needs_engine
+    def test_a_clipped_capture_is_quarantined_and_the_visit_keeps_its_total(
+        self, tmp_path, source, visit, usable, monkeypatch, holder
+    ):
+        """The contract after four rounds of review withdrew the anchored route.
+
+        The model may read the page perfectly; its answer is still not stored,
+        because a page with no printed total has nothing on it a reading can be
+        checked against. What the reader gets instead is the truth: which
+        capture, why, and that the visit is not lost — it keeps the figure the
+        statement gave it, which no reading of the picture can move.
+        """
+        self.answers(monkeypatch, self.honest(visit))
+        self.reads_like_the_real_clip(monkeypatch, visit)
+        parsed = holder.parse(tmp_path, source, self.clipped(tmp_path, visit))
+        txn = holder.visit_row(parsed, visit)
+        assert txn.items == (), "nothing the model said is stored"
+        assert txn.total_pre_discount == pytest.approx(float(visit["amount"])), (
+            "and the visit still carries what the statement said it cost"
+        )
+
+    @needs_engine
+    def test_the_reader_is_told_which_capture_and_why(
+        self, tmp_path, source, visit, usable, monkeypatch, holder
+    ):
+        self.answers(monkeypatch, self.honest(visit))
+        self.reads_like_the_real_clip(monkeypatch, visit)
+        parsed = holder.parse(tmp_path, source, self.clipped(tmp_path, visit))
+        said = " ".join(w.message for w in parsed.warnings)
+        assert "cut off at its right edge" in said
+        assert "The visit still carries the total the points statement gave for it." in said
+        assert "read it into a basket that does" not in said, "nothing was kept"
+
+    @needs_engine
+    def test_an_answer_checked_against_the_printed_total_says_so(
+        self, tmp_path, source, visit, usable, monkeypatch, holder
+    ):
+        """The other half of the same sentence. A page that DID print a total
+        is checked against it, and the anchor never enters."""
+        misread = holder.capture(tmp_path, visit, lines=[Decimal("5.00")], balance=visit["amount"])
+        self.answers(monkeypatch, self.honest(visit))
+        parsed = holder.parse(tmp_path, source, misread)
+        said = " ".join(w.message for w in parsed.warnings)
+        assert "the total printed on the receipt" in said
+        assert holder.visit_row(parsed, visit).items
+
+    @needs_engine
+    def test_a_fabricated_basket_is_refused_on_the_anchored_path(
+        self, tmp_path, source, visit, usable, monkeypatch, holder
+    ):
+        """The safety property, at the layer that writes rows. The anchor is
+        matched on a date alone, which is only safe because a wrong one fails
+        the arithmetic rather than attaching a basket to the wrong visit."""
+        self.answers(
+            monkeypatch,
+            {
+                "lines": [{"description": "INVENTED", "amount": ": 999.00"}],
+                "tax": "0.00",
+                "balance": ": 999.00",
+            },
+        )
+        parsed = holder.parse(tmp_path, source, self.clipped(tmp_path, visit))
+        assert all(not txn.items for txn in parsed.transactions)
+        said = " ".join(w.message for w in parsed.warnings)
+        assert "read it into a basket that does" not in said
+        assert "cut off at its right edge" in said
+
+    @needs_engine
+    def test_a_model_authored_tax_cannot_buy_a_wrong_basket(
+        self, tmp_path, source, visit, usable, monkeypatch, holder
+    ):
+        """The hole `_tax_for` was written to close, on the route that has no
+        printed total. The balance is set to `anchor + tax`, so `foots` reduces
+        to `subtotal - anchor` and a tax sized to absorb the difference cancels
+        out of the check instead of paying for it."""
+        inflated = visit["amount"] + Decimal("8.00")
+        self.answers(
+            monkeypatch,
+            {
+                "lines": [{"description": "INVENTED", "amount": f": {inflated}"}],
+                # Within the range a tax may occupy, and exactly the residual.
+                "tax": "8.00",
+                "balance": str(inflated),
+            },
+        )
+        parsed = holder.parse(tmp_path, source, self.clipped(tmp_path, visit))
+        assert all(not txn.items for txn in parsed.transactions)
+        assert not any("read it into a basket that does" in w.message for w in parsed.warnings)
+
+    @needs_engine
+    def test_the_cap_on_how_many_pages_a_model_is_asked_about_holds(
+        self, tmp_path, source, visit, usable, monkeypatch, holder
+    ):
+        """The other side of the same `if`, and the only thing standing between
+        an upload of unreadable captures and a call per capture. With the cap
+        spent, the page is set aside unread rather than sent."""
+        asked = []
+        monkeypatch.setattr(HMART, "MAX_ADJUDICATIONS", 0)
+        monkeypatch.setattr(
+            HMART.vision,
+            "read_receipt",
+            lambda pages, where, opener=None: asked.append(1),
+        )
+        parsed = holder.parse(tmp_path, source, self.clipped(tmp_path, visit))
+        assert asked == [], "a model was asked past the cap"
+        assert all(not txn.items for txn in parsed.transactions)
+
+
+class TestAClippedPageIsRefusedOnTheClip:
+    """Found by the automated review on PR #90.
+
+    The clipping signal was consulted only inside `_unreconciled`, which runs
+    only once the arithmetic has already failed. But a clip cuts through the
+    last digit of every amount and the fragment resolves to some OTHER digit —
+    so a page can add up while every figure on it is wrong, and the one signal
+    saying "these digits are unreliable" was being read only where the digits
+    had already given themselves away.
+    """
+
+    def clipped(self, **kw):
+        return rc.Receipt(
+            captures=("Transaction_030419.png",),
+            lines=(rc.ReceiptLine("A", Decimal("5.00")), rc.ReceiptLine("B", Decimal("5.00"))),
+            tax=Decimal("0.00"),
+            balance=Decimal("10.00"),
+            complete=True,
+            clipped=True,
+            **kw,
+        )
+
+    class _NoModel:
+        usable = False
+        model = None
+
+    def test_the_sum_passing_does_not_make_the_digits_trustworthy(self):
+        found = self.clipped()
+        assert rc.foots(found) is None, "the arithmetic is self-consistent"
+        said = HMART._unreconciled(found, None, self._NoModel(), statement=True)
+        assert "cut off at its right edge" in said
+
+    def test_and_it_does_not_claim_a_total_it_still_has_was_lost(self):
+        """The other clipped shape says the total went with the digits. On this
+        page it did not, and saying so would be false."""
+        said = HMART._unreconciled(self.clipped(), None, self._NoModel(), statement=True)
+        assert "including the total's" not in said
+        assert "cannot be trusted" in said
+
+    def test_the_visit_is_told_it_keeps_its_total(self):
+        said = HMART._unreconciled(self.clipped(), None, self._NoModel(), statement=True)
+        assert "still carries the total the points statement gave for it" in said
