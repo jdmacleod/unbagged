@@ -126,6 +126,11 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install --upgrade pip
       - run: pip install -e ".[dev]"
+      # The OCR engine, because 34 tests are gated on its presence and a gate
+      # that never opens is a suite that reports green having run nothing. The
+      # shipped image installs the same two packages (Dockerfile); this is the
+      # test tier catching up with it. -eng only, for the same reason as there.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng
       - run: ruff check .
       - run: ruff format --check .
       - run: pytest -q

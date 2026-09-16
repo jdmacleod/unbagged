@@ -335,3 +335,111 @@ class TestWhichLineWasTheTax:
         assert restored.tax == Decimal("0.00")
         assert sum(line.amount for line in restored.lines) == Decimal("6.00")
         assert rc.foots(restored) is None, "both readings reconcile — that is the point"
+
+
+class TestJoiningThreeOrMoreCaptures:
+    """Found by the adversarial pass on 2026-09-16.
+
+    Two captures hid both of these: with one seam, "a trim per seam" and "one
+    cap for all seams" are the same thing, and a group of two is never partly
+    complete. Three is where they come apart.
+    """
+
+    def part(self, names, **kw):
+        return rc.Receipt(
+            captures=("c.png",),
+            lines=tuple(rc.ReceiptLine(n, Decimal("1.00")) for n in names),
+            **kw,
+        )
+
+    def test_the_correct_join_is_reachable_when_seams_differ(self):
+        """One cap across every seam could not produce it at all.
+
+        With real overlaps of 2 and 0, every candidate either dropped lines or
+        duplicated them — verified: cap 1 both duplicated Z and lost Q. The
+        greedy pass happened to find the right answer, and greedy is exactly
+        what fails when one transcribed description differs by a character at
+        the true seam, which is the case this search exists for.
+        """
+        joined = rc.stitch(
+            [
+                self.part(["X", "Y", "Z"]),
+                self.part(["Y", "Z", "P"]),
+                self.part(["Q", "R"], tax=Decimal("0.00"), balance=Decimal("6.00"), complete=True),
+            ]
+        )
+        assert [line.description for line in joined.lines] == ["X", "Y", "Z", "P", "Q", "R"]
+        assert rc.foots(joined) is None
+
+    def test_a_reading_that_keeps_more_lines_wins_a_tie(self):
+        """Two trims can both reconcile — a product and its `CL` cancellation
+        straddling a seam sum to zero. Between two readings that both add up,
+        the one discarding less of what was paid for is the safer answer."""
+        head = rc.Receipt(
+            captures=("a.png",),
+            lines=(rc.ReceiptLine("A", Decimal("5.00")), rc.ReceiptLine("B", Decimal("2.00"))),
+        )
+        tail = rc.Receipt(
+            captures=("b.png",),
+            lines=(rc.ReceiptLine("B", Decimal("2.00")), rc.ReceiptLine("CL B", Decimal("-2.00"))),
+            tax=Decimal("0.00"),
+            balance=Decimal("7.00"),
+            complete=True,
+        )
+        joined = rc.stitch([head, tail])
+        assert rc.foots(joined) is None
+        assert len(joined.lines) == 4, "the trim that discarded the pair also reconciled"
+
+
+class TestWhichCapturesAreOfOneVisit:
+    """Found by the adversarial pass on 2026-09-16.
+
+    Captures are grouped by the date in their filename, which is a candidate
+    grouping, not an answer. The old rule — all complete, or stitch them all —
+    fused a whole day into one receipt the moment a single capture among them
+    was unreadable.
+    """
+
+    def part(self, names, **kw):
+        return rc.Receipt(
+            captures=("c.png",),
+            lines=tuple(rc.ReceiptLine(n, Decimal("1.00")) for n in names),
+            **kw,
+        )
+
+    def test_two_visits_one_of_them_captured_twice(self):
+        """Three parts, one incomplete. Previously all three were stitched into
+        one basket that could not foot, and BOTH visits were quarantined."""
+        whole = self.part(["A"], tax=Decimal("0.00"), balance=Decimal("1.00"), complete=True)
+        head = self.part(["B", "C"])
+        tail = self.part(["D"], tax=Decimal("0.00"), balance=Decimal("3.00"), complete=True)
+        found = rc.split_into_receipts([whole, head, tail])
+        assert [[line.description for line in r.lines] for r in found] == [["A"], ["B", "C", "D"]]
+        assert all(rc.foots(r) is None for r in found)
+
+    def test_two_whole_receipts_stay_two(self):
+        one = self.part(["A"], tax=Decimal("0.00"), balance=Decimal("1.00"), complete=True)
+        two = self.part(["B"], tax=Decimal("0.00"), balance=Decimal("1.00"), complete=True)
+        assert len(rc.split_into_receipts([one, two])) == 2
+
+    def test_a_head_and_a_tail_are_one(self):
+        head = self.part(["A", "B"])
+        tail = self.part(["C"], tax=Decimal("0.00"), balance=Decimal("3.00"), complete=True)
+        (found,) = rc.split_into_receipts([head, tail])
+        assert [line.description for line in found.lines] == ["A", "B", "C"]
+
+
+class TestWhichVisitAFilenameBelongsTo:
+    """`group_by_visit` and `capture_date` had no direct tests."""
+
+    def test_two_parts_of_one_receipt_group_together(self):
+        names = ["Transaction_030419_02.png", "Transaction_030419_01.png"]
+        assert rc.group_by_visit(names) == [sorted(names)]
+
+    def test_a_date_the_calendar_does_not_have_is_not_a_date(self):
+        assert rc.capture_date("Transaction_133199.png") is None
+        assert rc.capture_date("Transaction_023019.png") is None, "30 February"
+        assert rc.capture_date("Transaction_030419.png") == "2019-03-04"
+
+    def test_a_name_with_no_date_in_it_is_not_a_capture(self):
+        assert rc.capture_date("screenshot.png") is None

@@ -60,6 +60,7 @@ __all__ = [
     "from_reply",
     "group_by_visit",
     "read_capture",
+    "split_into_receipts",
     "stitch",
 ]
 
@@ -443,16 +444,38 @@ def stitch(parts: list[Receipt]) -> Receipt:
 
 
 def _candidates(parts: list[Receipt]):
-    """Every joining of `parts` worth checking, most-trimmed first."""
+    """Every joining of `parts` worth checking.
+
+    One trim PER SEAM, not one cap across all of them. Applying a single cap
+    everywhere was wrong in a way that only shows with three parts: with real
+    overlaps of 2 and 0, every cap either dropped lines or duplicated them, and
+    the correct join was produced by no candidate at all. The greedy pass found
+    it — but greedy is exactly what fails when one transcribed description
+    differs by a character at the true seam, which is the case this search
+    exists for.
+
+    Ordered fewest-trims-first so the reading that KEEPS the most lines wins a
+    tie. Two trims can both reconcile — a product and its `CL` cancellation
+    straddling a seam sum to zero — and between two readings that both add up,
+    the one that discards less of what the shopper paid for is the safer answer.
+    """
+    from itertools import product
+
     seams = [_seam(parts[i].lines, parts[i + 1].lines) for i in range(len(parts) - 1)]
-    for trim in range(max(seams, default=0), -1, -1):
-        yield _joined(parts, cap=trim)
+    if not seams:
+        yield parts[0]
+        return
+    for trims in sorted(product(*(range(s + 1) for s in seams)), key=sum):
+        yield _joined(parts, trims=trims)
 
 
-def _joined(parts: list[Receipt], *, greedy: bool = False, cap: int = 0) -> Receipt:
+def _joined(parts: list[Receipt], *, greedy: bool = False, trims: tuple = ()) -> Receipt:
     joined = parts[0]
-    for part in parts[1:]:
-        overlap = _seam(joined.lines, part.lines) if greedy else min(cap, len(part.lines))
+    for index, part in enumerate(parts[1:]):
+        if greedy:
+            overlap = _seam(joined.lines, part.lines)
+        else:
+            overlap = min(trims[index] if index < len(trims) else 0, len(part.lines))
         joined = Receipt(
             captures=joined.captures + part.captures,
             lines=joined.lines + part.lines[overlap:],
@@ -713,3 +736,32 @@ def _decimal(value: object) -> Decimal | None:
         return found.quantize(Decimal("0.01"))
     except (InvalidOperation, ValueError):
         return None
+
+
+def split_into_receipts(parts: list[Receipt]) -> list[Receipt]:
+    """Which of these captures are of the same receipt.
+
+    A group shares a filename date, and that is a candidate grouping rather than
+    an answer: two captures of one day are the halves of one tall receipt about
+    as often as they are two trips to the shop.
+
+    Partitioned at every capture that reached the end of a page. A part that did
+    NOT reach the end is the top half of whatever follows it, so it joins
+    forward; a part that did is the end of its own receipt.
+
+    The rule this replaces was "all parts complete, or stitch them all", which
+    fused a whole day into one receipt as soon as a single capture among them
+    was unreadable — two real visits, one of them captured twice, gave three
+    parts, one incomplete, and all three were stitched into a basket that could
+    not possibly foot. Both visits were then quarantined under one warning.
+    """
+    receipts: list[Receipt] = []
+    run: list[Receipt] = []
+    for part in parts:
+        run.append(part)
+        if part.complete:
+            receipts.append(stitch(run) if len(run) > 1 else run[0])
+            run = []
+    if run:
+        receipts.append(stitch(run) if len(run) > 1 else run[0])
+    return receipts

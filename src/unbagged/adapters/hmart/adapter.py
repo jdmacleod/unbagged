@@ -278,7 +278,7 @@ class HMartAdapter:
         # Sorted, because a bundle of several files arrives in upload order and
         # a timeline built from it would otherwise jump between them.
         transactions.sort(key=lambda t: t.occurred_at)
-        transactions = _itemise(bundle, transactions, warnings)
+        transactions = _itemise(bundle, transactions, warnings, statement_rows=bool(matched))
 
         if not transactions and matched:
             # Guarded on `matched`, which is the sheets that carried the H Mart
@@ -357,6 +357,8 @@ def _itemise(
     bundle: SourceBundle,
     transactions: list[Transaction],
     warnings: WarningCollector,
+    *,
+    statement_rows: bool,
 ) -> list[Transaction]:
     """Fill in what was in each basket, from the captures that show it.
 
@@ -403,7 +405,13 @@ def _itemise(
     #: one trip to the shop twice — and a doubled total is invisible on screen.
     #: WITHOUT one there is nothing to double, and refusing the receipt would
     #: throw away the only record of the visit there is.
-    statement = bool(transactions)
+    #:
+    #: Keyed on whether a statement was UPLOADED, not on whether any of its rows
+    #: survived parsing. `bool(transactions)` conflated the two: a statement
+    #: whose every row failed to yield a date reads as "no statement came", and
+    #: then every receipt becomes a standalone visit — the double-count this
+    #: flag exists to prevent, one re-upload later.
+    statement = bool(statement_rows)
 
     for names in rc.group_by_visit(list(by_name)):
         try:
@@ -600,9 +608,7 @@ def _read_visit(documents: list) -> list[rc.Receipt]:
         rc.read_capture(transcribe(Path(document.path).read_bytes()), document.original_filename)
         for document in documents
     ]
-    if len(parts) > 1 and all(part.complete for part in parts):
-        return parts
-    return [rc.stitch(parts)]
+    return rc.split_into_receipts(parts)
 
 
 def _match(
@@ -689,7 +695,17 @@ def _disagrees(txn: Transaction, receipt: rc.Receipt) -> str | None:
     every visit that paid any tax.
     """
     if txn.total_pre_discount is None:
-        return None
+        # The statement row exists but named no amount — it already raised its
+        # own warning saying so. Returning "they agree" here would quietly store
+        # a basket that nothing checked, which on this path is the only check
+        # there is. Say that instead.
+        where = " and ".join(receipt.captures)
+        return (
+            f"{where} reads as a basket of {receipt.subtotal}, and the points "
+            "statement names no amount for the visit it belongs to, so the two "
+            "cannot be checked against each other. Its contents have not been "
+            "stored."
+        )
     stated = Decimal(str(txn.total_pre_discount))
     if _close(stated, receipt.subtotal):
         return None
