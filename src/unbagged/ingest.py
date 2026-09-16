@@ -7,7 +7,10 @@ the data-handling rules are enforced rather than assumed:
   build context, and covered by a pre-commit hook
 * every file is hashed on the way in, and the same document is never ingested
   into the same request twice
-* nothing is written anywhere else, and nothing leaves the machine
+* nothing is written anywhere else, and nothing leaves the machine unless a
+  local vision model was configured and pointed somewhere other than this one,
+  which `transcription/ollama.py` refuses until it is acknowledged explicitly
+
 """
 
 from __future__ import annotations

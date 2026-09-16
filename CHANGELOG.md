@@ -26,12 +26,16 @@ from a specific response. See `CONTRIBUTING.md`.
 ## [0.15.0] - 2026-09-16
 
 **This release changes what already-ingested responses display.** Nothing needs
-re-loading and no migration runs, but two figures move: a product is now
+re-loading and no migration runs, but three figures move: a product is now
 identified by the code the retailer disclosed *or*, where it disclosed none, by
-the name it printed — and the Products count no longer includes items that only
-ever appear as negative lines, so a response whose figure you wrote down before
-may show a different one now. Both changes make the number match the page it
-heads; neither changes what was stored.
+the name it printed; the Products count no longer includes items that only ever
+appear as negative lines; and on a response that itemises some visits and not
+others, the headline total now counts every visit — by its stated total where it
+has one and by its own lines where it does not — rather than summing only the
+visits that were itemised. So a figure you wrote down before may show a
+different one now. All three make the number match the page it heads; none
+changes what was stored.
+
 
 ### Added
 
@@ -95,7 +99,15 @@ heads; neither changes what was stored.
   captures can share one visit, and asking a model about eight receipts is
   twenty minutes that used to sit after the last check.
 
+- **Two visits on one day for the same total matched neither, rather than the
+  first.** Where a printed timestamp cannot be read, a capture is placed by the
+  date in its filename and its own total — and the same basket bought twice on
+  one day fits both. The lane and transaction number are also recorded only from
+  a timestamp the join actually used; they share a line with it and are set in
+  the same small type.
+
 - **A visit placed by its filename rather than by the timestamp printed on the
+
   receipt now says so.** Measured on the response this was built against, that
   is a third of the itemised visits — both facts come from the response and
   neither is a guess, but they are different claims and only one of them was
@@ -121,14 +133,42 @@ heads; neither changes what was stored.
   be nothing to check the answer against, and the captures arrive from outside
   the trust boundary.
 
+- **A model's reading could still choose its own tax.** The check is
+  `lines + tax − total`, so pinning the total left one number a reading was free
+  to solve for: an answer can quote the printed total back correctly and put
+  everything else in the tax. Both figures come off the page now, and where the
+  tax line itself could not be read, a figure outside the range a tax can occupy
+  is refused — which holds a basket to what the receipt says was paid.
+
 - **A receipt with no tax line lost its last purchase and still added up.** The
   line above the total was taken as tax whatever it said, and since tax is added
   back the two readings are the same number — so the arithmetic could not tell
   them apart. Where the retailer also sent a statement of what each visit cost,
-  that figure now chooses.
+  that figure now chooses. Where it did not — a response of captures alone — no
+  figure can, so the visit is kept and a warning names the line and the amount
+  at stake rather than the basket quietly being one line short.
+
+- **The headline total skipped a visit on a partly itemised response.** It
+  substitutes the stated totals when line items cover only some visits, and that
+  sum omits a visit that carries no total of its own — so an itemised visit with
+  no stated total left the figure entirely while staying in the count beside it.
+
+- **"None of the captures could be read" was said about a response that read
+  most of them.** The engine failing on one image raises the same thing as the
+  engine not being installed, so a single timeout reported the whole upload as
+  unreadable in the same report as the baskets it had just read.
+
+
+- **Two readings of a joined receipt both added up, and the wrong one won.** A
+  product and its cancellation straddling a seam sum to zero, so keeping both
+  copies reconciled exactly as well as removing the duplicate — and was
+  preferred, storing two lines nobody was charged for and counting one of them
+  as a purchase. The join search is also bounded now: its size is a product over
+  the seams and the seam count comes from how many files were uploaded.
 
 - **Joining three or more captures of one receipt.** A single overlap was
   applied at every seam, so with three captures the correct join was not among
+
   the candidates at all. One unreadable capture also fused a whole day into a
   single receipt, quarantining two real visits at once.
 

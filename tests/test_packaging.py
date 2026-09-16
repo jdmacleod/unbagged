@@ -526,9 +526,12 @@ class TestTheOcrTierActuallyRuns:
     """A skipped suite is indistinguishable from a passing one.
 
     Found by /ship's testing specialist on 2026-09-16: CI installed no OCR
-    engine, so 34 tests across the capture suites reported as skipped, the build
-    went green, and the branch's headline feature — reading a receipt out of
-    pixels — had no CI coverage at all.
+    engine, so every test across the capture suites reported as skipped, the
+    build went green, and the branch's headline feature — reading a receipt out
+    of pixels — had no CI coverage at all. The count was written down here as
+    34 and was wrong by the end of the same branch, which is why it is a
+    relationship now and not a figure.
+
 
     It lives HERE, not beside those tests, and that is the whole point. Every
     capture suite carries a module-level `pytest.mark.skipif(not available())`,

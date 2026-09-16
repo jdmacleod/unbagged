@@ -126,8 +126,13 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install --upgrade pip
       - run: pip install -e ".[dev]"
-      # The OCR engine, because 34 tests are gated on its presence and a gate
-      # that never opens is a suite that reports green having run nothing. The
+      # The OCR engine, because the whole capture tier is gated on its presence
+      # and a gate that never opens is a suite that reports green having run
+      # nothing. Counted here once as 34 and already stale by the end of the
+      # branch, so it is not counted any more; `test_packaging.py` asserts the
+      # engine is present under CI, which is the relationship rather than a
+      # number that drifts. The
+
       # shipped image installs the same two packages (Dockerfile); this is the
       # test tier catching up with it. -eng only, for the same reason as there.
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng
