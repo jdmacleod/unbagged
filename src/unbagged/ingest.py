@@ -7,7 +7,10 @@ the data-handling rules are enforced rather than assumed:
   build context, and covered by a pre-commit hook
 * every file is hashed on the way in, and the same document is never ingested
   into the same request twice
-* nothing is written anywhere else, and nothing leaves the machine
+* nothing is written anywhere else, and nothing leaves the machine unless a
+  local vision model was configured and pointed somewhere other than this one,
+  which `transcription/ollama.py` refuses until it is acknowledged explicitly
+
 """
 
 from __future__ import annotations
@@ -131,13 +134,23 @@ def _stored_document(f: StoredFile) -> SourceDocument:
 
 
 def bundle_from(files: list[StoredFile], declared_retailer: str | None = None) -> SourceBundle:
+    """The uploaded files as an adapter sees them, each carrying its position.
+
+    `id` is the document's **index in this bundle**, not a database id — the
+    rows do not exist yet. An adapter that copies it onto a record's provenance
+    is saying "this came from the third file you handed me", and `_save()` turns
+    that into the real id once the documents are written. Before this, `id` was
+    left None and `_save()` credited every row to the first document, which is
+    invisible in a one-file bundle and wrong in every other kind.
+    """
     documents = tuple(
         SourceDocument(
             original_filename=f.original_filename,
             sha256=f.sha256,
             path=str(f.path),
+            id=index,
         )
-        for f in files
+        for index, f in enumerate(files)
     )
     return SourceBundle(documents=documents, declared_retailer=declared_retailer)
 
@@ -272,23 +285,17 @@ def _why_nothing_matched(bundle: SourceBundle) -> str:
 def _save(conn, result: ParseResult, documents) -> int:
     """Persist, attaching provenance to the document rows the adapter referenced.
 
-    Adapters set `source_document_id` before the documents have database ids,
-    because they have to reference something while parsing. The ids are assigned
-    here, so the references are rewritten to match.
+    The index-to-id mapping lives in `repository.save_parse_result`, which is
+    where the ids come into existence — see `_document_id_resolver`.
+
+    This used to run an UPDATE afterwards setting every row to the FIRST
+    document's id unconditionally. With one file in the bundle that is the same
+    answer; with two it is not, and a response arriving as a spreadsheet plus a
+    folder of receipt captures would have credited every line item to the
+    spreadsheet — a citation pointing at a document that does not contain the
+    value it cites.
     """
-    request_id = repository.save_parse_result(conn, result, documents=documents)
-    stored = repository.get_documents(conn, request_id)
-    if stored:
-        first = stored[0].id
-        with repository.transaction(conn):
-            for table in ("identity", "txn", "inference", "disclosure"):
-                conn.execute(
-                    # `table` comes from the literal tuple on the line above,
-                    # never from a caller. Both values are bound.
-                    f"UPDATE {table} SET source_document_id = ? WHERE request_id = ?",  # noqa: S608
-                    (first, request_id),
-                )
-    return request_id
+    return repository.save_parse_result(conn, result, documents=documents)
 
 
 def received_at() -> str:

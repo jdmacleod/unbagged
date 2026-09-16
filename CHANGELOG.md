@@ -23,6 +23,172 @@ from a specific response. See `CONTRIBUTING.md`.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/
 
+## [0.15.0] - 2026-09-16
+
+**This release changes what already-ingested responses display.** Nothing needs
+re-loading and no migration runs, but three figures move: a product is now
+identified by the code the retailer disclosed *or*, where it disclosed none, by
+the name it printed; the Products count no longer includes items that only ever
+appear as negative lines; and on a response that itemises some visits and not
+others, the headline total now counts every visit — by its stated total where it
+has one and by its own lines where it does not — rather than summing only the
+visits that were itemised. So a figure you wrote down before may show a
+different one now. All three make the number match the page it heads; none
+changes what was stored.
+
+
+### Added
+
+- **A response can arrive as screen captures of a receipt, and be read.** One
+  retailer could supply only images of its receipt viewer, a page or two per
+  visit. Those pages are now transcribed and the baskets on them stored, so a
+  response that previously said what every visit cost can also say what was in
+  them.
+
+  **Nothing is stored unless the basket adds up.** A receipt prints its own
+  total, so a transcription can be checked against a figure that did not come
+  out of the same reader — and where the retailer also sent a statement of what
+  each visit cost, against that too. A receipt that fails either check is named
+  in a warning and its visit keeps the total it already had. On the response
+  this was built against, 43 of 44 receipts reconciled to the cent; the one that
+  did not was clipped when it was captured, so every amount on it lost its last
+  digit. Nothing can recover that, and nothing pretends to.
+
+  Reading whole pages at once is not safe for this: the engine drops a minus
+  sign often enough to matter, turning a discount into a charge and, once, a
+  decimal point into a factor of a hundred. The column holding money is read
+  separately, under a character set restricted to what a number can be made of.
+
+  Nothing from the card details at the foot of a receipt is transcribed or
+  stored.
+
+- **A local vision model may be asked about the pages the engine could not
+  read** — and only those, which on a real response is a handful rather than all
+  of them. Its answer is kept only if it makes the receipt add up, which is the
+  same gate every other reading passes and the whole basis for asking. Both
+  figures that check it — the printed total and the tax — are taken off the page
+  rather than out of the answer, so the sum has nothing left in it for an answer
+  to adjust. Where the tax line itself could not be read, a figure outside the
+  range a tax can occupy is refused outright, which bounds a basket to what the
+  receipt says was paid. Off unless `UNBAGGED_OLLAMA_HOST` is set; a host that
+  is not this machine is refused until you acknowledge that it would receive
+  pictures of your shopping. See `.env.example`.
+
+- **Products and Prices work for a retailer that names what you bought without
+  coding it.** Both views identified a product by its barcode, so a response
+  disclosing descriptions and amounts and no codes rendered two empty pages over
+  hundreds of disclosed lines — the app answering "nothing" to the one question
+  that response had answered. A product is now identified by the code where one
+  was disclosed and by the name where none was.
+
+### Changed
+
+- **A local vision model is asked a question the transcription layer does not
+  own.** The prompt and the schema moved to the adapter, because a package
+  documenting that nothing in it knows what a receipt is should not contain a
+  receipt prompt. A model that cannot read images is now refused at the
+  preflight rather than failing on every page, and a prompt rejected for size
+  gets a larger window and two more tries. An answer the model ran out of room
+  to finish is never read: a basket cut off partway through still adds up
+  against whatever total came with it.
+
+- **Reading captures has a time budget.** The upload cap bounds bytes, not
+  images, and every per-item timeout multiplied with nothing capping the whole
+  inside a request a person is waiting on. The budget is tested between pages
+  and before each question put to a model, not only between visits — a hundred
+  captures can share one visit, and asking a model about eight receipts is
+  twenty minutes that used to sit after the last check.
+
+- **Two visits on one day for the same total matched neither, rather than the
+  first.** Where a printed timestamp cannot be read, a capture is placed by the
+  date in its filename and its own total — and the same basket bought twice on
+  one day fits both. The lane and transaction number are also recorded only from
+  a timestamp the join actually used; they share a line with it and are set in
+  the same small type.
+
+- **A visit placed by its filename rather than by the timestamp printed on the
+
+  receipt now says so.** Measured on the response this was built against, that
+  is a third of the itemised visits — both facts come from the response and
+  neither is a guess, but they are different claims and only one of them was
+  ever visible.
+
+- **The timeline explains a response that itemised only some of its visits.**
+  There are three states, not two, and the third had no sentence: a retailer
+  that says what every visit cost and what was in two thirds of them. The rows
+  with nothing to show simply would not open, with nothing on screen saying why.
+
+- `distinct_products` is now counted the way the Products page counts, so the
+  figure at the top matches the list underneath it. It had been admitting lines
+  that are only ever negative, which let a refund create an entry for something
+  you gave back.
+
+### Fixed
+
+- **A model's reading was checked against the model's own numbers.** The total
+  printed on the receipt was read and then discarded, so the check that
+  justifies asking a model anything reduced to self-consistency and any
+  self-consistent answer passed. It is checked against the printed total now,
+  and a page with no readable total is not put to a model at all — there would
+  be nothing to check the answer against, and the captures arrive from outside
+  the trust boundary.
+
+- **A model's reading could still choose its own tax.** The check is
+  `lines + tax − total`, so pinning the total left one number a reading was free
+  to solve for: an answer can quote the printed total back correctly and put
+  everything else in the tax. Both figures come off the page now, and where the
+  tax line itself could not be read, a figure outside the range a tax can occupy
+  is refused — which holds a basket to what the receipt says was paid.
+
+- **A receipt with no tax line lost its last purchase and still added up.** The
+  line above the total was taken as tax whatever it said, and since tax is added
+  back the two readings are the same number — so the arithmetic could not tell
+  them apart. Where the retailer also sent a statement of what each visit cost,
+  that figure now chooses. Where it did not — a response of captures alone — no
+  figure can, so the visit is kept and a warning names the line and the amount
+  at stake rather than the basket quietly being one line short.
+
+- **The headline total skipped a visit on a partly itemised response.** It
+  substitutes the stated totals when line items cover only some visits, and that
+  sum omits a visit that carries no total of its own — so an itemised visit with
+  no stated total left the figure entirely while staying in the count beside it.
+
+- **"None of the captures could be read" was said about a response that read
+  most of them.** The engine failing on one image raises the same thing as the
+  engine not being installed, so a single timeout reported the whole upload as
+  unreadable in the same report as the baskets it had just read.
+
+
+- **Two readings of a joined receipt both added up, and the wrong one won.** A
+  product and its cancellation straddling a seam sum to zero, so keeping both
+  copies reconciled exactly as well as removing the duplicate — and was
+  preferred, storing two lines nobody was charged for and counting one of them
+  as a purchase. The join search is also bounded now: its size is a product over
+  the seams and the seam count comes from how many files were uploaded.
+
+- **Joining three or more captures of one receipt.** A single overlap was
+  applied at every seam, so with three captures the correct join was not among
+
+  the candidates at all. One unreadable capture also fused a whole day into a
+  single receipt, quarantining two real visits at once.
+
+- **The headline figure covered only the itemised visits** while the count
+  beside it covered all of them.
+
+- **Clicking a product filtered by name where the retailer disclosed no codes**,
+  which over-counts — the timeline no longer claims those are the visits that
+  included it.
+
+- **A damaged image could still lose a whole upload.** The guard added for this
+  covered only the decode, not the work after it.
+
+- **A record now cites the document it was actually read from.** Every row in a
+  response was credited to the first file uploaded, regardless of which one it
+  came from. Every response so far arrived as a single file, where that is the
+  right answer by coincidence, so nothing looked wrong — but a response split
+  across a spreadsheet and a folder of images would have cited the spreadsheet
+  for every line item in it.
+
 ## [0.14.1] - 2026-09-11
 
 ### Fixed

@@ -109,6 +109,12 @@ read path goes, and naming the views has made it stale twice as tabs were added.
 - **Parsing:** `pdfplumber` for text extraction, `pypdf` for structure. Note that the
   Kroger report's JSON is pretty-printed and interrupted by bare page-number lines; the
   adapter must strip those before `json.loads`.
+- **Transcription:** `unbagged.transcription` for a response that arrived as images.
+  `tesseract` driven as a subprocess reads the page; where the basket it returns does not
+  reconcile against the total printed on the receipt, a local vision model may be asked
+  instead, over stdlib `urllib` and only when one is configured. Neither reading is stored
+  unless it adds up — see §6.9 and `adapters/hmart/NOTES.md`.
+
 - **Frontend:** React + Vite + TypeScript, Recharts for charts, Tailwind for layout
 - **Packaging:** Docker + Docker Compose, single container in the default path
 

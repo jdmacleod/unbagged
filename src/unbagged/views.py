@@ -312,7 +312,7 @@ def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
     they are, and `total_saved` is the difference between them.
     """
     row = conn.execute(
-        """
+        f"""
         SELECT COUNT(DISTINCT t.id) AS basket_count,
                MIN(t.occurred_at) AS first_visit,
                MAX(t.occurred_at) AS last_visit,
@@ -322,13 +322,34 @@ def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
                -- paid, and a line without one cost its shelf price.
                COALESCE(SUM(COALESCE(i.loyalty_amt, i.retail_amt)), 0) AS total_paid,
                COUNT(i.id) AS line_count,
-               COUNT(DISTINCT CASE WHEN i.retail_amt <> 0 THEN i.upc END)
-                   AS distinct_products,
+               -- Visits that were itemised, which is not all of them and not
+               -- none of them. H Mart answered twice: a points statement
+               -- covering every visit, then captures of the receipts covering
+               -- two thirds. `lines_disclosed` is one bit for the whole
+               -- response and cannot say that, so the rows it cannot explain
+               -- were simply rows that would not open.
+               COUNT(DISTINCT CASE WHEN i.id IS NOT NULL THEN t.id END) AS itemised_count,
+               -- Keyed the same way `product_index` and `price_history` key a
+               -- product, because this is the headline figure for the number
+               -- those two views list and three different answers to "what is
+               -- a product" is how that number stops matching the page under
+               -- it. A response disclosing names and no codes counted zero
+               -- products over 388 disclosed lines.
+               --
+               -- `> 0` rather than `<> 0`, for the same reason: a line that is
+               -- only ever negative is a discount or a return, and
+               -- `product_index` has always refused to let one create an entry
+               -- for something you gave back. This counted three products the
+               -- page under it did not list.
+               COUNT(DISTINCT CASE
+                   WHEN i.retail_amt > 0
+                   THEN {PRODUCT_KEY}
+               END) AS distinct_products,
                SUM(CASE WHEN i.retail_amt = 0 THEN 1 ELSE 0 END) AS zero_value_lines,
                SUM(CASE WHEN i.retail_amt < 0 THEN 1 ELSE 0 END) AS negative_lines
         FROM txn t LEFT JOIN txn_item i ON i.txn_id = t.id
         WHERE t.request_id = ?
-        """,
+        """,  # noqa: S608 - PRODUCT_KEY is a module literal, never caller input
         (request_id,),
     ).fetchone()
     result = dict(row)
@@ -342,6 +363,23 @@ def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
         (request_id,),
     ).fetchone()["total"]
     result["total_stated"] = round(result["total_stated"], 2)
+    # What every visit came to, taking each one's stated total where it has one
+    # and what its own lines come to where it does not. `total_stated` alone
+    # drops a visit that was itemised but carries no total of its own, and the
+    # headline below substitutes it wholesale — so that visit's disclosed spend
+    # left the figure entirely while the row stayed on screen and in the count.
+    across_visits = round(
+        conn.execute(
+            "SELECT COALESCE(SUM(COALESCE(t.total_pre_discount, lines.summed)), 0) AS total"
+            " FROM txn t LEFT JOIN ("
+            "   SELECT txn_id, SUM(retail_amt) AS summed FROM txn_item"
+            "   WHERE retail_amt IS NOT NULL GROUP BY txn_id"
+            " ) lines ON lines.txn_id = t.id"
+            " WHERE t.request_id = ?",
+            (request_id,),
+        ).fetchone()["total"],
+        2,
+    )
 
     if not result["lines_disclosed"]:
         # Every figure above is built by summing line items, and there are
@@ -355,16 +393,33 @@ def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
             "line_count",
             "zero_value_lines",
             "negative_lines",
+            # Zero here would be a claim that nothing was itemised, which is
+            # the same claim `lines_disclosed` already makes and says better.
+            "itemised_count",
         ):
             result[key] = None
         # The one exception, and the reason this branch exists: the stated
         # totals ARE disclosed money, so the headline figure carries them
         # rather than an em dash above a chart drawn from real numbers.
-        result["total_paid"] = result["total_stated"]
+        result["total_paid"] = across_visits
     else:
         result["total_shelf"] = round(result["total_shelf"], 2)
         result["total_paid"] = round(result["total_paid"], 2)
         result["total_saved"] = round(result["total_shelf"] - result["total_paid"], 2)
+        if result["itemised_count"] < result["basket_count"]:
+            # A PARTLY itemised response, and the same reasoning as the branch
+            # above, reached from the other side. `total_paid` is summed from
+            # line items, so on a mixed response it covers only the visits that
+            # have any — measured on the real one: it summed 43 of 67 visits and
+            # sat beside a "Visits 67" figure, understating by a thousand
+            # dollars with nothing on screen naming its scope. The stated totals
+            # are disclosed money for ALL of them, so the headline carries those
+            # and `total_shelf`/`total_saved` keep the narrower scope they
+            # honestly describe. Per visit rather than from `total_stated`, so
+            # a visit that was itemised but carries no total of its own is
+            # counted by its lines instead of dropped.
+            result["total_paid"] = across_visits
+
     stores = _rows(
         conn,
         "SELECT store_code, COUNT(*) AS visits FROM txn WHERE request_id = ?"
@@ -392,6 +447,7 @@ def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
             "first_visit",
             "last_visit",
             "total_stated",
+            "itemised_count",
         ):
             result[key] = None
     return result
@@ -656,21 +712,29 @@ def price_history(
     """
     rows = _rows(
         conn,
-        """
-        SELECT i.upc, i.description_raw, i.retail_amt, i.loyalty_amt,
+        f"""
+        SELECT {PRODUCT_KEY} AS product_key,
+               i.upc, i.description_raw, i.retail_amt, i.loyalty_amt,
                substr(t.occurred_at, 1, 10) AS on_date
         FROM txn_item i JOIN txn t ON t.id = i.txn_id
-        WHERE t.request_id = ? AND i.upc IS NOT NULL AND i.retail_amt > 0
+        WHERE t.request_id = ?
+          AND {PRODUCT_KEY} IS NOT NULL
+          AND i.retail_amt > 0
         ORDER BY t.occurred_at, i.id
-        """,
+        """,  # noqa: S608 - PRODUCT_KEY is a module literal, never caller input
         (request_id,),
     )
 
     series: dict[str, dict[str, Any]] = {}
     for row in rows:
         entry = series.setdefault(
-            row["upc"],
-            {"upc": row["upc"], "descriptions": defaultdict(int), "points": []},
+            row["product_key"],
+            {
+                "key": row["product_key"],
+                "upc": row["upc"],
+                "descriptions": defaultdict(int),
+                "points": [],
+            },
         )
         entry["descriptions"][row["description_raw"]] += 1
         retail = row["retail_amt"]
@@ -717,6 +781,7 @@ def price_history(
 
         products.append(
             {
+                "key": entry["key"],
                 "upc": entry["upc"],
                 # The description can vary between visits; the commonest one is
                 # the honest label, and the raw values stay reachable per point.
@@ -971,6 +1036,29 @@ def _tier(purchases: int) -> int:
     return next(tier for tier, floor in PURCHASE_TIERS if purchases >= floor)
 
 
+#: What identifies a product across visits, in SQL.
+#:
+#: The code where the retailer disclosed one, and the name it printed where it
+#: did not. H Mart's response is the second kind: its receipts carry a
+#: description and an amount and no code anywhere, so a predicate of `upc IS
+#: NOT NULL` left both of these views empty over 388 disclosed line items —
+#: this tool's answer to "what did you buy" was nothing, about a response that
+#: had answered exactly that.
+#:
+#: A line whose name came back blank is excluded, for the reason the zero-value
+#: placeholder rows already are: it names no product. The line itself is still
+#: stored and still counts towards the basket — its amount was read and checked
+#: like every other — but there is nothing to call it, and an entry in an index
+#: of what you bought has to be something a reader can recognise.
+#:
+#: A name is a weaker key than a code, and the weakness is the retailer's
+#: rather than ours: two products whose names truncate to the same characters
+#: merge, and one product renamed between visits splits. Both are visible to a
+#: reader looking at the list, which is the test that matters — the alternative
+#: was showing nothing and letting them conclude nothing was disclosed.
+PRODUCT_KEY = "COALESCE(NULLIF(i.upc, ''), NULLIF(i.description_raw, ''))"
+
+
 def product_index(
     conn: sqlite3.Connection,
     request_id: int,
@@ -996,14 +1084,18 @@ def product_index(
     """
     rows = _rows(
         conn,
-        """
-        SELECT i.upc, i.description_raw, COUNT(*) AS purchases,
+        f"""
+        SELECT {PRODUCT_KEY} AS product_key,
+               i.upc, i.description_raw, COUNT(*) AS purchases,
                MIN(substr(t.occurred_at, 1, 10)) AS first_seen,
                MAX(substr(t.occurred_at, 1, 10)) AS last_seen
         FROM txn_item i JOIN txn t ON t.id = i.txn_id
-        WHERE t.request_id = ? AND i.upc IS NOT NULL AND i.retail_amt > 0
-        GROUP BY i.upc, i.description_raw
-        """,
+        WHERE t.request_id = ?
+          AND {PRODUCT_KEY} IS NOT NULL
+          AND i.retail_amt > 0
+        GROUP BY {PRODUCT_KEY},
+                 i.upc, i.description_raw
+        """,  # noqa: S608 - PRODUCT_KEY is a module literal, never caller input
         (request_id,),
     )
 
@@ -1013,8 +1105,9 @@ def product_index(
     merged: dict[str, dict[str, Any]] = {}
     for row in rows:
         entry = merged.setdefault(
-            row["upc"],
+            row["product_key"],
             {
+                "key": row["product_key"],
                 "upc": row["upc"],
                 "names": defaultdict(int),
                 "purchases": 0,
@@ -1035,6 +1128,7 @@ def product_index(
         name = max(entry["names"].items(), key=lambda kv: kv[1])[0]
         products.append(
             {
+                "key": entry["key"],
                 "upc": entry["upc"],
                 "description": name,
                 "purchases": entry["purchases"],
@@ -1065,14 +1159,18 @@ def product_index(
         # what someone typing it into a search box meant.
         needle = query.strip().lower()
         products = [
-            p for p in products if needle in p["description"].lower() or needle in p["upc"].lower()
+            p
+            for p in products
+            if needle in p["description"].lower() or needle in (p["upc"] or "").lower()
         ]
     if min_purchases > 1:
         products = [p for p in products if p["purchases"] >= min_purchases]
 
-    # Alphabetical, with the UPC breaking ties so the order is total and the
-    # same filter always renders the same page.
-    products.sort(key=lambda p: (p["description"], p["upc"]))
+    # Alphabetical, with the product key breaking ties so the order is total
+    # and the same filter always renders the same page. The key rather than the
+    # UPC: a response that disclosed no codes has none to sort by, and None
+    # does not compare against a string.
+    products.sort(key=lambda p: (p["description"], p["key"]))
 
     return {
         "disclosed": disclosed_specific_pieces(conn, request_id),

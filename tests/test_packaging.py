@@ -6,6 +6,7 @@ review will not catch it going missing during an unrelated edit.
 """
 
 import importlib
+import os
 import re
 from pathlib import Path
 
@@ -518,4 +519,46 @@ class TestEveryStartCommandRebuilds:
             f"the scan found only {len(found)} start commands, which is fewer than "
             "the repository had when this guard was written — it has probably "
             "stopped matching rather than the commands having gone"
+        )
+
+
+class TestTheOcrTierActuallyRuns:
+    """A skipped suite is indistinguishable from a passing one.
+
+    Found by /ship's testing specialist on 2026-09-16: CI installed no OCR
+    engine, so every test across the capture suites reported as skipped, the
+    build went green, and the branch's headline feature — reading a receipt out
+    of pixels — had no CI coverage at all. The count was written down here as
+    34 and was wrong by the end of the same branch, which is why it is a
+    relationship now and not a figure.
+
+
+    It lives HERE, not beside those tests, and that is the whole point. Every
+    capture suite carries a module-level `pytest.mark.skipif(not available())`,
+    so a guard written next to them is inside the very skip it exists to defeat
+    — which is what the first version of this did: with the engine hidden it
+    reported "1 skipped" instead of failing. `test_packaging.py` carries no
+    module-level mark, so this one runs whatever the machine has.
+    """
+
+    def test_the_engine_is_installed_where_the_tier_is_meant_to_run(self):
+        from unbagged.transcription import words as tr_words
+
+        if not os.environ.get("CI"):
+            pytest.skip("only asserted where the tier is contractually meant to run")
+        assert tr_words.available(), (
+            f"{tr_words.ENGINE} is not installed, so every capture test skipped "
+            "and CI proved nothing about reading a receipt"
+        )
+
+    def test_ci_installs_what_that_assertion_needs(self):
+        """The other half: the workflow really does install it.
+
+        Asserted as the relationship — the package the guard above needs is the
+        package CI installs — rather than as a grep for a string that could
+        drift to a different package name and stay green.
+        """
+        workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        assert "tesseract-ocr" in workflow, (
+            "the test job installs no OCR engine, so the capture suites will skip"
         )

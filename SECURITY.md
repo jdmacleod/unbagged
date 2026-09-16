@@ -44,9 +44,12 @@ would rather not be named.
 
 ## Scope
 
-`unbagged` runs on one person's machine, reads files that person already possesses, makes
-no outbound requests, and has no accounts, sessions or multi-tenancy. That shapes what
-counts:
+`unbagged` runs on one person's machine, reads files that person already possesses, and
+has no accounts, sessions or multi-tenancy. It makes no outbound requests of its own; the
+one exception is a local vision model, which is off unless `UNBAGGED_OLLAMA_HOST` is set,
+and which refuses a host that is not this machine until that is acknowledged explicitly.
+That shapes what counts:
+
 
 - **In scope:** anything above. Also the Docker packaging, the CI workflows, and the
   documentation where it tells someone to do something unsafe.

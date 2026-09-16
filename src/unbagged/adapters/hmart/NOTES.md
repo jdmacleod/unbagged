@@ -259,3 +259,127 @@ distinguish them. The generator and the fixture both use Python's `round()`, so
 a test asserting that relationship would be self-consistent and would prove
 nothing about the format. Nothing asserts it. It matters more if the deferred
 `FIRST_PARTY_MODEL` inference is ever built.
+
+## The second response: screen captures of the receipt viewer
+
+A later reply added 46 PNG screen captures, one or two per store visit, covering
+44 of the 67 visits the points statement lists. All of 2020 and 22 other visits
+are still totals only.
+
+### What a capture looks like
+
+A white page, **519 to 542 pixels wide** — the width varies between captures,
+which is the first thing to know, because a crop measured off one of them reads
+nothing at all off another. Drawn in three inks: `#002D8C` for descriptions,
+`#B55D00` for amounts, black for the header and the footer. Hairline rules
+separate the header, the body, the tender line and the timestamp.
+
+Three columns, and the line pitch is about 20px:
+
+| column | x | holds |
+|---|---|---|
+| flag | 6-98 | `WT`, `CL`, `***`, and full-width `2.50 lb @ 1.50 / lb` lines |
+| description | ~104 | product names, `SC - …` discount lines, `TAX`, `BALANCE`, the tender |
+| amount | right-aligned, ~12px from the edge | `$ 12.48`, `$ -3.75` |
+
+In order: `Customer ID: <smartcard>`, the purchase lines, `TAX`, `*** BALANCE`,
+the tender line, a stamp `2019-03-04 11:07:00  2  118  0042`, then a card block.
+
+### How often the printed timestamp is actually readable
+
+Not often. Measured through the shipped reader on the real corpus, **15 of 43
+visits could not be placed by their printed timestamp at all** and fell back to
+the date in the capture's filename together with the basket's own total. An
+early prototype suggested five; it read the stamp from a different crop, and the
+figure did not survive contact with the code that ships.
+
+Each fallback now raises an INFO warning naming the capture. "Matched on the
+printed timestamp" and "matched on a filename and an amount" are different
+claims, and a reader auditing this archive cannot otherwise tell which visits
+rest on the weaker one. Both facts come from the response and neither is a
+guess — but a third of the itemised visits resting on the second is worth
+knowing.
+
+### The three reconciliations
+
+These are the whole reason reading these by machine is defensible.
+
+1. **The stamp matches `Date of Purchase` to the second.** Every capture's date
+   appears in the points statement.
+2. **`sum(lines) + TAX == BALANCE`**, printed on the receipt itself.
+3. **`sum(lines) ==` the statement's `Amount`.** The statement reports a visit's
+   **pre-tax subtotal**, not what was paid. Three visits looked like
+   disagreements until that was worked out, by 0.20, 0.70 and 1.26 — each
+   exactly that receipt's own tax line. `Point` is the subtotal rounded.
+
+### What is read by arithmetic or geometry rather than by reading words
+
+The type is 10px and the engine is not reliable on it. Everything structural is
+therefore decided some other way, and the decisions are worth keeping:
+
+- **Where a receipt ends.** A finished capture leaves 44 to 207 pixels below its
+  last amount; the two that are the top half of a taller receipt leave 3 and 4,
+  pressed against the edge the screen cut. Looking for the word `BALANCE`
+  instead fails on a seventh of the corpus — it comes back as `BALANGE`, `ANE
+  wu`, `Serr`, `x` — and looking for the timestamp fails on a third.
+- **Which line is the total.** The tender repeats it, so the last two equal
+  amounts are the balance and its echo, and tax is the line above them.
+- **How much of a seam between two captures is a repeat.** One repeated line is
+  either the overlap or the same product scanned twice. Both are ordinary, and
+  guessing either invents a line or loses one that was paid for, so every
+  plausible overlap is tried and the one that reconciles is taken.
+- **A capture with two products at the same price is not a receipt.** One head
+  capture ends on two lines at 2.99, which reads positionally as a balance and
+  its tender echo. It was taken as complete, its other half was never joined,
+  and the visit split in two.
+
+### Hazards
+
+- **A dozen captures carry a freehand scrawl** drawn across them in pure
+  `#0000FF`. The page itself never uses that colour, so it is masked back to
+  white before the engine sees it. Unmasked, one capture read 14 lines summing
+  to 85.28 against a stated 100.23; masked, 16 summing to 100.23 exactly.
+- **One capture is clipped at the source.** It cut the last
+  digit off every amount in the column, so `$ 7.49` is rendered as `$ 7.4`. It
+  is legible, every figure on it is plausible, and it cannot be read. It is the
+  one receipt of the 44 that is permanently quarantined, and it is the reason
+  the arithmetic gate is not optional.
+- **Two captures sharing a date may be two visits.** One pair in the corpus is
+  two separate trips on one day, at different lanes, for different amounts.
+  Their filenames are indistinguishable from a continuation pair; only reading
+  them tells the two apart.
+- **The stamp's first field is a lane, not a store.** The same values appear
+  against both of the branches in the corpus, so it cannot be one. The branch
+  comes from the statement, which names it; a capture never does.
+- **The gate has exactly two inputs, and both must come off the page.** It is
+  `sum(lines) + tax - balance`, so every figure in it that a reader also
+  authored is a free variable that reader can solve for. Pinning the balance
+  alone left `tax`: an answer can quote the printed total back correctly, since
+  it reads the same pixels, and let the tax absorb whatever the basket was
+  inflated by. Measured on a synthetic page printing 20.00 — lines of 1000.00
+  and 250.00 with a tax of -1230.00 reconciled and were stored. Where the TAX
+  line itself is illegible, a bound of `0 <= tax <= balance` is what stands in:
+  it holds the subtotal inside `[0, balance]`, so a basket can never claim more
+  than the receipt says was paid.
+
+
+### Deliberately not read
+
+- **The flag column.** `WT`, `CL` and `***` are two glyphs of 10px type and come
+  back as `wr`, `week`, `nee`, `ANE`, `AK`. A line's meaning is carried by its
+  description and the sign of its amount, both of which read exactly, so reading
+  the flag would buy a way to be wrong for no capability.
+- **The card block.** The last four digits, the expiry, the approval code and
+  the host code are all on the page. None is transcribed, none is stored.
+- **Tax.** It reconciles the receipt, and the schema has nowhere to put it.
+  `total_pre_discount` stays the statement's pre-tax subtotal, which is what the
+  lines sum to, so the timeline's own footing check reports no difference. A
+  line for it would put a row in the basket the receipt never had.
+
+### What still is not disclosed
+
+`SPECIFIC_PIECES` stays PARTIAL. Two thirds of the visits are itemised, none of
+2020 is, no UPC appears anywhere, and no other category is addressed at all.
+`docs/legal-basis.md` is direct about which way that resolves: a category is
+never upgraded on inference, and the grade describes the response rather than
+the effort behind it.

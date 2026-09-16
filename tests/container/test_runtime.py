@@ -251,3 +251,46 @@ class TestVersionReachesTheImage:
             time.sleep(0.5)
         assert reported is not None, f"the app never served /api/health in {name}"
         assert reported == declared
+
+
+class TestTheImageCanReadACapture:
+    """A response can arrive as a screen capture, and the image has to read one.
+
+    Asserted by reading something rather than by grepping the Dockerfile for
+    `tesseract-ocr`. The invariant is not "that string is present" — it is that
+    the shipped image can turn pixels into text, and the string is one of
+    several ways to satisfy it and the only way a grep would notice. A base
+    image that stopped shipping the language data, or a package rename, would
+    leave the grep green and every capture unreadable.
+
+    The failure it guards is quiet in the worst way: with no engine, a capture
+    is set aside with a warning, so a response ingests successfully and simply
+    holds nothing. Nothing errors.
+    """
+
+    def test_the_ocr_engine_is_installed_and_runs(self, run_container):
+        name = run_container()
+        result = docker("exec", name, "tesseract", "--version")
+        assert "tesseract" in result.stdout.lower()
+
+    def test_it_can_turn_pixels_into_text(self, run_container):
+        """End to end, through the code that will actually call it.
+
+        Drawn in the container rather than copied in, so this needs no fixture
+        and no bind mount — and it exercises Pillow inside the image too, which
+        is the other half of the path and arrives only transitively.
+        """
+        name = run_container()
+        script = (
+            "from PIL import Image, ImageDraw, ImageFont;"
+            "import io;"
+            "im = Image.new('RGB', (260, 44), (255, 255, 255));"
+            "d = ImageDraw.Draw(im);"
+            "d.text((8, 12), 'BALANCE 81.84', fill=(0, 0, 0),"
+            " font=ImageFont.load_default(size=20));"
+            "buf = io.BytesIO(); im.save(buf, format='PNG');"
+            "from unbagged.transcription import transcribe;"
+            "print(transcribe(buf.getvalue()).text)"
+        )
+        result = docker("exec", name, "python", "-c", script)
+        assert "81.84" in result.stdout, result.stdout

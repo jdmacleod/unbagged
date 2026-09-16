@@ -105,6 +105,11 @@ export type Stats = {
   /** total_shelf − total_paid. */
   total_saved: number | null;
   line_count: number | null;
+  /** Visits this response itemised. Less than `basket_count` when a retailer
+   *  answered in two parts and the second covered only some of the visits;
+   *  null when it disclosed no lines at all, where `lines_disclosed` says it
+   *  better. */
+  itemised_count: number | null;
   distinct_products: number | null;
   /** Lines naming no product at zero cost. Reported, never folded into products. */
   zero_value_lines: number | null;
@@ -221,7 +226,16 @@ export type PricePoint = {
 export type PriceShape = "unit" | "multiple" | "weight";
 
 export type PriceSeries = {
-  upc: string;
+  /** What identifies this product across visits, and the value to key a list
+   *  or a selection on. The retailer's code where one was disclosed, and the
+   *  name it printed where none was — H Mart's receipts carry no codes at all.
+   *  Never rendered: it is an identity, and half the time it is the name
+   *  already shown beside it. */
+  key: string;
+  /** The code the retailer disclosed, or null if it disclosed none. Rendered
+   *  in the mono stack as a numeral, so it has to be absent rather than
+   *  substituted when there is none. */
+  upc: string | null;
   description: string;
   /** Times this product was bought. One line is one purchase. */
   purchases: number;
@@ -285,7 +299,16 @@ export type FollowUpLetter = {
  *  pixel value: the API has no business knowing the type scale, and quantising
  *  to five absolute steps is what makes the encoding honest. See DESIGN.md. */
 export type IndexEntry = {
-  upc: string;
+  /** What identifies this product across visits, and the value to key a list
+   *  or a selection on. The retailer's code where one was disclosed, and the
+   *  name it printed where none was — H Mart's receipts carry no codes at all.
+   *  Never rendered: it is an identity, and half the time it is the name
+   *  already shown beside it. */
+  key: string;
+  /** The code the retailer disclosed, or null if it disclosed none. Rendered
+   *  in the mono stack as a numeral, so it has to be absent rather than
+   *  substituted when there is none. */
+  upc: string | null;
   description: string;
   purchases: number;
   /** 1 (bought once) to 5 (bought most often). Absolute, not normalised. */

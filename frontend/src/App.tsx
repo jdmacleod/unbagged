@@ -808,7 +808,16 @@ export default function App() {
                   onOpenProduct={(entry) =>
                     href({
                       tab: "timeline",
-                      query: entry.upc,
+                      // The code where one was disclosed; the name only where
+                      // none was. ProductIndex records why the code is
+                      // preferred: Timeline's search is a substring match and
+                      // this catalogue is full of names containing each other,
+                      // so a name filter opens a timeline claiming more visits
+                      // "included" the product than actually did. Where the
+                      // retailer disclosed no codes there is no exact handle to
+                      // use, so the name goes through and `exact` tells the
+                      // timeline to stop claiming the stronger thing.
+                      query: entry.upc ?? entry.description,
                       label: entry.description,
                     }).search
                   }

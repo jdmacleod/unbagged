@@ -32,9 +32,13 @@ export function Timeline({
 }: {
   requestId: number;
   /** The product this view was opened *for*, from the URL. `query` is what the
-   *  search actually matches — a UPC when the Products index sent it, because
-   *  the search is a substring match and product names contain each other —
-   *  and `label` is the human name to say it with. */
+   *  search actually matches and `label` is the human name to say it with.
+   *
+   *  Where the retailer disclosed a code, `query` is that code — the search is
+   *  a substring match and product names contain each other, so a code is the
+   *  only exact handle. Where it disclosed none, both are the name, and the two
+   *  being EQUAL is how this view knows the filter is inexact and the sentence
+   *  below must stop claiming these are "the ones that included" it. */
   arrival?: { query: string; label: string } | null;
   onClearArrival?: () => void;
 }) {
@@ -216,6 +220,7 @@ function TimelineBody({
         <Spine margin={<Aside>filtered</Aside>}>
           <Arrival
             product={arrival.label}
+            exact={arrival.query !== arrival.label}
             visits={filteredCount}
             total={stats.basket_count}
             indexHref={indexHref}
@@ -235,10 +240,31 @@ function TimelineBody({
             <MonthRail months={months} current={currentMonth} onJump={jumpTo} />
           }
         >
-          {stats.lines_disclosed ? null : (
-            // Said once, above the roll, instead of 67 times inside it. Each
-            // row used to open onto this same sentence, which is a control
-            // that cannot pay out — the failure this view fixes elsewhere.
+          {/* Said once, above the roll, instead of 67 times inside it. Each row
+              used to open onto this same sentence, which is a control that
+              cannot pay out — the failure this view fixes elsewhere.
+
+              Three states, not two. A response can itemise none of its visits,
+              all of them, or some — and the third is what H Mart sent: a points
+              statement covering every visit, then captures of the receipts
+              covering two thirds. `lines_disclosed` is one bit for the whole
+              response, so on a mixed one it reads true, this paragraph
+              vanished, and two dozen rows quietly would not open with nothing
+              on screen saying why. */}
+          {stats.lines_disclosed ? (
+            stats.itemised_count !== null &&
+            stats.basket_count !== null &&
+            stats.itemised_count < stats.basket_count ? (
+              <p className="mb-4 max-w-[62ch] text-muted">
+                This retailer disclosed what <em>all</em> of these visits cost
+                and what was in {number(stats.itemised_count)} of the{" "}
+                {number(stats.basket_count)}. The rows that do not open are the
+                ones it itemised nothing for. What was disclosed, and what was
+                not, is recorded as a finding in the{" "}
+                <strong>Compliance</strong> view.
+              </p>
+            ) : null
+          ) : (
             <p className="mb-4 max-w-[62ch] text-muted">
               This retailer disclosed what each visit cost and never what was in
               it. Every row below carries a date, a store and a total, and
@@ -299,6 +325,7 @@ function TimelineBody({
  */
 function Arrival({
   product,
+  exact,
   visits,
   total,
   indexHref,
@@ -310,13 +337,21 @@ function Arrival({
    *  sentence drops the comparison rather than inventing a denominator. */
   total: number | null;
   indexHref: string;
+  /** False when the retailer disclosed no code for this product, so the filter
+   *  is a substring match on its name. The sentence then says what it is really
+   *  showing: names that contain each other match each other, so these are not
+   *  provably the visits that included this product. */
+  exact: boolean;
   onClear: () => void;
 }) {
   return (
     <p className="max-w-[62ch] border-l-2 border-rule pl-3 font-serif text-[15px] leading-relaxed">
       Showing {number(visits)}
-      {total === null ? "" : ` of ${number(total)}`} visits, the ones that
-      included <span className="num text-[13px]">{product}</span>.{" "}
+      {total === null ? "" : ` of ${number(total)}`} visits,{" "}
+      {exact ? "the ones that included" : "the ones naming"}{" "}
+      <span className="num text-[13px]">{product}</span>
+      {exact ? "" : " — this retailer disclosed no product codes, so that is a match on the name"}
+      .{" "}
       <button
         onClick={onClear}
         className="text-accent underline underline-offset-2 hover:no-underline"
@@ -1151,9 +1186,22 @@ function BasketRow({
               </span>
             )}
             <span className="num shrink-0 text-muted">
-              {basket.lines_disclosed
-                ? `${number(basket.item_count)} items`
-                : ""}
+              {basket.lines_disclosed ? (
+                `${number(basket.item_count)} items`
+              ) : (
+                /* An em dash, not a blank. The 2026-09-09 row settles that the
+                   dash means absence and a blank means a disclosed zero, and
+                   the 2026-09-10 row extends the dash to a count whose
+                   disclosure is partial — which is exactly this. A blank was
+                   defensible when the whole response had no lines and this
+                   column was uniformly empty; with 43 filled and 24 blank it
+                   reads as a zero, beside a `saved_total` on the same row
+                   already dashing for the identical absence. */
+                <>
+                  <span aria-hidden>—</span>
+                  <span className="sr-only">not disclosed</span>
+                </>
+              )}
             </span>
             {/* w-16 below sm: the widest amount here is about 53px of Iosevka,
                 so 80px was reserving space this row cannot spare on a phone. */}
@@ -1204,13 +1252,19 @@ function BasketRow({
 function LineItems({ detail }: { detail: BasketDetail }) {
   const stated = detail.total_pre_discount;
   const delta = detail.stated_pre_discount_delta;
+  // Whether this basket disclosed any product code at all. "Absent rather than
+  // filled" is the rule the 2026-09-15 decisions row sets for the UPC slot, and
+  // a labelled column of em dashes on every row of every basket is the filled
+  // version of the same nothing. The 2026-09-10 row's reasoning excludes a
+  // wholly undisclosed column from the question rather than tabulating it.
+  const hasCodes = detail.items.some((item) => item.upc !== null);
   return (
     <div className="scroll-x">
       <table className="w-full min-w-[34rem] text-[12.5px]">
         <thead className="text-[11.5px] tracking-[0.05em] text-muted uppercase">
           <tr className="text-left">
             <th className="py-1.5 font-medium">Description</th>
-            <th className="py-1.5 font-medium">UPC</th>
+            {hasCodes && <th className="py-1.5 font-medium">UPC</th>}
             <th className="py-1.5 text-right font-medium">Shelf</th>
             <th className="py-1.5 text-right font-medium">You paid</th>
             <th className="py-1.5 text-right font-medium">Saved</th>
@@ -1239,9 +1293,16 @@ function LineItems({ detail }: { detail: BasketDetail }) {
                     </span>
                   )}
                 </td>
-                <td className="num py-1.5 pr-3 text-[11.5px] text-faint">
-                  {item.upc ?? "—"}
-                </td>
+                {hasCodes && (
+                  <td className="num py-1.5 pr-3 text-[11.5px] text-faint">
+                    {item.upc ?? (
+                      <>
+                        <span aria-hidden>—</span>
+                        <span className="sr-only">not disclosed</span>
+                      </>
+                    )}
+                  </td>
+                )}
                 <td className="num py-1.5 text-right">
                   {money(item.retail_amt)}
                 </td>

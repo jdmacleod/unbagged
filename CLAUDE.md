@@ -50,7 +50,12 @@ historical**: `DESIGN.md` is the authority for anything the user sees, and it de
   recorded explicitly as `status=absent`, never as a missing row.
 - Every emitted record carries provenance: `source_document_id`, `page`, `locator`.
 - No outbound network calls from the application at runtime. No telemetry, no CDN
-  requests, no update checks.
+  requests, no update checks. One carve-out, on the terms `docs/handoff.md` §6.9
+  already set for it — opt-in, off by default, and labelled as sending data
+  off-device: a local vision model may be asked to read a receipt capture the
+  deterministic reader could not. `UNBAGGED_OLLAMA_HOST` unset means no call is
+  made at all, and a host that is not loopback is refused until
+  `UNBAGGED_ALLOW_REMOTE_OLLAMA` acknowledges what it would receive.
 
 ## Design System
 

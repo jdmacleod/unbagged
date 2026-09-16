@@ -38,6 +38,25 @@ log = logging.getLogger(__name__)
 PDF_MAGIC = b"%PDF"
 TEXT_SUFFIXES = {".txt", ".text", ".json", ".csv", ".md"}
 
+#: Image formats, by their magic bytes, mapped to the media type to store.
+#:
+#: Routed by content like everything else here, and for a sharper reason than
+#: usual: a screen capture reaches this tool through whatever the operating
+#: system's screenshot key produced and whatever the mail client renamed it to,
+#: so the suffix is the least reliable thing about it. JPEG's magic is the first
+#: three bytes only — the fourth varies by marker — and WebP's sits after a
+#: four-byte length, so both are matched at an offset rather than as a prefix.
+IMAGE_MAGIC: tuple[tuple[int, bytes, str], ...] = (
+    (0, b"\x89PNG\r\n\x1a\n", "image/png"),
+    (0, b"\xff\xd8\xff", "image/jpeg"),
+    (0, b"GIF87a", "image/gif"),
+    (0, b"GIF89a", "image/gif"),
+    (8, b"WEBP", "image/webp"),
+)
+
+#: Enough to cover every offset in IMAGE_MAGIC.
+IMAGE_MAGIC_BYTES = 16
+
 #: The SpreadsheetML 2003 namespace. A workbook saved by Excel as "XML
 #: Spreadsheet 2003", and what at least one retailer's export servlet emits
 #: under an `.xls` extension.
@@ -409,6 +428,24 @@ def looks_like_pdf(path: Path) -> bool:
         return False
 
 
+def looks_like_image(path: Path) -> str | None:
+    """The image media type of this file, or None if it is not one.
+
+    Returns the type rather than a bool so `classify()` and `probe()` cannot
+    disagree about WHICH image it is, the same way they cannot disagree about
+    whether a `.xls` is the XML kind.
+    """
+    try:
+        with path.open("rb") as fh:
+            head = fh.read(IMAGE_MAGIC_BYTES)
+    except OSError:
+        return None
+    for offset, magic, media_type in IMAGE_MAGIC:
+        if head[offset : offset + len(magic)] == magic:
+            return media_type
+    return None
+
+
 def extract_pdf(path: Path, max_pages: int | None = None) -> tuple[str, ...]:
     try:
         import pdfplumber
@@ -480,6 +517,8 @@ def classify(document: SourceDocument, path: Path) -> str:
         return "pdf"
     if looks_like_spreadsheetml(_head(path)):
         return "spreadsheetml"
+    if looks_like_image(path):
+        return "image"
     if suffix in TEXT_SUFFIXES or document.media_type == "text/plain":
         return "text"
     if suffix in {".xls", ".xlsx"}:
@@ -513,6 +552,12 @@ def probe(document: SourceDocument) -> DocumentFacts | None:
                 return DocumentFacts("application/pdf", len(pdf.pages))
         if kind == "spreadsheetml":
             return DocumentFacts("application/vnd.ms-excel", None)
+        if kind == "image":
+            # One capture is one page. Not None: a page count of None means the
+            # format has no pages to count, which is true of a spreadsheet and
+            # false of an image — a citation saying "page 2 of 3" across a set
+            # of captures is exactly what a reader needs.
+            return DocumentFacts(looks_like_image(path) or "image/png", 1)
         if kind == "text":
             return DocumentFacts(document.media_type or "text/plain", len(extract_text_file(path)))
     except Exception:
@@ -569,6 +614,20 @@ def extract(document: SourceDocument, max_pages: int | None = None) -> Extracted
     elif kind == "text":
         pages = extract_text_file(path)
         media_type = document.media_type or "text/plain"
+    elif kind == "image":
+        # Reached only when no adapter claimed the image, because the adapter
+        # that reads captures reads them as pixels through `transcription` and
+        # never comes here. So the useful thing to say is which responses
+        # arrive as images at all — not, as this used to, that "an image
+        # reaches an adapter as a transcript", which described a design that
+        # was replaced before it shipped and names nothing a reader can act on.
+        raise ExtractionError(
+            f"{document.original_filename} is an image, and no retailer this "
+            "knows about answers with one of this shape. Screen captures of a "
+            "receipt are read when their filenames are the ones the store's "
+            "own export produced; a photograph or a screenshot taken by hand "
+            "is not something this can identify."
+        )
     elif kind == "binary_workbook":
         # Reached only when the content check above said no, so this is a real
         # binary workbook rather than the XML kind.

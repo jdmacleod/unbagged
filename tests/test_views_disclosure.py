@@ -204,3 +204,279 @@ class TestCompareCounts:
         assert row["disclosed"] is False
         assert row["visits"] is None
         assert row["total_paid"] is None
+
+
+class TestAProductWithNoCode:
+    """A retailer may disclose what you bought without disclosing a code for it.
+
+    H Mart's receipts carry a description and an amount and no code anywhere.
+    Both product views keyed on `upc IS NOT NULL`, so they showed nothing at all
+    over 388 disclosed line items — this tool's answer to "what did you buy" was
+    an empty page, about the one response that had answered it.
+    """
+
+    def _request(self, conn, items):
+        from unbagged.models import TxnItem
+
+        return repository.save_parse_result(
+            conn,
+            ParseResult(
+                request=RequestMeta(retailer_id="r", display_name="R"),
+                disclosures=(
+                    Disclosure(
+                        category=DisclosureCategory.SPECIFIC_PIECES,
+                        status=DisclosureStatus.PARTIAL,
+                        provenance=PROV,
+                    ),
+                ),
+                transactions=(
+                    Transaction(
+                        occurred_at="2019-03-04T10:00:00",
+                        total_pre_discount=sum(amount for _, _, amount in items),
+                        items=tuple(
+                            TxnItem(description_raw=name, upc=upc, retail_amt=amount)
+                            for name, upc, amount in items
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+    def test_a_named_product_with_no_code_is_still_a_product(self, conn):
+        request_id = self._request(conn, [("PEELED GARLIC 1 LB", None, 6.99)])
+        index = views.product_index(conn, request_id)
+        assert index["total_products"] == 1
+        assert index["products"][0]["description"] == "PEELED GARLIC 1 LB"
+        # Null, not the name repeated. It is rendered as a numeral in the mono
+        # stack, so a name standing in for it would be the name twice, once in
+        # a face chosen for digits.
+        assert index["products"][0]["upc"] is None
+
+    def test_a_code_is_still_what_identifies_a_product_where_one_exists(self, conn):
+        """Two spellings of one code are one product; that must not regress.
+
+        The whole point of a code is that it survives the retailer renaming
+        something between visits, and keying on the name would split it in two.
+        """
+        request_id = self._request(
+            conn, [("BANANAS", "00000001", 1.00), ("BANANA", "00000001", 1.00)]
+        )
+        index = views.product_index(conn, request_id)
+        assert index["total_products"] == 1
+
+    def test_a_line_with_no_readable_name_names_no_product(self, conn):
+        """The same rule the zero-value placeholder rows already get.
+
+        The line is real — its amount was read and checked like every other, and
+        it counts towards the basket. There is simply nothing to call it, and an
+        entry in an index of what you bought has to be something a reader can
+        recognise.
+        """
+        request_id = self._request(conn, [("", None, 4.00), ("MINT", None, 1.00)])
+        index = views.product_index(conn, request_id)
+        assert [p["description"] for p in index["products"]] == ["MINT"]
+
+    def test_the_headline_count_matches_the_page_under_it(self, conn):
+        """A relationship, not two expected numbers.
+
+        `stats` counted products its own product list did not contain: it
+        admitted lines that are only ever negative, which `product_index` has
+        always refused so that a refund cannot create an entry for something you
+        gave back. Three different answers to "what is a product" lived in this
+        module and the docstring already said they must not.
+        """
+        request_id = self._request(conn, [("MINT", None, 1.00), ("SC - MINT", None, -0.50)])
+        assert (
+            views.stats(conn, request_id)["distinct_products"]
+            == (views.product_index(conn, request_id)["total_products"])
+        )
+
+
+class TestARequestThatIsOnlyPartlyItemised:
+    """A retailer that answered twice, covering different ground each time."""
+
+    def _mixed(self, conn, itemised: int, total: int):
+        from unbagged.models import TxnItem
+
+        return repository.save_parse_result(
+            conn,
+            ParseResult(
+                request=RequestMeta(retailer_id="r", display_name="R"),
+                disclosures=(
+                    Disclosure(
+                        category=DisclosureCategory.SPECIFIC_PIECES,
+                        status=DisclosureStatus.PARTIAL,
+                        provenance=PROV,
+                    ),
+                ),
+                transactions=tuple(
+                    Transaction(
+                        occurred_at=f"2026-01-{n + 1:02d}T10:00:00",
+                        total_pre_discount=5.00,
+                        items=(
+                            (TxnItem(description_raw="MINT", retail_amt=5.00),)
+                            if n < itemised
+                            else ()
+                        ),
+                    )
+                    for n in range(total)
+                ),
+            ),
+        )
+
+    def test_the_count_of_itemised_visits_is_reported(self, conn):
+        """`lines_disclosed` is one bit and cannot say "two thirds".
+
+        Without this the timeline's explanation vanished on a mixed response —
+        the bit reads true — and the visits with nothing to show became rows
+        that would not open, with nothing on screen saying why.
+        """
+        stats = views.stats(conn, self._mixed(conn, itemised=2, total=5))
+        assert stats["lines_disclosed"] is True
+        assert stats["itemised_count"] == 2
+        assert stats["basket_count"] == 5
+
+    def test_a_fully_itemised_response_has_nothing_to_qualify(self, conn):
+        stats = views.stats(conn, self._mixed(conn, itemised=3, total=3))
+        assert stats["itemised_count"] == stats["basket_count"] == 3
+
+    def test_a_response_with_no_lines_says_so_the_way_it_already_did(self, conn):
+        """Zero would be a second, weaker way of saying what a null already says."""
+        stats = views.stats(conn, self._mixed(conn, itemised=0, total=3))
+        assert stats["lines_disclosed"] is False
+        assert stats["itemised_count"] is None
+
+
+class TestTheHeadlineFigureOnAMixedResponse:
+    """Found by /ship's design specialist on 2026-09-16.
+
+    `total_paid` is summed from line items, so on a response that itemised only
+    some of its visits it covered only those — and sat beside a "Visits" figure
+    counting all of them. On the real response it summed 43 of 67 and understated
+    by roughly a thousand dollars, with nothing on screen naming its scope. The
+    largest number on the page is the last one that should need a footnote.
+    """
+
+    def _mixed(self, conn, itemised: int, total: int, each: float):
+        from unbagged.models import TxnItem
+
+        return repository.save_parse_result(
+            conn,
+            ParseResult(
+                request=RequestMeta(retailer_id="r", display_name="R"),
+                disclosures=(
+                    Disclosure(
+                        category=DisclosureCategory.SPECIFIC_PIECES,
+                        status=DisclosureStatus.PARTIAL,
+                        provenance=PROV,
+                    ),
+                ),
+                transactions=tuple(
+                    Transaction(
+                        occurred_at=f"2019-03-{n + 1:02d}T10:00:00",
+                        total_pre_discount=each,
+                        items=(
+                            (TxnItem(description_raw="MINT", retail_amt=each),)
+                            if n < itemised
+                            else ()
+                        ),
+                    )
+                    for n in range(total)
+                ),
+            ),
+        )
+
+    def test_the_headline_covers_every_visit_not_just_the_itemised_ones(self, conn):
+        """A relationship, not a literal: it equals what the retailer stated
+        across all of them, never the partial sum."""
+        request_id = self._mixed(conn, itemised=2, total=5, each=10.0)
+        stats = views.stats(conn, request_id)
+        assert stats["basket_count"] == 5
+        assert stats["itemised_count"] == 2
+        assert stats["total_paid"] == stats["total_stated"] == 50.0
+        assert stats["total_paid"] != 20.0, "this is the partial sum the bug showed"
+
+    def test_a_fully_itemised_response_still_sums_its_lines(self, conn):
+        """The control. Without it the fix above passes by always using the
+        stated total, which would throw away every loyalty price."""
+        request_id = self._mixed(conn, itemised=3, total=3, each=10.0)
+        stats = views.stats(conn, request_id)
+        assert stats["itemised_count"] == stats["basket_count"]
+        assert stats["total_paid"] == 30.0
+
+    def test_the_narrower_figures_keep_the_scope_they_describe(self, conn):
+        """`total_shelf` and `total_saved` are line-item facts and stay so —
+        only the headline changes, because only it is read as covering the
+        visits counted beside it."""
+        request_id = self._mixed(conn, itemised=2, total=5, each=10.0)
+        stats = views.stats(conn, request_id)
+        assert stats["total_shelf"] == 20.0
+        assert stats["line_count"] == 2
+
+
+class TestThePriceHistoryContract:
+    """`price_history` changed SQL and gained a `key` field with no test at any
+    tier. Found by /ship's testing and coverage passes on 2026-09-16.
+
+    The frontend keys its rows, its selection and its category colours on `key`
+    (`PriceHistory.tsx`). If it stopped being emitted, every Python test and the
+    TypeScript build still pass and the UI silently renders duplicate undefined
+    React keys with every dot the same colour.
+    """
+
+    def _bought(self, conn, purchases):
+        from unbagged.models import TxnItem
+
+        return repository.save_parse_result(
+            conn,
+            ParseResult(
+                request=RequestMeta(retailer_id="r", display_name="R"),
+                disclosures=(
+                    Disclosure(
+                        category=DisclosureCategory.SPECIFIC_PIECES,
+                        status=DisclosureStatus.PARTIAL,
+                        provenance=PROV,
+                    ),
+                ),
+                transactions=tuple(
+                    Transaction(
+                        occurred_at=f"2019-03-{day:02d}T10:00:00",
+                        total_pre_discount=amount,
+                        items=(TxnItem(description_raw=name, upc=upc, retail_amt=amount),),
+                    )
+                    for day, (name, upc, amount) in enumerate(purchases, start=1)
+                ),
+            ),
+        )
+
+    def test_a_product_with_no_code_gets_a_price_series(self, conn):
+        request_id = self._bought(conn, [("GREEN ONION", None, 0.49), ("GREEN ONION", None, 0.79)])
+        series = views.price_history(conn, request_id, min_observations=2)["products"]
+        assert len(series) == 1
+        assert series[0]["description"] == "GREEN ONION"
+        assert series[0]["upc"] is None, "absent, not filled with the name"
+
+    def test_every_series_carries_an_identity_the_view_can_key_on(self, conn):
+        """A relationship, not a literal: as many distinct keys as series."""
+        request_id = self._bought(
+            conn,
+            [
+                ("MINT", None, 1.0),
+                ("MINT", None, 1.5),
+                ("BASIL", "00000001", 2.0),
+                ("BASIL", "00000001", 2.5),
+            ],
+        )
+        series = views.price_history(conn, request_id, min_observations=2)["products"]
+        assert all(entry.get("key") for entry in series)
+        assert len({entry["key"] for entry in series}) == len(series)
+
+    def test_the_index_and_the_series_agree_on_what_a_product_is(self, conn):
+        """The two views key products the same way, which is the whole reason
+        `PRODUCT_KEY` exists as one definition."""
+        request_id = self._bought(conn, [("MINT", None, 1.0), ("MINT", None, 1.5)])
+        index_keys = {p["key"] for p in views.product_index(conn, request_id)["products"]}
+        series_keys = {
+            s["key"] for s in views.price_history(conn, request_id, min_observations=2)["products"]
+        }
+        assert series_keys <= index_keys

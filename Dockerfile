@@ -36,8 +36,18 @@ WORKDIR /app
 
 # gosu drops privileges in the entrypoint. ~2 MB, and the alternative is either
 # running the app as root or failing on every Linux bind mount.
+#
+# tesseract-ocr reads responses that arrive as screen captures. It is an apt
+# package rather than a pip one on purpose: the Python packages that offer OCR
+# are wrappers that build an argv and call this same binary, so taking one
+# would add something to the hash-locked requirements that contributes no
+# behaviour of its own. `transcription/words.py` runs it as a subprocess.
+#
+# -eng only. The full language set is ~500 MB and every response this reads is
+# in English; a language pack that is never loaded is image size and a CVE
+# surface, not a capability.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends gosu \
+    && apt-get install -y --no-install-recommends gosu tesseract-ocr tesseract-ocr-eng \
     && rm -rf /var/lib/apt/lists/*
 
 # The lock first, on its own layer. It changes only when a dependency does, so

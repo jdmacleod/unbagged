@@ -437,11 +437,17 @@ function Filters({
  * order and a screen reader announces them in it, so the letter is a visual
  * affordance rather than content. It carries the jump target.
  *
- * The link filters the timeline by UPC, never by name. Timeline's search is a
- * substring match, and this catalogue is full of names that contain each other:
- * clicking BANANAS EA matched ORGANIC BANANAS EA and SIMPLE TRUTH ORG BANANAS
- * EA as well, so a product bought 20 times opened a timeline claiming 26 visits
- * "that included" it. A UPC is exact and is what a click on one entry means.
+ * The link filters the timeline by UPC wherever the retailer disclosed one.
+ * Timeline's search is a substring match, and this catalogue is full of names
+ * that contain each other: clicking BANANAS EA matched ORGANIC BANANAS EA and
+ * SIMPLE TRUTH ORG BANANAS EA as well, so a product bought 20 times opened a
+ * timeline claiming 26 visits "that included" it. A UPC is exact and is what a
+ * click on one entry means.
+ *
+ * A retailer that disclosed no codes at all leaves no exact handle, and the
+ * name goes through instead. The over-count above is then unavoidable, so the
+ * timeline stops claiming these are the visits that INCLUDED the product and
+ * says it is matching the name — see `Arrival` in Timeline.tsx.
  */
 function Block({
   products,
@@ -465,7 +471,7 @@ function Block({
         lastLetter = letter;
         return (
           <li
-            key={entry.upc}
+            key={entry.key}
             // Inline, so the whole thing reads as one field of type rather than
             // as a stack of rows. `scroll-mt` clears the sticky strip that the
             // jump rail becomes below lg.
@@ -650,7 +656,7 @@ function Stopped({
       <ul className="border-t border-rule">
         {entries.map((entry) => (
           <li
-            key={entry.upc}
+            key={entry.key}
             className="flex items-baseline gap-4 border-b border-rule py-2"
           >
             <span className="min-w-0 flex-1 truncate" title={entry.description}>
