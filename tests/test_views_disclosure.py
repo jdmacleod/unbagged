@@ -345,3 +345,70 @@ class TestARequestThatIsOnlyPartlyItemised:
         stats = views.stats(conn, self._mixed(conn, itemised=0, total=3))
         assert stats["lines_disclosed"] is False
         assert stats["itemised_count"] is None
+
+
+class TestTheHeadlineFigureOnAMixedResponse:
+    """Found by /ship's design specialist on 2026-09-16.
+
+    `total_paid` is summed from line items, so on a response that itemised only
+    some of its visits it covered only those — and sat beside a "Visits" figure
+    counting all of them. On the real response it summed 43 of 67 and understated
+    by roughly a thousand dollars, with nothing on screen naming its scope. The
+    largest number on the page is the last one that should need a footnote.
+    """
+
+    def _mixed(self, conn, itemised: int, total: int, each: float):
+        from unbagged.models import TxnItem
+
+        return repository.save_parse_result(
+            conn,
+            ParseResult(
+                request=RequestMeta(retailer_id="r", display_name="R"),
+                disclosures=(
+                    Disclosure(
+                        category=DisclosureCategory.SPECIFIC_PIECES,
+                        status=DisclosureStatus.PARTIAL,
+                        provenance=PROV,
+                    ),
+                ),
+                transactions=tuple(
+                    Transaction(
+                        occurred_at=f"2019-03-{n + 1:02d}T10:00:00",
+                        total_pre_discount=each,
+                        items=(
+                            (TxnItem(description_raw="MINT", retail_amt=each),)
+                            if n < itemised
+                            else ()
+                        ),
+                    )
+                    for n in range(total)
+                ),
+            ),
+        )
+
+    def test_the_headline_covers_every_visit_not_just_the_itemised_ones(self, conn):
+        """A relationship, not a literal: it equals what the retailer stated
+        across all of them, never the partial sum."""
+        request_id = self._mixed(conn, itemised=2, total=5, each=10.0)
+        stats = views.stats(conn, request_id)
+        assert stats["basket_count"] == 5
+        assert stats["itemised_count"] == 2
+        assert stats["total_paid"] == stats["total_stated"] == 50.0
+        assert stats["total_paid"] != 20.0, "this is the partial sum the bug showed"
+
+    def test_a_fully_itemised_response_still_sums_its_lines(self, conn):
+        """The control. Without it the fix above passes by always using the
+        stated total, which would throw away every loyalty price."""
+        request_id = self._mixed(conn, itemised=3, total=3, each=10.0)
+        stats = views.stats(conn, request_id)
+        assert stats["itemised_count"] == stats["basket_count"]
+        assert stats["total_paid"] == 30.0
+
+    def test_the_narrower_figures_keep_the_scope_they_describe(self, conn):
+        """`total_shelf` and `total_saved` are line-item facts and stay so —
+        only the headline changes, because only it is read as covering the
+        visits counted beside it."""
+        request_id = self._mixed(conn, itemised=2, total=5, each=10.0)
+        stats = views.stats(conn, request_id)
+        assert stats["total_shelf"] == 20.0
+        assert stats["line_count"] == 2

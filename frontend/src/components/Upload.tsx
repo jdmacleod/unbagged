@@ -188,10 +188,11 @@ export function Upload({
               first" — so the first screen was inviting the one action that
               cannot work. */}
           <p className="mt-1 max-w-[62ch] text-muted">
-            The PDF, text file or spreadsheet export a retailer sent back when
-            you filed a right-to-know request. If it arrived as a zip, unzip it
-            first and drop what was inside. It is read here, on this machine,
-            and nothing is uploaded anywhere.
+            The PDF, text file, spreadsheet export or screen captures a
+            retailer sent back when you filed a right-to-know request. If it
+            arrived as a zip, unzip it first and drop what was inside — all of
+            it at once, since it is one response. It is read here, on this
+            machine, and nothing is uploaded anywhere.
           </p>
         </div>
       )}
@@ -248,8 +249,8 @@ export function Upload({
           <>
             <span className="font-medium">Drop it here</span>
             <span className="mt-1 block text-muted">
-              PDF, text, or a spreadsheet export — the XML kind, not an Excel
-              workbook. Or click to choose a file.
+              PDF, text, a spreadsheet export — the XML kind, not an Excel
+              workbook — or screen captures of a receipt. Or click to choose.
             </span>
             {/* What happens next, and roughly how long. A long report is tens
                 of seconds of text extraction, and a reader with no estimate

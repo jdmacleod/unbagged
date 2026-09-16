@@ -389,6 +389,17 @@ def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
         result["total_shelf"] = round(result["total_shelf"], 2)
         result["total_paid"] = round(result["total_paid"], 2)
         result["total_saved"] = round(result["total_shelf"] - result["total_paid"], 2)
+        if result["itemised_count"] < result["basket_count"]:
+            # A PARTLY itemised response, and the same reasoning as the branch
+            # above, reached from the other side. `total_paid` is summed from
+            # line items, so on a mixed response it covers only the visits that
+            # have any — measured on the real one: it summed 43 of 67 visits and
+            # sat beside a "Visits 67" figure, understating by a thousand
+            # dollars with nothing on screen naming its scope. The stated totals
+            # are disclosed money for ALL of them, so the headline carries those
+            # and `total_shelf`/`total_saved` keep the narrower scope they
+            # honestly describe.
+            result["total_paid"] = result["total_stated"]
     stores = _rows(
         conn,
         "SELECT store_code, COUNT(*) AS visits FROM txn WHERE request_id = ?"
