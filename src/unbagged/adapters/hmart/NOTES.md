@@ -337,8 +337,10 @@ therefore decided some other way, and the decisions are worth keeping:
 
 - **A dozen captures carry a freehand scrawl** drawn across them in pure
   `#0000FF`. The page itself never uses that colour, so it is masked back to
-  white before the engine sees it. Unmasked, one capture read 14 lines summing
-  to 85.28 against a stated 100.23; masked, 16 summing to 100.23 exactly.
+  white before the engine sees it. Unmasked, one capture read 14 lines and came
+  up short of its stated total; masked, 16 lines reading exactly to it.
+
+
 - **One capture is clipped at the source**, and the earlier note here was wrong
   about what that means. It is the narrowest page in the corpus and its amount
   column runs into the right edge, so the last digit of every amount is cut —

@@ -360,10 +360,12 @@ def _clipped(transcript: Transcript) -> bool:
 
     Worth knowing because of how the failure presents. A clip does not blank
     the last digit, it cuts through it, and the engine reads the surviving part
-    as SOME digit — measured on the real capture, `7.49` came back as `7.45`
-    and `0.39` as `0.35`, five silent corruptions on one page. Where the
-    fragment resolves to no digit at all the amount stops matching at all and
-    the row is dropped whole, which on that page took the BALANCE line with it.
+    as SOME digit — so an amount comes back altered in its last place, with
+    nothing marking it as changed. Five amounts on one page were corrupted that
+    way. Where the fragment resolves to no digit at all the amount stops
+    matching the shape of one and the row is dropped whole, which on that page
+    took the BALANCE line with it.
+
 
     So the page fails in two ways at once and neither says what happened: some
     amounts are quietly wrong, and the total that would have caught them is
@@ -813,8 +815,9 @@ def from_reply(reply: dict, like: Receipt) -> Receipt | None:
     tax** come from `like` rather than from the reply. Those last two are the
     whole gate: taking the balance out of the reply too made `foots()` a check
     of three model-authored numbers against each other, so any self-consistent
-    JSON passed — a fabricated basket of 1000.00 was accepted against a page the
-    engine had read as 87.65. The printed total is the one fact the model had
+    JSON passed — a fabricated basket worth an order of magnitude more than the
+    page's own total was accepted. The printed total is the one fact the model had
+
     no hand in, and it only works as a check if it comes from the page. `_tax_for`
     has the same argument for the other free variable, and why bounding it is
     enough where the page could not state it.
@@ -899,7 +902,23 @@ def from_reply(reply: dict, like: Receipt) -> Receipt | None:
     tax = _tax_for(reply, like, ceiling)
     if tax is None:
         return None
-    if sum((abs(item.amount) for item in lines), Decimal("0.00")) > ceiling * MAX_GROSS:
+    # Measured against the page's total OR against what the engine itself got
+    # off the page, whichever is larger.
+    #
+    # A receipt can legitimately total nothing — a product and its cancellation
+    # net to zero — and against a bare `ceiling * MAX_GROSS` that is zero, so
+    # every non-empty basket fails and a correct reading of a voided visit can
+    # never be stored. A fixed floor does not help either: the gross of such a
+    # visit is twice an ordinary item's price, which no constant covers.
+    #
+    # The engine's own gross does. It is a measurement of how much money this
+    # page has on it, taken by a reader the model had no hand in, so it bounds
+    # the answer's magnitude on a page whose total cannot. It is only ever a
+    # magnitude bound here — the printed total is still the gate.
+    engine_gross = sum((abs(item.amount) for item in like.lines), Decimal("0.00"))
+    allowed = max(ceiling, engine_gross) * MAX_GROSS
+
+    if sum((abs(item.amount) for item in lines), Decimal("0.00")) > allowed:
         # The gate is a check on the SUM, and a sum says nothing about its
         # parts: a pair of offsetting lines at a thousand pounds each nets to
         # zero, passes every arithmetic check there is, and puts two invented
@@ -908,10 +927,11 @@ def from_reply(reply: dict, like: Receipt) -> Receipt | None:
         #
         # Measured rather than guessed, and measured on the GROSS rather than
         # on any single line, because a discount legitimately makes one line
-        # bigger than the whole receipt — a 91.40 item against a 87.65 balance
-        # is an ordinary page once its discount is counted. Across the real
-        # corpus the worst gross-to-total ratio is 2.2 and the worst single
-        # line is 0.95 of its receipt; the offsetting-pair attack runs at 21.
+        # bigger than the whole receipt — an item priced above the balance is an
+        # ordinary page once its discount is counted. Across the real corpus the
+        # worst gross-to-total ratio is 2.2 and the worst single line is 0.95 of
+        # its own receipt; the offsetting-pair attack runs at 21.
+
         return None
 
     claimed = _decimal(reply.get("balance"))
@@ -1003,7 +1023,9 @@ def _tax_for(reply: dict, like: Receipt, ceiling: Decimal) -> Decimal | None:
 
 #: What a currency mark comes back as. The engine returns `§` and `s` for `$`
 #: often enough to be named, and a vision model asked for "no currency symbol"
-#: returns `: 7.50` — it transcribes the mark it can see rather than dropping
+#: returns a colon in front of the number — it transcribes the mark it can see
+#: rather than dropping
+
 #: it. Measured against the corpus: every amount in a 30B model's answer came
 #: back with a leading colon, `_decimal` returned None for all of them, and
 #: `from_reply` voids the whole answer on one unreadable amount — so the
@@ -1017,7 +1039,9 @@ def _decimal(value: object) -> Decimal | None:
     try:
         text = str(value).replace(",", "").strip()
         # Only from the FRONT, and only marks. A stray character in the middle
-        # of a number still voids it: `7.5O` is not 7.50 here, it is a reading
+        # of a number still voids it: a letter O where a zero belongs is not a
+        # number here, it is a reading
+
         # nobody should act on.
         found = Decimal(text.lstrip(_CURRENCY_MARKS).strip())
 

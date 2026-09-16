@@ -485,7 +485,26 @@ def _itemise(
             )
             continue
         for receipt in receipts:
+            if receipt.clipped:
+                # Refused on the strength of the CLIP, not of the arithmetic.
+                #
+                # A clip cuts through the last digit of every amount, and the
+                # surviving fragment resolves to some other digit — so the page
+                # can still add up while every figure on it is wrong. Reaching
+                # this check only when the sum already failed meant the one
+                # signal that says "these digits are unreliable" was consulted
+                # only where the digits had already given themselves away.
+                # Verified: a clipped page whose corrupted amounts reconcile was
+                # stored, silently, with no mention of the clip.
+                #
+                # Before `foots`, because on this page the sum proves nothing.
+                warnings.add(
+                    _unreconciled(receipt, rc.foots(receipt), model, statement=statement),
+                    locator=receipt.captures[0],
+                )
+                continue
             short = rc.foots(receipt)
+
             #: The accepted model answer. Bound here rather than in the branch
             #: below, because it is read after the join for a receipt that never
             #: needed a model at all.
@@ -559,8 +578,15 @@ def _itemise(
             itemised[index] = _with_items(
                 transactions[index], receipt, by_name, stamp_trusted=not by_filename
             )
-            if receipt is second:
+            if second is not None:
+                # `second is not None`, not `receipt is second`: settling the
+                # tax against the statement returns a REPLACEMENT receipt, so
+                # an identity test quietly suppressed this notice on exactly
+                # the baskets where a model contributed AND a tax line had to
+                # be restored as a purchase.
+                #
                 # Said AFTER the row is written, not before. Emitted at the
+
                 # point the answer was accepted, it claimed the basket had been
                 # kept while `_match` and `_disagrees` could still refuse it —
                 # and the report then carried two sentences about one capture
@@ -957,12 +983,26 @@ def _unreconciled(receipt: rc.Receipt, short: Decimal, model, *, statement: bool
     tried = (
         f" {model.model} was asked about it as well and could not either." if model.usable else ""
     )
-    if receipt.clipped and receipt.balance is None:
+    if receipt.clipped:
         # Checked BEFORE the no-total branch, because a clip causes that too
         # and the reader would otherwise be sent looking for a second capture
-        # that was never taken. The amount column runs into the right edge, so
-        # the last digit of every amount is cut through — including the total's,
-        # which is why there is nothing to check the rest against.
+        # that was never taken.
+        #
+        # Two shapes, because the page can lose its total to the clip or keep
+        # it. Keeping it is the more dangerous one: every amount is still cut,
+        # so the page can add up while each figure on it is wrong, and a
+        # message claiming the total was lost would be false.
+        if receipt.balance is not None:
+            return (
+                f"{where} is cut off at its right edge: the column of amounts "
+                "runs into the edge of the picture, so the last digit of every "
+                "amount on it is sliced through. What it adds up to cannot be "
+                "trusted — the figures can be consistent with each other and "
+                "still be the wrong figures — so nothing from it is in this "
+                "report. The receipt itself is fine; the capture of it is too "
+                f"narrow. A wider capture of the same receipt would be read.{kept}"
+            )
+
         # Deliberately NOT `tried`. On this page a model may well have read
         # every amount correctly — the one in the real response did. What
         # stopped it was not the reading: the clip takes the printed total

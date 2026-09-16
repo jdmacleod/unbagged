@@ -903,3 +903,56 @@ class TestAPageWithNoPrintedTotalStoresNothing:
         found = rc.from_reply(reply, printed)
         assert found is not None
         assert rc.foots(found) is None
+
+
+class TestWhatTheGrossIsMeasuredAgainst:
+    """Found by the automated review on PR #90.
+
+    The gross bound was `ceiling * MAX_GROSS`, and a receipt can legitimately
+    total nothing — a product and its cancellation net to zero. Against a
+    ceiling of nought the bound is nought too, so every non-empty basket failed
+    and a correct reading of a voided visit could never be stored.
+    """
+
+    def page(self):
+        return rc.Receipt(
+            captures=("a.png",),
+            lines=(line("TOFU", "5.00"), line("CL TOFU", "-5.00")),
+            tax=Decimal("0.00"),
+            balance=Decimal("0.00"),
+            complete=True,
+        )
+
+    def reply(self, amounts):
+        return {
+            "lines": [{"description": f"M{i}", "amount": a} for i, a in enumerate(amounts)],
+            "tax": "0.00",
+            "balance": "0.00",
+        }
+
+    def test_a_visit_that_cancelled_itself_can_still_be_read(self):
+        assert rc.from_reply(self.reply(["5.00", "-5.00"]), self.page()) is not None
+
+    def test_and_an_invented_pair_on_the_same_page_is_still_refused(self):
+        """The engine's own gross is what bounds it — a measurement of how much
+        money the page has on it, taken by a reader the model had no hand in."""
+        assert rc.from_reply(self.reply(["1000.00", "-1000.00"]), self.page()) is None
+
+    def test_an_ordinary_receipt_is_bounded_by_its_own_total(self):
+        printed = rc.Receipt(
+            captures=("a.png",),
+            lines=(line("R", "19.00"),),
+            tax=Decimal("1.00"),
+            balance=Decimal("20.00"),
+            complete=True,
+        )
+        reply = {
+            "lines": [
+                {"description": "R", "amount": "19.00"},
+                {"description": "P", "amount": "1000.00"},
+                {"description": "P", "amount": "-1000.00"},
+            ],
+            "tax": "1.00",
+            "balance": "20.00",
+        }
+        assert rc.from_reply(reply, printed) is None

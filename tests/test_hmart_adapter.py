@@ -1263,3 +1263,47 @@ class TestWhenTheModelsAnswerIsAccepted:
         parsed = holder.parse(tmp_path, source, self.clipped(tmp_path, visit))
         assert asked == [], "a model was asked past the cap"
         assert all(not txn.items for txn in parsed.transactions)
+
+
+class TestAClippedPageIsRefusedOnTheClip:
+    """Found by the automated review on PR #90.
+
+    The clipping signal was consulted only inside `_unreconciled`, which runs
+    only once the arithmetic has already failed. But a clip cuts through the
+    last digit of every amount and the fragment resolves to some OTHER digit —
+    so a page can add up while every figure on it is wrong, and the one signal
+    saying "these digits are unreliable" was being read only where the digits
+    had already given themselves away.
+    """
+
+    def clipped(self, **kw):
+        return rc.Receipt(
+            captures=("Transaction_030419.png",),
+            lines=(rc.ReceiptLine("A", Decimal("5.00")), rc.ReceiptLine("B", Decimal("5.00"))),
+            tax=Decimal("0.00"),
+            balance=Decimal("10.00"),
+            complete=True,
+            clipped=True,
+            **kw,
+        )
+
+    class _NoModel:
+        usable = False
+        model = None
+
+    def test_the_sum_passing_does_not_make_the_digits_trustworthy(self):
+        found = self.clipped()
+        assert rc.foots(found) is None, "the arithmetic is self-consistent"
+        said = HMART._unreconciled(found, None, self._NoModel(), statement=True)
+        assert "cut off at its right edge" in said
+
+    def test_and_it_does_not_claim_a_total_it_still_has_was_lost(self):
+        """The other clipped shape says the total went with the digits. On this
+        page it did not, and saying so would be false."""
+        said = HMART._unreconciled(self.clipped(), None, self._NoModel(), statement=True)
+        assert "including the total's" not in said
+        assert "cannot be trusted" in said
+
+    def test_the_visit_is_told_it_keeps_its_total(self):
+        said = HMART._unreconciled(self.clipped(), None, self._NoModel(), statement=True)
+        assert "still carries the total the points statement gave for it" in said
