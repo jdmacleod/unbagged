@@ -126,15 +126,91 @@ def store_upload(filename: str, content: bytes, *, directory: Path | None = None
     )
 
 
-def looks_like_archive(content: bytes) -> bool:
-    """Is this a zip, by the record it opens with?
+#: The namespace an OOXML package declares inside `[Content_Types].xml`.
+OOXML_CONTENT_TYPES = b"http://schemas.openxmlformats.org/package/2006/content-types"
 
-    All three openings count, not only the one that carries a member: an empty
-    archive is `PK\x05\x06` alone, and answering it as "a .zip file, which is
-    not supported" would be the one sentence that is untrue. It is expanded like
-    any other and refused for holding nothing readable, which is what it holds.
+#: What an ODF package's `mimetype` entry holds.
+ODF_MIMETYPE_PREFIX = b"application/vnd.oasis.opendocument"
+
+
+def looks_like_archive(content: bytes) -> bool:
+    """Is this an archive of a response, rather than a single document?
+
+    All three zip openings count, not only the one that carries a member: an
+    empty archive is `PK\x05\x06` alone, and answering it as "a .zip file, which
+    is not supported" would be the one sentence that is untrue. It is expanded
+    like any other and refused for holding nothing readable, which is what it
+    holds.
+
+    **Zip-shaped is not the same as an archive**, and this is the second place
+    that has to know it. `extraction.classify` tests `archive` LAST among its
+    content checks and its comment says exactly why: `.xlsx`, `.docx` and `.odt`
+    are zips, so a magic-bytes test placed first claims every one of them. This
+    runs BEFORE `classify` ever sees the file — `store_upload_many` expands an
+    archive into documents, and classification happens per document afterwards —
+    so ordering cannot save it here and the check has to be made directly.
+
+    Measured before this: a workbook dropped on the upload area was expanded
+    into `[Content_Types].xml`, `workbook.xml` and `sheet1.xml`, three documents
+    named after nothing the reader recognises, instead of reaching the message
+    in `extraction.py` that tells them to save it as XML Spreadsheet 2003. The
+    same test inside an archive refused a response for "containing another
+    archive" and told the reader to unpack a spreadsheet.
+
+    Decided by what is INSIDE, not by the filename, because the filename is the
+    least reliable thing about a file that reached here through a mail client.
     """
-    return content[:4] in ZIP_MAGICS
+    if content[:4] not in ZIP_MAGICS:
+        return False
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            return not _is_office_package(archive)
+    except (zipfile.BadZipFile, OSError):
+        # Zip-shaped and unopenable. Still an archive as far as routing goes:
+        # `_archive_members` produces the honest "could not be opened" message,
+        # which is better than falling through to "unsupported format".
+        return True
+
+
+def _is_office_package(archive: zipfile.ZipFile) -> bool:
+    """Is this zip an OOXML or ODF document rather than a bag of files?
+
+    Asked of the package's STRUCTURE, not of an entry's name. A response archive
+    is free to contain a file called `mimetype`, and matching the name alone
+    would store that whole response as one document — which then reaches
+    `extraction.classify`, is recognised as a zip, and is refused as "an archive
+    inside an archive": a wrong answer wearing a confident message.
+
+    Both formats declare themselves and both declarations are cheap to read:
+
+    * **ODF** writes `mimetype` FIRST and stores it uncompressed, precisely so a
+      reader can identify the package from the first bytes of the file without
+      inflating anything. The content names the document type.
+    * **OOXML** carries `[Content_Types].xml` at the root, declaring the package
+      content-types namespace.
+
+    Anything else zip-shaped is an archive, which is the safe direction: being
+    expanded is recoverable, being stored whole and then refused is not.
+    """
+    names = archive.namelist()
+
+    if names and names[0] == "mimetype":
+        try:
+            info = archive.getinfo("mimetype")
+            # Stored, not deflated — the property that makes it readable without
+            # inflating, and the one a coincidental `mimetype` will not have.
+            if info.compress_type == zipfile.ZIP_STORED:
+                return archive.read("mimetype").startswith(ODF_MIMETYPE_PREFIX)
+        except (KeyError, zipfile.BadZipFile, OSError):
+            return False
+
+    if "[Content_Types].xml" in names:
+        try:
+            return OOXML_CONTENT_TYPES in archive.read("[Content_Types].xml")
+        except (KeyError, zipfile.BadZipFile, OSError):
+            return False
+
+    return False
 
 
 def store_upload_many(
@@ -241,11 +317,15 @@ def _archive_members(filename: str, content: bytes, budget: int) -> list[tuple[s
             ) from exc
 
         if len(member) > remaining:
+            # The REMAINING budget, not the constant. One upload may hold several
+            # archives and they share the allowance, so the second one to blow it
+            # was being told it exceeded 256 MB when what it actually exceeded
+            # was whatever the first one left — a number the reader could not
+            # reconcile with the file in front of them.
             raise IngestError(
-                f"{filename} expands to more than "
-                f"{MAX_ARCHIVE_BYTES // (1024 * 1024)} MB of files, which is "
-                "what one upload may unpack to in total. Nothing in it has "
-                "been kept."
+                f"{filename} expands to more than {_size(remaining)}, which is what is "
+                f"left of the {_size(MAX_ARCHIVE_BYTES)} one upload may unpack to in "
+                "total. Nothing in it has been kept."
             )
         remaining -= len(member)
         if not member:
@@ -289,6 +369,20 @@ def _names_for(found: list[tuple[str, bytes]]) -> list[str]:
     if len(set(bare)) == len(bare):
         return bare
     return [name.lstrip("./") for name, _ in found]
+
+
+def _size(count: int) -> str:
+    """Bytes in the unit that still says something.
+
+    Flooring the remainder to whole megabytes reported "more than 0 MB" once the
+    allowance was nearly spent, which tells a reader nothing they can check their
+    file against.
+    """
+    if count >= 1024 * 1024:
+        return f"{count // (1024 * 1024)} MB"
+    if count >= 1024:
+        return f"{count // 1024} KB"
+    return f"{count} bytes"
 
 
 def _is_noise(name: str) -> bool:

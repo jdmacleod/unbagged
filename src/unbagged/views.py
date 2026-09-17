@@ -1075,7 +1075,10 @@ def product_index(
     answers "what do I buy most" precisely.
 
     **What counts as a purchase.** The same predicate `price_history` uses: a
-    line with a UPC and a positive amount. That excludes the export's zero-value
+    line with a positive amount, keyed by `PRODUCT_KEY` — the UPC the retailer
+    disclosed, or the name it printed where it disclosed none. It used to require
+    a UPC, which silently dropped every product of a retailer that publishes no
+    codes. That excludes the export's zero-value
     placeholder rows, which name no product, and the negative lines, which are
     returns and would otherwise let a refund create an index entry for something
     you gave back. Three different predicates for "a purchase" existed in this

@@ -468,3 +468,135 @@ class TestWhatAMemberIsCalledOnceItIsOut:
         # agree — and both survive to be read rather than one being dropped.
         (group,) = rc.group_by_visit(["visit-a/sc_030419.png", "visit-b/sc_030419.png"])
         assert len(group) == 2
+
+
+#: What a real OOXML package declares. The namespace is the part that matters:
+#: `looks_like_archive` reads it rather than trusting the entry's name, so a
+#: response archive that happens to contain a file called `[Content_Types].xml`
+#: is still an archive.
+OOXML_CONTENT_TYPES = (
+    b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    b'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>'
+)
+
+
+class TestAZipThatIsReallyADocument:
+    """Office formats are zips, and expanding one shreds it.
+
+    `extraction.classify` tests `archive` last among its content checks and its
+    comment says why: `.xlsx`, `.docx` and `.odt` are zips, so a magic-bytes test
+    placed first claims every one of them. `store_upload_many` runs BEFORE
+    `classify` ever sees the file, so ordering cannot save it there — it has to
+    make the check itself.
+
+    Measured before the fix: a workbook dropped on the upload area came back as
+    `[Content_Types].xml`, `workbook.xml` and `sheet1.xml`, three documents named
+    after nothing a reader recognises, instead of the message telling them to
+    save it as XML Spreadsheet 2003.
+    """
+
+    def test_a_workbook_stays_one_document(self, tmp_path):
+        book = archive(
+            {
+                "[Content_Types].xml": OOXML_CONTENT_TYPES,
+                "xl/workbook.xml": b"<workbook/>",
+                "xl/worksheets/sheet1.xml": b"<worksheet/>",
+            }
+        )
+        (stored,) = store_upload_many("history.xlsx", book, directory=tmp_path)
+        assert stored.original_filename == "history.xlsx"
+
+    def test_an_opendocument_file_stays_one_document(self, tmp_path):
+        doc = archive(
+            {"mimetype": b"application/vnd.oasis.opendocument.text", "content.xml": b"<doc/>"}
+        )
+        (stored,) = store_upload_many("letter.odt", doc, directory=tmp_path)
+        assert stored.original_filename == "letter.odt"
+
+    def test_a_response_holding_a_workbook_is_not_refused_for_it(self, tmp_path):
+        """The same test, one level in.
+
+        A response zip carrying a spreadsheet was refused as "containing another
+        archive", which told the reader to unpack a workbook — and unpacking one
+        gives them `xl/worksheets/sheet1.xml`.
+        """
+        book = archive(
+            {"[Content_Types].xml": OOXML_CONTENT_TYPES, "xl/workbook.xml": b"<workbook/>"}
+        )
+        stored = store_upload_many(
+            "response.zip",
+            archive({"history.xlsx": book, "sc_030419.png": b"x"}),
+            directory=tmp_path,
+        )
+        assert [f.original_filename for f in stored] == ["history.xlsx", "sc_030419.png"]
+
+    def test_a_response_that_merely_CONTAINS_those_names_is_still_an_archive(self, tmp_path):
+        """The check reads the package, not the entry name.
+
+        A response is free to carry a file called `mimetype` or
+        `[Content_Types].xml`. Matching on the name alone would store the whole
+        response as one document, which then reaches `extraction.classify`, is
+        recognised as a zip, and is refused as "an archive inside an archive" —
+        a wrong answer wearing a confident message.
+        """
+        decoys = archive(
+            {
+                "mimetype": b"not an opendocument package",
+                "[Content_Types].xml": b"<Types/>",
+                "history.xls": b"<Workbook/>",
+            }
+        )
+        stored = store_upload_many("response.zip", decoys, directory=tmp_path)
+        assert [f.original_filename for f in stored] == [
+            "mimetype",
+            "[Content_Types].xml",
+            "history.xls",
+        ]
+
+    def test_a_real_archive_is_still_expanded(self, tmp_path):
+        stored = store_upload_many(
+            "response.zip",
+            archive({"history.xls": b"<Workbook/>", "sc_030419.png": b"x"}),
+            directory=tmp_path,
+        )
+        assert [f.original_filename for f in stored] == ["history.xls", "sc_030419.png"]
+
+    def test_an_archive_of_archives_is_still_refused(self, tmp_path):
+        """The nested-archive refusal has to survive the fix, not be traded for it."""
+        with pytest.raises(IngestError, match="another archive"):
+            store_upload_many(
+                "outer.zip",
+                archive({"inner.zip": archive({"a.txt": b"x"})}),
+                directory=tmp_path,
+            )
+
+    def test_a_zip_shaped_file_that_will_not_open_is_still_an_archive(self, tmp_path):
+        """Routing it anywhere else costs the reader the honest message.
+
+        "Could not be opened, the download may be incomplete" is actionable;
+        "unsupported format" for a file named `.zip` is not.
+        """
+        with pytest.raises(IngestError, match="could not be opened"):
+            store_upload_many("truncated.zip", b"PK\x03\x04broken", directory=tmp_path)
+
+
+class TestWhatTheBudgetMessageSays:
+    def test_it_names_what_is_left_not_the_whole_allowance(self, tmp_path):
+        """One upload may hold several archives and they share the allowance.
+
+        Naming the constant told the second archive it had exceeded 256 MB when
+        what it actually exceeded was whatever the first one left — a number the
+        reader cannot reconcile with the file in front of them.
+        """
+        payload = archive({"big.txt": b"0" * 200_000}, compress=True)
+        with pytest.raises(IngestError, match="more than 1 KB, which is what is left"):
+            store_upload_many("second.zip", payload, directory=tmp_path, budget=1024)
+
+    def test_a_small_remainder_is_not_floored_to_nothing(self):
+        """Whole megabytes reported "more than 0 MB" once the allowance was
+        nearly spent, which a reader cannot check their file against."""
+        from unbagged.ingest import _size
+
+        assert _size(900) == "900 bytes"
+        assert _size(4096) == "4 KB"
+        assert _size(300 * 1024 * 1024) == "300 MB"

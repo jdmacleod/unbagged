@@ -17,6 +17,12 @@ by a remote attacker:
   that reports clean on something it should catch is a security bug, not a papercut.
 - The server binding, or being reachable, beyond loopback without the user asking.
 - Ordinary web vulnerabilities: path traversal, injection, XSS, SSRF.
+- A way past the bounds on an uploaded archive. A response may be dropped as the
+  zip it arrived in, and `src/unbagged/ingest.py` is what decides what comes out
+  of one: a cap on the number of entries, a cap on what they expand to measured
+  across the whole request, a refusal of any member naming a path outside the
+  archive, and a refusal of an archive inside an archive. A member read whole
+  before it is measured, or a name that escapes, is a security bug.
 
 ## How to report
 

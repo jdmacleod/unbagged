@@ -16,8 +16,8 @@ mechanically, so nothing has to be quoted to make it.
 
 Usage:
 
-    python tools/check_footing.py --report data/incoming/<file> --request 1
-    python tools/check_footing.py --report data/incoming/<file> --request 1 \\
+    python -m tools.check_footing --report data/incoming/<file> --request 1
+    python -m tools.check_footing --report data/incoming/<file> --request 1 \\
         --dates YYYY-MM-DD,YYYY-MM-DD --pattern 'BAG|TAX|FEE|BOTTLE|DEPOSIT'
 
 With no --dates it examines the baskets the app has already flagged, most

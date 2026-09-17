@@ -13,9 +13,11 @@ Both are transparent and centered in a 100×100 viewBox.
 
 ## Generated
 
-Four of these six are served. `SERVED` in `tools/build_brand.py` excludes `icon-512.png`
-(README and avatar, never requested by the app) and the three `favicon-*.png` (already
-bundled inside the `.ico`), so `make brand-check` says nothing about them.
+Two of these six are served: `favicon.ico` and `apple-touch-icon-180.png`. `SERVED` in
+`tools/build_brand.py` names four files, the other two being the source SVGs themselves.
+It excludes `icon-512.png` (README and avatar, never requested by the app) and the three
+`favicon-*.png` (already bundled inside the `.ico`), so `make brand-check` says nothing
+about them.
 
 | File | Source | Notes |
 |---|---|---|

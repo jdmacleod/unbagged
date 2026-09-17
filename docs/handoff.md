@@ -115,7 +115,7 @@ read path goes, and naming the views has made it stale twice as tabs were added.
   instead, over stdlib `urllib` and only when one is configured. Neither reading is stored
   unless it adds up — see §6.9 and `adapters/hmart/NOTES.md`.
 
-- **Frontend:** React + Vite + TypeScript, Recharts for charts, Tailwind for layout
+- **Frontend:** React + Vite + TypeScript, hand-drawn SVG for charts, Tailwind for layout
 - **Packaging:** Docker + Docker Compose, single container in the default path
 
 ### Why not Streamlit
@@ -392,7 +392,7 @@ note that the tool reports observations and is not legal advice.
 
 ## 6. PII safeguards
 
-Nine layers. Implement all of them in M0, before writing any parser.
+Ten layers. Implement all of them in M0, before writing any parser.
 
 > **The embedded config below was the brief's starting point and has since been
 > superseded.** Read `.gitignore`, `.dockerignore` and `CONTRIBUTING.md` for what
@@ -612,61 +612,20 @@ Wrap the Docker commands so contributors never need to remember overlay syntax.
 
 ## 9. Milestones
 
-> **All milestones are complete as of 0.9.0 (2026-09-03).** This section is kept
-> as the record of the intended order, not as a plan. Work since then is recorded
-> in `CHANGELOG.md`, and planned work is filed as GitHub issues.
+> **Complete as of 0.9.0 (2026-09-03).** Kept because the names are still cited:
+> four test modules assert one of the acceptance criteria below, `tests/factories.py`
+> and §0 of this file refer to a milestone by name, and `repository.py` cites M1.
+> Grep for `M0`..`M7` before touching this table. The build order it records is history; shipped
+> work is in `CHANGELOG.md` and planned work is filed as
+> [GitHub issues](https://github.com/jdmacleod/unbagged/issues).
 
-Each milestone is independently mergeable with passing CI.
-
-**M0 — Safeguards and scaffolding.** Repo init, MIT LICENSE, `.gitignore`,
-`.dockerignore`, `CLAUDE.md`, pre-commit config, `tools/scan_pii.py`, CI workflow,
-Makefile, CONTRIBUTING.md.
-*Acceptance:* deliberately place a file containing a fake-but-realistic address under
-`data/` and in the tree; confirm the hook and CI both reject it.
-
-**M1 — Canonical schema.** Migrations, models, a repository layer. No parsers yet.
-*Acceptance:* schema creates cleanly, round-trips a hand-built `ParseResult`.
-
-**M2 — Fixture generator.** `tools/make_fixtures.py` emitting a structurally faithful
-synthetic Kroger report.
-*Acceptance:* generated fixture passes `scan_pii` and matches the documented section
-structure.
-
-**M3 — Kroger adapter.** Full parse against the synthetic fixture. All four blobs,
-identity graph, both inference classes, ABSENT disclosures, follow-up action for the
-pre-2022 supplemental window.
-*Acceptance:* parses the fixture into the expected record counts; degrades with warnings
-rather than crashing on a truncated input.
-
-**M4 — API.** FastAPI read endpoints for each view, plus upload/ingest.
-*Acceptance:* OpenAPI schema generated; endpoints covered by tests against fixture data.
-
-**M5 — UI.** Timeline, Profile, Compliance. Compare and price history if time allows.
-*Acceptance:* every displayed value traceable to a provenance link.
-*Shipped:* all five, plus a sixth Products view added in 0.10.0. See §8 above.
-
-**M6 — Docker packaging.** Single-container compose, dev overlay, README quickstart.
-*Acceptance:* a clean machine with only Docker installed reaches a working UI in three
-commands.
-
-**M7 — Adapter authoring guide.** `docs/writing-an-adapter.md`, Safeway and H Mart stubs,
-generic-fallback adapter for unstructured letters.
-*Acceptance:* a contributor can add a new retailer without touching core code.
-
----
-
-## 10. Open questions for the project owner
-
-1. **Scope beyond groceries.** The schema is retailer-agnostic already. Do you want the
-   README to invite pharmacy, telecom, and airline adapters, or stay narrow to build a
-   credible v1 first? This decision drives the name choice in section 2.
-2. **Real-report validation.** M3 tests against synthetic fixtures only. You'll need to
-   validate the Kroger adapter against your actual report locally, outside the repo.
-   Suggest a documented workflow: `data/incoming/`, never staged, verified by the M0
-   tooling.
-3. **Contact with Bristol.** Fryer and Day have run public workshops on this exact
-   interaction design and listed public release as future work. Worth an email before M5
-   locks the UI down.
-4. **Follow-up letter templates.** Should the compliance view's letter generator borrow
-   Datenanfragen's template approach, or stay minimal? Reusing their letter-generator
-   package is possible but adds a TypeScript dependency to a Python backend.
+| | Milestone | Acceptance |
+|---|---|---|
+| M0 | Safeguards and scaffolding | A fake-but-realistic address under `data/` is rejected by both the hook and CI |
+| M1 | Canonical schema | A hand-built `ParseResult` round-trips through storage unchanged |
+| M2 | Fixture generator | The generated fixture passes `scan_pii` and matches the documented section structure |
+| M3 | Kroger adapter | Parses the fixture to the expected record counts, and degrades with warnings rather than crashing on truncated input |
+| M4 | API | OpenAPI schema generated; every endpoint covered against fixture data |
+| M5 | UI | Every displayed value traceable to a provenance link |
+| M6 | Docker packaging | A clean machine with only Docker reaches a working UI in three commands |
+| M7 | Adapter authoring guide | A contributor can add a retailer without touching core code |

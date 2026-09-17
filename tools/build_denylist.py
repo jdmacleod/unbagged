@@ -11,7 +11,7 @@ and categories only. Run it, then read `tools/denylist.txt` yourself if you want
 to check it — that file is gitignored, and this tool refuses to write to any path
 that is not.
 
-    python tools/build_denylist.py data/incoming/report.pdf
+    make denylist REPORT=data/incoming/report.pdf
     make check-pii
 
 Values are merged with whatever is already in the file, so running it against a
