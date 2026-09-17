@@ -52,12 +52,24 @@ The Privacy Team
 DROP_ATTEMPTS = 3
 
 #: How long to wait for the request a drop should have produced, in ms.
-#: Issuing a `fetch` takes milliseconds — this is generous against a loaded
-#: machine, and still a twenty-fourth of the 120s the callers allow. It has to
-#: stay well under a real round trip: `send()` refuses a second file while one
-#: is in flight, so retrying on top of a slow-but-live upload would replace the
-#: answer under test with "Still reading the last file".
+#: Issuing a `fetch` takes milliseconds, so this is margin rather than budget.
 DROP_SETTLE_MS = 5_000
+
+#: How long to wait once the page says it is BUSY, in ms. A send has started by
+#: then, so this has to clear a real round trip — a long report is tens of
+#: seconds of parsing — rather than the milliseconds a dispatch takes.
+BUSY_GRACE_MS = 120_000
+
+#: How long to wait for the file input to exist at all, in ms.
+FIELD_ATTACH_MS = 30_000
+
+#: Between polls of what the page has sent, in ms.
+POLL_MS = 100
+
+
+def _is_upload(request) -> bool:
+    """The one POST this app makes to `/api/requests` is an upload."""
+    return request.method == "POST" and request.url.rstrip("/").endswith("/requests")
 
 
 def drop(page, *paths) -> None:
@@ -83,33 +95,51 @@ def drop(page, *paths) -> None:
 
     So the drop is no longer assumed to have happened. The upload request is
     watched for directly, because "did the browser POST" is the thing actually
-    meant and it cannot be missed the way a transient spinner can. No request
-    inside the settle window means the event went nowhere, and the drop is
-    simply made again against a freshly resolved input.
+    meant and it cannot be missed the way a transient spinner can.
+
+    **A retry only ever happens when nothing is in flight.** The order below is
+    load-bearing: request, then BUSY, then retry. `send()` refuses a second file
+    while one is in flight, so re-dropping on top of a live upload would replace
+    the answer under test with "Still reading the last file" — and a request
+    that merely arrived late would be credited to the attempt that had already
+    re-dropped, which is two POSTs where the suite asserts one. Asking the page
+    whether it is busy before retrying is what rules both out.
+
+    Busy is not taken as success on its own either. It says a send started, so
+    the request is waited for rather than assumed — a stuck `aria-busy` (the
+    shape of the #48 mutex bug this suite guards) would otherwise read here as a
+    drop that worked.
     """
     sent: list[str] = []
 
     def _record(request) -> None:
-        if request.method == "POST" and request.url.rstrip("/").endswith("/requests"):
+        if _is_upload(request):
             sent.append(request.url)
+
+    page.on("request", _record)
 
     # Re-resolved on every attempt rather than pinned to a handle: a remount is
     # the thing being recovered from, so the next try wants the NEW input.
     field = page.locator("input[type=file]")
-    field.wait_for(state="attached", timeout=30_000)
+    field.wait_for(state="attached", timeout=FIELD_ATTACH_MS)
 
-    page.on("request", _record)
     try:
         for _ in range(DROP_ATTEMPTS):
+            before = len(sent)
             field.set_input_files([])
             field.set_input_files([str(x) for x in paths])
-            waited = 0
-            while not sent and waited < DROP_SETTLE_MS:
-                page.wait_for_timeout(100)
-                waited += 100
-            if sent:
+            if _sent_since(page, sent, before, DROP_SETTLE_MS):
                 return
+            if page.locator('[aria-busy="true"]').count():
+                if _sent_since(page, sent, before, BUSY_GRACE_MS):
+                    return
+                raise AssertionError(
+                    "the drop zone reports itself busy but issued no upload request — "
+                    "the in-flight flag is stuck, which is the shape of issue #48"
+                )
     finally:
+        # By reference, so this removes THIS call's handler and not whichever
+        # one happens to be last — several tests register their own.
         page.remove_listener("request", _record)
 
     raise AssertionError(
@@ -117,6 +147,29 @@ def drop(page, *paths) -> None:
         f"{', '.join(Path(x).name for x in paths)} — the change event reached no "
         "live handler, so nothing was ever sent"
     )
+
+
+def _sent_since(page, sent: list[str], before: int, timeout_ms: int) -> bool:
+    """Has a new upload request gone out since `before`?
+
+    Checked BEFORE the first sleep, because the request usually beats the poll:
+    waiting a tick first put a fixed tax on every green drop in the tier, at
+    every one of this helper's call sites.
+
+    A recorded list rather than `page.expect_request`, which both specialists
+    reached for and which is the cleaner primitive for the fast path. It only
+    ever sees events that arrive after it starts listening, so a request landing
+    between the settle window closing and the BUSY branch opening would be
+    invisible to it — exactly the late arrival this function exists to see.
+    """
+    waited = 0
+    while True:
+        if len(sent) > before:
+            return True
+        if waited >= timeout_ms:
+            return False
+        page.wait_for_timeout(POLL_MS)
+        waited += POLL_MS
 
 
 def upload(page, *paths) -> None:
