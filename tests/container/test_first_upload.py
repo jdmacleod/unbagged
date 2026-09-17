@@ -448,8 +448,15 @@ class TestWhatCompareAsserts:
         """The dash and the number must both be there, in the right rows.
 
         A fix that hid the whole column would look correct in a screenshot of
-        the inference row alone. H Mart discloses a card number, so the
-        identifier row has to keep rendering it.
+        the dashed row alone, so the rows that DO disclose something have to be
+        asserted beside it.
+
+        The dashed row is the appended one. H Mart discloses a card number and,
+        since #36, one first-party inference — the `Point` column, which is
+        `Amount` rounded — so both of those are facts and print as figures. It
+        bought nothing from a broker, and that zero is the one this tool may not
+        quote. `zero_is_claimable` gates the zero and never the figure, which is
+        what lets three cells in one column disagree.
         """
         upload(page, HMART)
         hmart = selected(page)
@@ -462,8 +469,11 @@ class TestWhatCompareAsserts:
         assert re.search(r"[1-9]", row_text("Identifiers held for you")), (
             "H Mart discloses a card number; it must not render as an em dash"
         )
-        assert "\u2014" in row_text("Inferred attributes"), (
-            "the response never addressed inferences; this must not read as a zero"
+        assert re.search(r"[1-9]", row_text("Inferred attributes")), (
+            "the Point column is a disclosed inference; it must not render as an em dash"
+        )
+        assert "\u2014" in row_text("…of those, bought from elsewhere"), (
+            "the response never addressed appended data; this must not read as a zero"
         )
 
 

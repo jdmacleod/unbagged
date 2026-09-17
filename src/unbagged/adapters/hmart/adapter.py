@@ -1242,10 +1242,20 @@ def _point_inferences(
     """
     checked = 0
     for amount_raw, point_raw in pairs:
+        if amount_raw is None or point_raw is None:
+            # The row does not carry both, so it has nothing to say either way.
+            # A blank cell is the ordinary sparse row this format really sends.
+            continue
         amount = _exact(amount_raw)
         point = _exact(point_raw)
         if amount is None or point is None:
-            continue
+            # Present and unreadable, which is NOT the same as absent and was
+            # passed over as if it were. The claim is that the relationship
+            # holds on every row carrying both values, and this row carries
+            # both — so it cannot be evaluated, and a claim resting on the rows
+            # that happened to parse would overstate what was checked. The
+            # reader already has a warning naming the cell.
+            return ()
         if point != point.to_integral_value():
             # Not a rounded anything. Whatever this column is, it is not that.
             return ()
@@ -1293,19 +1303,32 @@ def _point_header_provenance(matched: list) -> Provenance:
 
 
 def _exact(value: str | None) -> Decimal | None:
-    """An amount as the sheet printed it, to the digit.
+    """An amount as the sheet printed it, to the digit. None if it is not one.
 
     `_amount` returns a float, which is right for a total and wrong here: this
     compares against a half, and a half is one of the values binary floating
     point does hold exactly but its neighbours are not. Reading the string again
     costs nothing and removes the question.
+
+    **`is_finite` is the load-bearing line.** `Decimal` parses `NaN`, `sNaN` and
+    `Infinity` without raising, and they do not behave like numbers afterwards:
+    a quiet NaN compares false against everything, so it slips past a bounds
+    check rather than failing it, and arithmetic on a signalling NaN raises
+    `InvalidOperation` from wherever it is finally touched. A cell reading
+    `sNaN` therefore aborted the whole upload with an `AdapterError` — from an
+    adapter whose contract is to degrade with a `ParseWarning` and never raise.
+
+    `receipt._decimal` guards the same way for the same reason, and its comment
+    is worth repeating here: the check should not be load-bearing for type
+    safety.
     """
     if value is None:
         return None
     try:
-        return Decimal(value.strip().replace(",", "").lstrip("$"))
+        found = Decimal(value.strip().replace(",", "").lstrip("$"))
     except (InvalidOperation, ValueError):
         return None
+    return found if found.is_finite() else None
 
 
 def _disclosures(

@@ -246,6 +246,89 @@ class TestThePointColumnCarriesNothingNew:
         # Whatever that column is, it is not a rounded anything.
         assert self._inferences(tmp_path, [("1.00", "1.5"), ("2.00", "2"), ("3.00", "3")]) == ()
 
+    @pytest.mark.parametrize("poison", ["NaN", "sNaN", "Infinity", "-Infinity"])
+    def test_a_non_number_that_decimal_accepts_does_not_abort_the_upload(self, tmp_path, poison):
+        """`Decimal` parses all four of these and none of them is a number.
+
+        A quiet NaN compares false against everything, so it slips past a bounds
+        check rather than failing it. Arithmetic on a signalling NaN raises
+        `InvalidOperation` from wherever it is finally touched — which, before
+        `_exact` checked `is_finite`, escaped as an `AdapterError` and lost the
+        entire upload. This adapter's contract is to degrade with a warning and
+        never raise.
+        """
+        parsed = HMartAdapter().parse(
+            bundle(
+                tmp_path,
+                self._sheet([("1.00", "1"), (poison, "2"), ("3.00", "3"), ("4.00", "4")]),
+            )
+        )
+        # The point is that we got here at all rather than out through an
+        # exception. The row is unreadable, so no claim is made about the column.
+        assert parsed.inferences == ()
+        assert parsed.transactions
+
+    @pytest.mark.parametrize("poison", ["NaN", "sNaN", "Infinity"])
+    def test_the_same_holds_in_the_point_column(self, tmp_path, poison):
+        parsed = HMartAdapter().parse(
+            bundle(
+                tmp_path,
+                self._sheet([("1.00", "1"), ("2.00", poison), ("3.00", "3"), ("4.00", "4")]),
+            )
+        )
+        assert parsed.inferences == ()
+
+    def test_a_cell_that_cannot_be_read_is_not_a_cell_to_pass_over(self, tmp_path):
+        """Present and unreadable is not the same as absent.
+
+        Skipping both alike let three good pairs and one garbage cell still
+        emit the claim, which overstates what was actually checked: the
+        contract is that the relationship holds on every row carrying BOTH
+        values, and a row with junk in it carries both.
+        """
+        assert (
+            self._inferences(
+                tmp_path, [("1.00", "1"), ("not a number", "2"), ("3.00", "3"), ("4.00", "4")]
+            )
+            == ()
+        )
+
+    def test_a_blank_cell_is_passed_over_rather_than_refused(self, tmp_path):
+        """The other half of that distinction, and the ordinary sparse row.
+
+        A row that carries only one of the two has nothing to say either way, so
+        it is skipped and the rows that do carry both still support the claim.
+        """
+
+        def cell(text):
+            return f'<ss:Cell><ss:Data ss:Type="String">{text}</ss:Data></ss:Cell>'
+
+        rows = [("1.00", "1"), ("2.00", "2"), ("3.00", "3")]
+        body = "".join(
+            "<ss:Row>"
+            + "".join(
+                cell(c) for c in ("40100200300", f"2019-03-0{n} 11:07:00.0", "SOME BRANCH", a, p)
+            )
+            + "</ss:Row>"
+            for n, (a, p) in enumerate(rows, start=1)
+        )
+        # A fourth visit with an amount and no points cell at all.
+        body += (
+            "<ss:Row>"
+            + "".join(
+                cell(c) for c in ("40100200300", "2019-03-09 11:07:00.0", "SOME BRANCH", "9.00")
+            )
+            + "</ss:Row>"
+        )
+        header = "<ss:Row>" + "".join(cell(h) for h in self.HEADERS) + "</ss:Row>"
+        document = (
+            f'<?xml version="1.0" encoding="utf-8"?><ss:Workbook xmlns:ss="{self.SS}">'
+            f'<ss:Worksheet ss:Name="Workbook"><ss:Table>{header}{body}'
+            f"</ss:Table></ss:Worksheet></ss:Workbook>"
+        )
+        (found,) = HMartAdapter().parse(bundle(tmp_path, document)).inferences
+        assert "on all 3 rows" in found.value_raw
+
     def test_too_few_rows_to_mean_anything_says_nothing(self, tmp_path):
         assert self._inferences(tmp_path, [("1.00", "1"), ("2.00", "2")]) == ()
 
