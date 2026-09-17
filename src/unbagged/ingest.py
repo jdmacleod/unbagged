@@ -28,7 +28,7 @@ from pathlib import Path
 
 from unbagged import repository
 from unbagged.adapters.registry import Match, registry
-from unbagged.extraction import ZIP_MAGIC, ExtractionError, extract, probe
+from unbagged.extraction import ZIP_MAGICS, ExtractionError, extract, probe
 from unbagged.models import AdapterError, ParseResult, SourceBundle, SourceDocument
 
 DEFAULT_INCOMING = Path("data/incoming")
@@ -127,7 +127,14 @@ def store_upload(filename: str, content: bytes, *, directory: Path | None = None
 
 
 def looks_like_archive(content: bytes) -> bool:
-    return content[: len(ZIP_MAGIC)] == ZIP_MAGIC
+    """Is this a zip, by the record it opens with?
+
+    All three openings count, not only the one that carries a member: an empty
+    archive is `PK\x05\x06` alone, and answering it as "a .zip file, which is
+    not supported" would be the one sentence that is untrue. It is expanded like
+    any other and refused for holding nothing readable, which is what it holds.
+    """
+    return content[:4] in ZIP_MAGICS
 
 
 def store_upload_many(
@@ -176,11 +183,17 @@ def _archive_members(filename: str, content: bytes, budget: int) -> list[tuple[s
       depth rather than the only thing standing in the way. It is refused
       loudly: a response should not contain one, and quietly dropping it would
       hide that it did.
-    * **The uncompressed total is capped**, which the upload limit cannot do —
-      it bounds the compressed bytes, and that is the wrong end of a bomb.
-      Measured as members are read rather than trusted from the header, because
-      the header is written by the sender too, and tested BEFORE the member is
-      written so a bomb is refused rather than stored and then complained about.
+    * **The entry count is bounded before anything is filtered.** Counting only
+      the members that survived filtering meant an archive could carry hundreds
+      of thousands of directory and metadata entries and never reach the cap,
+      and every one of them was still iterated.
+    * **No member is read whole.** The uncompressed total is capped, which the
+      upload limit cannot do — it bounds the compressed bytes, and that is the
+      wrong end of a bomb. Reading the member and THEN measuring it defeats the
+      cap it is enforcing: a single entry inside a 64 MB archive expands to
+      gigabytes in memory before any comparison happens. Each member is read to
+      one byte past what is left of the budget, so what is held at any moment is
+      bounded by the budget rather than by what the archive claims.
     * **An archive inside an archive is refused rather than recursed.** It is a
       real shape and a reader can unpack it; recursion here would be a second
       unbounded thing to bound.
@@ -190,15 +203,22 @@ def _archive_members(filename: str, content: bytes, budget: int) -> list[tuple[s
     """
     try:
         archive = zipfile.ZipFile(io.BytesIO(content))
+        entries = archive.infolist()
     except zipfile.BadZipFile as exc:
         raise IngestError(
             f"{filename} looks like a zip but could not be opened ({exc}). "
             "If it was downloaded, the download may be incomplete."
         ) from exc
 
+    if len(entries) > MAX_ARCHIVE_MEMBERS:
+        raise IngestError(
+            f"{filename} declares more than {MAX_ARCHIVE_MEMBERS} entries. A "
+            "right-to-know response is a document, not a data lake."
+        )
+
     found: list[tuple[str, bytes]] = []
-    total = 0
-    for info in archive.infolist():
+    remaining = budget
+    for info in entries:
         name = info.filename
         if info.is_dir() or _is_noise(name):
             continue
@@ -207,13 +227,11 @@ def _archive_members(filename: str, content: bytes, budget: int) -> list[tuple[s
                 f"{filename} contains an entry whose name points outside the "
                 f"archive ({name!r}). Nothing in it has been read."
             )
-        if len(found) >= MAX_ARCHIVE_MEMBERS:
-            raise IngestError(
-                f"{filename} holds more than {MAX_ARCHIVE_MEMBERS} files. A "
-                "right-to-know response is a document, not a data lake."
-            )
         try:
-            member = archive.read(info)
+            with archive.open(info) as handle:
+                # One byte past the budget is all it takes to prove the budget
+                # is blown, and is the most this will ever hold for one member.
+                member = handle.read(remaining + 1)
         except (zipfile.BadZipFile, RuntimeError, OSError) as exc:
             # RuntimeError is what `zipfile` raises for an encrypted member,
             # which is a thing a person can fix and should be told about.
@@ -222,14 +240,14 @@ def _archive_members(filename: str, content: bytes, budget: int) -> list[tuple[s
                 "protected, unpack it yourself and upload what is inside."
             ) from exc
 
-        total += len(member)
-        if total > budget:
+        if len(member) > remaining:
             raise IngestError(
                 f"{filename} expands to more than "
                 f"{MAX_ARCHIVE_BYTES // (1024 * 1024)} MB of files, which is "
                 "what one upload may unpack to in total. Nothing in it has "
                 "been kept."
             )
+        remaining -= len(member)
         if not member:
             # An empty file carries nothing, and `store_upload` refuses one by
             # name. Skipped rather than raised: an archive holding a stray empty
@@ -240,14 +258,37 @@ def _archive_members(filename: str, content: bytes, budget: int) -> list[tuple[s
                 f"{filename} contains another archive ({Path(name).name!r}). "
                 "Unpack the inner one and upload what is in it."
             )
-        # The member's own name, without the folder it sat in. The adapter that
-        # reads screen captures takes the visit's date out of the filename the
-        # store's export produced, and a path prefix is not part of that name.
-        found.append((Path(name).name, member))
+        found.append((name, member))
 
     if not found:
         raise IngestError(f"{filename} is an archive with nothing readable in it.")
-    return found
+    names = _names_for(found)
+    return [(name, member) for name, (_, member) in zip(names, found, strict=True)]
+
+
+def _names_for(found: list[tuple[str, bytes]]) -> list[str]:
+    """What each member is called once it is out of the archive.
+
+    Its own name without the folder it sat in, because the capture reader takes
+    a visit's date out of the name the store's export produced and a folder
+    prefix is not part of that — **unless two members would then share a name.**
+
+    That case loses a visit, which is the whole thing this feature exists to
+    prevent. `adapter._captures` maps captures by `original_filename` and keeps
+    the last of any duplicate, so flattening `visit-a/x.png` and `visit-b/x.png`
+    onto one name discards a capture and its basket with it. The adapter warns,
+    and tells the reader to rename the files — advice nobody can act on when it
+    was the unpacking that collided them.
+
+    Where a basename repeats, every member keeps its path instead. Nothing is
+    lost by that: `receipt._stem` strips a leading path before matching, so
+    `capture_date` and `group_by_visit` read a path exactly as they read a bare
+    name.
+    """
+    bare = [Path(name).name for name, _ in found]
+    if len(set(bare)) == len(bare):
+        return bare
+    return [name.lstrip("./") for name, _ in found]
 
 
 def _is_noise(name: str) -> bool:

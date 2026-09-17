@@ -38,11 +38,27 @@ log = logging.getLogger(__name__)
 
 PDF_MAGIC = b"%PDF"
 
-#: Every zip-shaped thing starts with this, which is the point: it is the
-#: container format under `.xlsx`, `.docx` and `.odt` as well as under `.zip`.
-#: Routing on it alone would claim all of them, so `classify` tests it after the
-#: formats that live inside a zip have had their say.
-ZIP_MAGIC = b"PK\x03\x04"
+#: How a zip can begin. `PK\x03\x04` is a local file header and is what an
+#: archive with anything in it starts with; `PK\x05\x06` is an end-of-central-
+#: directory record, which is the whole of an EMPTY archive; `PK\x07\x08` marks
+#: one spanned across volumes. All three are recognised so that an archive is
+#: answered as an archive rather than falling through to "this is a .zip file
+#: and is not supported", which is the one sentence that would be untrue.
+#:
+#: Recognition is by these records only, so a self-extracting archive — a zip
+#: with an executable stub in front of it — is NOT one of these. That is
+#: deliberate: it is a program, and unpacking a program somebody mailed you is
+#: not a thing this should offer to do.
+#:
+#: Being zip-shaped is the point and also the difficulty: it is the container
+#: under `.xlsx`, `.docx` and `.odt` too. Routing on it alone would claim all of
+#: them, so `classify` tests it after the formats that live inside a zip have
+#: had their say.
+ZIP_MAGICS: tuple[bytes, ...] = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
+
+#: The one that carries a member. `ingest` expands only these, because the other
+#: two hold nothing to expand.
+ZIP_MAGIC = ZIP_MAGICS[0]
 
 TEXT_SUFFIXES = {".txt", ".text", ".json", ".csv", ".md"}
 
@@ -506,9 +522,10 @@ def looks_like_zip(path: Path) -> bool:
     """
     try:
         with path.open("rb") as fh:
-            return fh.read(len(ZIP_MAGIC)) == ZIP_MAGIC
+            head = fh.read(4)
     except OSError:
         return False
+    return head in ZIP_MAGICS
 
 
 def looks_like_image(path: Path) -> str | None:

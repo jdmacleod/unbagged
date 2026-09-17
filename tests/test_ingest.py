@@ -326,12 +326,40 @@ class TestWhatAnArchiveIsNotAllowedToDo:
 
     def test_too_many_members_are_refused(self, tmp_path, monkeypatch):
         monkeypatch.setattr(ingest, "MAX_ARCHIVE_MEMBERS", 2)
-        with pytest.raises(IngestError, match="more than 2 files"):
+        with pytest.raises(IngestError, match="more than 2 entries"):
             store_upload_many(
                 "response.zip",
                 archive({f"{n}.txt": b"x" for n in range(3)}),
                 directory=tmp_path,
             )
+
+    def test_entries_that_get_filtered_out_still_count(self, tmp_path, monkeypatch):
+        """Counted before anything is filtered, not after.
+
+        Counting only the members that survived meant an archive could carry
+        hundreds of thousands of directory and metadata entries, never reach the
+        cap, and be iterated in full anyway.
+        """
+        monkeypatch.setattr(ingest, "MAX_ARCHIVE_MEMBERS", 3)
+        noise = {f"__MACOSX/._{n}": b"fork" for n in range(5)}
+        with pytest.raises(IngestError, match="more than 3 entries"):
+            store_upload_many(
+                "response.zip", archive({"real.txt": b"x", **noise}), directory=tmp_path
+            )
+
+    def test_one_member_cannot_be_read_whole_before_it_is_measured(self, tmp_path):
+        """The cap has to bound the allocation, not describe it afterwards.
+
+        Reading the member and then measuring it defeats the limit it enforces:
+        a single entry inside an archive well under the upload cap expands to
+        gigabytes in memory before any comparison happens. Each member is read
+        to one byte past what is left of the budget instead.
+        """
+        payload = archive({"big.txt": b"0" * 5_000_000}, compress=True)
+        assert len(payload) < 50_000, "the compressed size must pass the upload cap"
+        with pytest.raises(IngestError, match="expands to more than"):
+            store_upload_many("bomb.zip", payload, directory=tmp_path, budget=4096)
+        assert list(tmp_path.iterdir()) == []
 
     def test_what_it_expands_to_is_capped_not_what_was_sent(self, tmp_path):
         """The upload limit bounds the COMPRESSED bytes, which is the wrong end
@@ -377,3 +405,66 @@ class TestWhatAnArchiveIsNotAllowedToDo:
     def test_a_zip_that_cannot_be_opened_says_so(self, tmp_path):
         with pytest.raises(IngestError, match="could not be opened"):
             store_upload_many("broken.zip", b"PK\x03\x04truncated", directory=tmp_path)
+
+    def test_an_empty_archive_is_answered_as_an_archive(self, tmp_path):
+        """It opens with `PK\\x05\\x06` and no local file header at all.
+
+        Recognising only the header that carries a member sent this down the
+        unsupported-format path, where the reader was told a `.zip` file is not
+        supported — the one sentence about it that is untrue.
+        """
+        with pytest.raises(IngestError, match="nothing readable"):
+            store_upload_many("empty.zip", archive({}), directory=tmp_path)
+
+    def test_a_self_extracting_archive_is_not_unpacked(self, tmp_path):
+        """A zip behind an executable stub is a program, and unpacking a program
+        somebody mailed you is not a thing this offers to do. It is stored as an
+        ordinary file and refused downstream by format."""
+        stub = b"MZ\x90\x00" + b"\x00" * 60 + archive({"a.txt": b"x"})
+        (stored,) = store_upload_many("setup.exe", stub, directory=tmp_path)
+        assert stored.original_filename == "setup.exe"
+
+
+class TestWhatAMemberIsCalledOnceItIsOut:
+    """A name collision here loses a visit, which is what this feature prevents.
+
+    `adapter._captures` maps captures by `original_filename` and keeps the last
+    of any duplicate. Flattening two folders onto one set of names therefore
+    discards a capture and the basket on it — and the adapter's warning tells
+    the reader to rename the files, which nobody can act on when it was the
+    unpacking that collided them.
+    """
+
+    def test_a_unique_basename_loses_its_folder(self, tmp_path):
+        stored = store_upload_many(
+            "response.zip",
+            archive({"captures/sc_030419.png": b"a", "captures/sc_030519.png": b"b"}),
+            directory=tmp_path,
+        )
+        assert [f.original_filename for f in stored] == ["sc_030419.png", "sc_030519.png"]
+
+    def test_a_repeated_basename_keeps_every_path(self, tmp_path):
+        stored = store_upload_many(
+            "response.zip",
+            archive({"visit-a/sc_030419.png": b"a", "visit-b/sc_030419.png": b"b"}),
+            directory=tmp_path,
+        )
+        assert [f.original_filename for f in stored] == [
+            "visit-a/sc_030419.png",
+            "visit-b/sc_030419.png",
+        ]
+
+    def test_the_capture_reader_reads_a_path_exactly_as_it_reads_a_name(self):
+        """Which is what makes keeping the path free of consequences.
+
+        `receipt._stem` strips a leading path before matching, so the date and
+        the visit key come out the same either way.
+        """
+        from unbagged.adapters.hmart import receipt as rc
+
+        assert rc.capture_date("visit-a/sc_030419.png") == rc.capture_date("sc_030419.png")
+        assert rc.capture_date("visit-a/sc_030419.png") == "2019-03-04"
+        # Two captures of one visit, which is what they are when their stems
+        # agree — and both survive to be read rather than one being dropped.
+        (group,) = rc.group_by_visit(["visit-a/sc_030419.png", "visit-b/sc_030419.png"])
+        assert len(group) == 2
