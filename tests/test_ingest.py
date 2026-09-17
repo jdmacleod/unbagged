@@ -470,6 +470,16 @@ class TestWhatAMemberIsCalledOnceItIsOut:
         assert len(group) == 2
 
 
+#: What a real OOXML package declares. The namespace is the part that matters:
+#: `looks_like_archive` reads it rather than trusting the entry's name, so a
+#: response archive that happens to contain a file called `[Content_Types].xml`
+#: is still an archive.
+OOXML_CONTENT_TYPES = (
+    b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    b'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>'
+)
+
+
 class TestAZipThatIsReallyADocument:
     """Office formats are zips, and expanding one shreds it.
 
@@ -488,7 +498,7 @@ class TestAZipThatIsReallyADocument:
     def test_a_workbook_stays_one_document(self, tmp_path):
         book = archive(
             {
-                "[Content_Types].xml": b"<Types/>",
+                "[Content_Types].xml": OOXML_CONTENT_TYPES,
                 "xl/workbook.xml": b"<workbook/>",
                 "xl/worksheets/sheet1.xml": b"<worksheet/>",
             }
@@ -510,13 +520,38 @@ class TestAZipThatIsReallyADocument:
         archive", which told the reader to unpack a workbook — and unpacking one
         gives them `xl/worksheets/sheet1.xml`.
         """
-        book = archive({"[Content_Types].xml": b"<Types/>", "xl/workbook.xml": b"<workbook/>"})
+        book = archive(
+            {"[Content_Types].xml": OOXML_CONTENT_TYPES, "xl/workbook.xml": b"<workbook/>"}
+        )
         stored = store_upload_many(
             "response.zip",
             archive({"history.xlsx": book, "sc_030419.png": b"x"}),
             directory=tmp_path,
         )
         assert [f.original_filename for f in stored] == ["history.xlsx", "sc_030419.png"]
+
+    def test_a_response_that_merely_CONTAINS_those_names_is_still_an_archive(self, tmp_path):
+        """The check reads the package, not the entry name.
+
+        A response is free to carry a file called `mimetype` or
+        `[Content_Types].xml`. Matching on the name alone would store the whole
+        response as one document, which then reaches `extraction.classify`, is
+        recognised as a zip, and is refused as "an archive inside an archive" —
+        a wrong answer wearing a confident message.
+        """
+        decoys = archive(
+            {
+                "mimetype": b"not an opendocument package",
+                "[Content_Types].xml": b"<Types/>",
+                "history.xls": b"<Workbook/>",
+            }
+        )
+        stored = store_upload_many("response.zip", decoys, directory=tmp_path)
+        assert [f.original_filename for f in stored] == [
+            "mimetype",
+            "[Content_Types].xml",
+            "history.xls",
+        ]
 
     def test_a_real_archive_is_still_expanded(self, tmp_path):
         stored = store_upload_many(
@@ -554,5 +589,14 @@ class TestWhatTheBudgetMessageSays:
         reader cannot reconcile with the file in front of them.
         """
         payload = archive({"big.txt": b"0" * 200_000}, compress=True)
-        with pytest.raises(IngestError, match="more than 0 MB, which is what is left"):
+        with pytest.raises(IngestError, match="more than 1 KB, which is what is left"):
             store_upload_many("second.zip", payload, directory=tmp_path, budget=1024)
+
+    def test_a_small_remainder_is_not_floored_to_nothing(self):
+        """Whole megabytes reported "more than 0 MB" once the allowance was
+        nearly spent, which a reader cannot check their file against."""
+        from unbagged.ingest import _size
+
+        assert _size(900) == "900 bytes"
+        assert _size(4096) == "4 KB"
+        assert _size(300 * 1024 * 1024) == "300 MB"

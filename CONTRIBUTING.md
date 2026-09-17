@@ -438,8 +438,8 @@ compatibility contract is read against your database rather than a code API, and
 a prebuilt image would ask people to trust a binary in a project whose whole
 pitch is that they can read every line first.
 
-    git tag -s v0.16.0 -m "unbagged 0.16.0"
-    git push origin v0.16.0
+    git tag -s vX.Y.Z -m "unbagged X.Y.Z"    # the version in VERSION
+    git push origin vX.Y.Z
 
 That is the whole procedure. `.github/workflows/release.yml` fires on the tag,
 runs `tools/release_notes.py`, and creates the release from the CHANGELOG
