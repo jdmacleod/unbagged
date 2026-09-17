@@ -37,13 +37,15 @@ docker compose up --build
 
 Then open <http://localhost:8420> and drag the retailer's response onto the upload
 area. The zip it arrived in can be dropped as it is: each file inside becomes its
-own document with its own citation, so nothing has to be unpacked by hand. One
-exception: a password-protected archive cannot be opened here, and says so rather
-than failing quietly — unpack that one yourself and drop what was inside.
+own document with its own citation, so nothing has to be unpacked by hand. Some
+archives are refused rather than opened — a password-protected one, one holding
+another archive, one carrying more files or unpacking to more bytes than a
+response plausibly contains, or one naming a path outside itself. Each says which
+it was, so you can unpack that one yourself and drop what was inside.
 
-The first run builds the app: two base images, the UI, and the Python dependencies,
-about 75 seconds on a clean machine. There is no prebuilt image to download,
-deliberately — you run what you can read. Later starts re-check the build and take
+The first run builds the app: two base images, the OCR engine, the UI, and the
+Python dependencies. Budget a couple of minutes on a clean machine. There is no
+prebuilt image to download, deliberately — you run what you can read. Later starts re-check the build and take
 about two seconds when nothing has changed. Keep `--build` on the command: without
 it Docker serves whatever it built last, so a pull can leave you running the
 previous version.
@@ -112,7 +114,7 @@ listed with what their amounts look like, and no price change is claimed for the
 
 ![The prices view](docs/screenshots/prices.png)
 
-**Products** — every product the response discloses, set as a typographic index:
+**Products** — every product you actually bought, set as a typographic index:
 alphabetical, sized by purchase count, with an A-Z rail. Clicking one opens the visits
 that contained it. Under the index is a control that saves what you are looking at
 as an SVG — text, not a rasterised screenshot, so it stays selectable and searchable
@@ -145,8 +147,10 @@ make setup-frontend  # npm install
 make dev             # compose + Vite, on http://localhost:5173
 make test            # fast suite
 make test-frontend   # UI unit tests (vitest)
-make test-container  # slow: builds and runs a real container
-make setup-browser   # once, if you want the browser tests to run rather than skip
+make test-container  # slow: builds and runs a real container (needs Docker + Chromium)
+make setup-browser   # once, to get the Chromium the container tier drives
+make lint            # ruff check + ruff format --check, the two gates CI runs
+make format          # apply the formatter
 make screenshots     # regenerate docs/screenshots from the fixture
 make check-pii       # run this before every commit
 ```
@@ -192,10 +196,12 @@ per visit. Those are read, and they are read carefully:
 - **Nothing is stored unless the basket adds up.** A receipt prints its own
   total, so a transcription can be checked against something that did not come
   out of the same reader. One that does not reconcile is named in a warning and
-  its visit keeps the total it already had. On the response this was built for,
-  43 of 44 receipts reconciled; the one that did not was clipped when it was
-  captured, slicing through the last digit of every amount on it — including
-  the total, which left nothing on the page to check a reading against.
+  its visit keeps the total it already had.
+- **A page captured with its edge cut through the amounts is set aside on the
+  cut**, before the arithmetic is consulted at all. A clip slices the last digit
+  off every amount rather than removing it, and each sliver reads as some other
+  digit — so such a page can add up perfectly while every figure on it is wrong.
+  Adding up is not evidence there.
 - Nothing from the card block at the foot of a receipt is transcribed or stored.
 
 Reading is done by tesseract, which ships in the image. A local vision model can

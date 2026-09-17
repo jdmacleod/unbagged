@@ -115,7 +115,7 @@ read path goes, and naming the views has made it stale twice as tabs were added.
   instead, over stdlib `urllib` and only when one is configured. Neither reading is stored
   unless it adds up — see §6.9 and `adapters/hmart/NOTES.md`.
 
-- **Frontend:** React + Vite + TypeScript, Recharts for charts, Tailwind for layout
+- **Frontend:** React + Vite + TypeScript, hand-drawn SVG for charts, Tailwind for layout
 - **Packaging:** Docker + Docker Compose, single container in the default path
 
 ### Why not Streamlit
@@ -392,7 +392,7 @@ note that the tool reports observations and is not legal advice.
 
 ## 6. PII safeguards
 
-Nine layers. Implement all of them in M0, before writing any parser.
+Ten layers. Implement all of them in M0, before writing any parser.
 
 > **The embedded config below was the brief's starting point and has since been
 > superseded.** Read `.gitignore`, `.dockerignore` and `CONTRIBUTING.md` for what

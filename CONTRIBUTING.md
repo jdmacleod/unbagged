@@ -127,7 +127,7 @@ dates and times you went shopping. Build it from your own report:
 
 
 ```bash
-python tools/build_denylist.py data/incoming/your-report.pdf
+make denylist REPORT=data/incoming/your-report.pdf
 make check-pii
 ```
 
@@ -467,7 +467,7 @@ commit cannot be quietly moved — it has to be superseded by a new version.
 Tags are signed, and `.github/allowed_signers` is what lets you check one:
 
     git config gpg.ssh.allowedSignersFile .github/allowed_signers
-    git verify-tag v0.16.0
+    git verify-tag v0.14.1
     # Good "git" signature for ... with ED25519 key SHA256:...
 
 GitHub verifies independently and shows a Verified badge either way. The file
