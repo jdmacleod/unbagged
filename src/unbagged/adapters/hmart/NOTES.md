@@ -114,10 +114,16 @@ a response that discloses no discount. With no discount mechanism in the
 programme at all, the stated total is simultaneously the pre-discount figure and
 the amount paid, so the two readings do not diverge here.
 
-**`Point` has no destination.** The model has no field for it, and it is not an
-attribute about a person, so an `Inference` would be the wrong shape. It is a
-disclosed column deliberately not stored. Recorded as
-[#36](https://github.com/jdmacleod/unbagged/issues/36) if it is ever wanted.
+**`Point` is emitted as an inference, not stored as a field.** The model has no
+field for it and it is not an attribute about a person, so it is no part of a
+`Transaction` — but what the column says about the *disclosure* is a finding:
+the retailer sent back a value it computed from another column in the same
+response. It lands as an `Inference` with `origin=FIRST_PARTY_MODEL` and
+`derivable_from_txns=True`, cited to the `Point` header cell itself, and only
+when the relationship holds on every row carrying both values. Recorded as
+[#36](https://github.com/jdmacleod/unbagged/issues/36) while it was not yet
+stored; "One caveat worth carrying" below is why it is never checked by
+rounding.
 
 **No `TxnItem` is emitted.** Fabricating one line per basket to carry the total
 would invent structure the retailer never sent.
@@ -514,10 +520,11 @@ A dozen real captures carry one, so it is not an exotic case.
 
 #### What this did not settle
 
-The shipped default, `qwen2.5vl:7b`, **is not in this table because the host
-does not have it**. It was never measured against anything, which is what the
-bake-off was for; what is recorded here is the field it is being replaced by,
-not a comparison with it.
+The default this replaced, `qwen2.5vl:7b`, **is not in this table because the
+host does not have it**. It was never measured against anything, which is what
+the bake-off was for; what is recorded here is the field that replaced it, not a
+comparison with it. `minicpm-v4.5:8b` is the shipped default from this release
+on.
 
 Everything above is one host, one day, one quantisation of each tag. A re-pulled
 tag can be a different build — `gemma3:12b` hitting a 180s timeout on one page

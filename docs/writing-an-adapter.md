@@ -90,6 +90,14 @@ register(adapter)
 …and add the package to the import list in `adapters/__init__.py`. That is the
 one line of core code you touch.
 
+**A bundle holds documents, and an archive is never one of them.** A zip dropped
+on the upload area is expanded by `ingest` before any adapter is consulted: each
+member becomes its own `SourceDocument`, with its own hash, its own name and its
+own citation. So `sniff()` sees the files and never the archive, and forty
+captures look the same to you whether they were dropped loose or zipped. An
+archive inside an archive is refused at ingest rather than recursed, so there is
+no depth for you to reason about.
+
 ### `sniff()`
 
 Read as little as possible. `extract(document, max_pages=3)` exists for exactly
@@ -214,7 +222,10 @@ the next present one with `ss:Index` naming its real column. Appending in
 encounter order shifts every value after a gap one column left, and the header
 row stays dense so matching headers by name does not save you — the damage is in
 the data rows. `ss:Index` appears on rows too, where it moves the row number
-instead.
+instead. A merged cell displaces the same way and in two directions:
+`ss:MergeAcross` swallows the columns it spans, and `ss:MergeDown` reserves the
+same columns on the rows beneath it. `extraction.py` honours both; a reader of
+your own has to.
 
 **Map columns by header name, never by position.** A column that moves then
 makes your `sniff()` decline, which is loud. Reading the next column along is

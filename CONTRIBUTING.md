@@ -255,6 +255,14 @@ Every test in `tests/container/` gets a 180-second cap automatically, and
 everything else gets 60. Both are backstops sized against measured worst cases,
 not budgets — if a test approaches either, the test is wrong, not the cap.
 
+The tier shares one harness, `tests/container/browser.py`, and `drop()` in it is
+no longer a wrapper: it watches for the upload the drop should have started, puts
+the file down again when it reached a control that was being replaced, and never
+re-drops onto a send already in flight. Those branches are driven without a
+browser by `tests/test_browser_harness.py`, in the fast tier, because every
+browser-tier call site exercises only the path where the first attempt works.
+Change `drop()` and that is the suite that covers you.
+
 ## Writing a test that needs the OCR engine
 
 Captures are read by `tesseract`, which is an apt package rather than a pip one

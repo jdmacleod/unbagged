@@ -23,6 +23,91 @@ from a specific response. See `CONTRIBUTING.md`.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/
 
+## [0.16.0] - 2026-09-16
+
+### Added
+
+- **A response can arrive as a zip, and be read.** One retailer answers with a
+  folder of screen captures — a page or two per visit, dozens of files — and it
+  arrives zipped. Until now you had to unpack it, open the folder, select every
+  file and drop them together, because they are one response and one upload.
+  Miss one and the response was short a visit with nothing on screen saying
+  which. Drop the zip itself now. Each file inside becomes its own document with
+  its own citation, so a figure still points at the page it came from rather
+  than at an archive.
+
+  What comes out of an archive is bounded, and bounded by what it expands to
+  rather than by what was sent: a small file can describe an enormous one. An
+  entry whose name points outside the archive is refused outright, as is an
+  archive holding another archive. A folder of Mac metadata is quietly ignored
+  rather than reported as dozens of unreadable files.
+
+- **H Mart's Point column is reported as something the shop worked out about
+  you.** The response carries a points figure beside every amount, and on every
+  row seen it is that amount rounded to the nearest whole number — which the
+  shop's own published terms state independently. So the column tells you
+  nothing the amount did not already tell you, and that is now said plainly in
+  the Profile view, cited to the column it describes. It appears on responses
+  loaded from this version on.
+
+### Changed
+
+- **The local vision model is now a measured choice rather than a guess.** The
+  model that reads a receipt the ordinary reader could not was picked by hand
+  with no evidence behind it, and was not even present on the machine it was
+  meant to run on. Twelve models were scored against receipt-shaped pages drawn
+  for the purpose — an ordinary page, a discounted one, weighed items, a page
+  with a scrawl across it, one cut off at the edge, one cut short. The default
+  is the fastest of the three that read every page they could be scored on,
+  reading a page in about eight seconds.
+
+  Nothing about a real receipt was used to measure this and nothing could be:
+  the pages are drawn from instructions in the source, so the right answer is
+  known without anybody's shopping being involved.
+
+### Fixed
+
+- **A spreadsheet cell that spans downward no longer shifts the rows beneath
+  it.** A cell merged across columns was already handled; merged *down* was not,
+  and a row underneath one lost a column silently — every value after it sliding
+  one place left. On this format that is close to invisible: the points figure
+  is the amount rounded, so a basket came back wrong by less than a dollar with
+  nothing to show for it. No response seen contains such a cell; the fix rests
+  on the file format's own rules rather than on having met one.
+
+- **A receipt captured with its edge cut through the amounts is refused on the
+  cut, not on the arithmetic.** A clip slices the last digit of every amount
+  rather than removing it, and each sliver reads as *some* digit — so a page can
+  add up perfectly while every figure on it is wrong. Such a page was being
+  stored whenever the corrupted figures happened to reconcile. It is now set
+  aside as soon as the clip is seen, and the note explaining why has a second
+  form for a page that kept its total, because the existing one said the total
+  was lost and that would have been untrue.
+
+- **A visit that nets to nothing can be read again.** A product and its
+  cancellation come to zero, and the guard bounding how much money a page may
+  claim was a multiple of the page's own total — which is nought on such a page,
+  so every reading of it failed. It is measured against what the ordinary reader
+  found on the page instead.
+
+- **A cell holding something that is not a number no longer loses the whole
+  upload.** `NaN` and `Infinity` are accepted by the number reader and then
+  behave like nothing else does; one of them in an amount column ended the
+  upload with an error rather than a note. Such a cell is now simply unreadable,
+  which is what it is.
+
+- **The browser tests stopped failing one at a time for no reason.** A test that
+  put a file on the upload box assumed the app had noticed. Usually it had —
+  but the box moves on screen once a response exists, and a file arriving during
+  that move reached a control already being replaced, so nothing was sent and
+  the test waited two minutes for an answer that was never coming. One test
+  failed per full run, a different one each time, every one of them passing on
+  its own. The upload itself is now watched for, and a file that reached nothing
+  is simply put down again — never while an upload is already running, which
+  would have sent the same response twice. The suite runs in about half the time
+  it did. This is the other half of the same fault the previous release capped
+  the hanging of, rather than a new one.
+
 ## [0.15.0] - 2026-09-16
 
 **This release changes what already-ingested responses display.** Nothing needs

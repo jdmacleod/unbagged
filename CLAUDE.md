@@ -30,7 +30,10 @@ historical**: `DESIGN.md` is the authority for anything the user sees, and it de
 - `src/unbagged/adapters/` — one adapter per retailer, behind the `RetailerAdapter`
   protocol. Core code never branches on retailer identity.
 - `tools/` — repo tooling: PII scanner, fixture generator, hook helpers, the runtime
-  lock (`check_lock.py`, `make_lock.py`), and the brand asset build (`build_brand.py`).
+  lock (`check_lock.py`, `make_lock.py`), the brand asset build (`build_brand.py`), and
+  the vision bake-off (`bakeoff_vision.py`, `bakeoff_cases.py`), which is not a gate and
+  takes no input path: every page it scores is drawn in source, and it must never be
+  pointed at `data/`.
   `CONTRIBUTING.md` lists which gate covers what — and note that `resources/`'s own
   rasters are the gap: `build_icons.py` needs cairosvg, which is in no dependency
   group, so nothing re-runs it. Edit an SVG, run `make brand` alone, and stale
