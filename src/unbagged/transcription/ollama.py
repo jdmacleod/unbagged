@@ -48,6 +48,11 @@ from dataclasses import dataclass
 from enum import Enum
 from urllib.parse import urlparse
 
+# Generic JSON scanning, not receipt knowledge — this package's boundary claim
+# survives it. `jsonscan`'s own docstring invites the third consumer: the first
+# two hit the same nesting bug independently.
+from unbagged import jsonscan
+
 log = logging.getLogger(__name__)
 
 #: Where the model is. Unset means the whole path is off, which is the default.
@@ -56,7 +61,15 @@ MODEL_ENV = "UNBAGGED_OLLAMA_VISION_MODEL"
 #: Acknowledgement that a non-loopback host will receive your receipts.
 REMOTE_ENV = "UNBAGGED_ALLOW_REMOTE_OLLAMA"
 
-DEFAULT_MODEL = "qwen2.5vl:7b"
+#: Measured, not chosen. `src/unbagged/adapters/hmart/NOTES.md` carries the
+#: bake-off this came out of: twelve vision models over six receipt-shaped
+#: pages, scored through this lane. Three clear the gate on every page it can be
+#: cleared on, and this is the fastest of them — an ~8s mean against a 600s
+#: budget for a whole response.
+#:
+#: It is one host on one day, and a re-pulled tag can be a different build.
+#: `python -m tools.bakeoff_vision` is how to check rather than assume.
+DEFAULT_MODEL = "minicpm-v4.5:8b"
 
 LOOPBACK = frozenset({"localhost", "127.0.0.1", "::1"})
 
@@ -270,7 +283,7 @@ def _present(model: str, names: set[str]) -> bool:
 def ask(
     pages: list[bytes],
     prompt: str,
-    schema: dict,
+    schema: dict | None,
     where: Availability,
     opener=None,
 ) -> dict | None:
@@ -284,6 +297,16 @@ def ask(
     Returns the raw reply. It is a claim, not a reading: whatever asked has to
     put it through a check the model had no hand in, and throw it away if it
     does not hold.
+
+    **`schema=None` sends no `format` at all, and no caller in the application
+    may pass it.** It exists for `tools/bakeoff_vision.py`, which measures what a
+    model does with the schema against what it does without — and that
+    comparison is only worth anything if the schema is the ONLY difference
+    between the two. The alternative was a second transport in the bake-off,
+    which would have compared this code against that code and called the
+    difference a fact about the model: a build that rejects `think`, or a model
+    answering through the reasoning channel, would have scored as a model that
+    cannot read.
     """
     if not where.usable or where.host is None:
         return None
@@ -300,9 +323,6 @@ def ask(
             }
         ],
         "stream": False,
-        # The full schema, not the string "json". Constrained decoding is what
-        # keeps a small model from answering in prose about the receipt.
-        "format": schema,
         "options": {
             "temperature": 0,
             "num_ctx": NUM_CTX_FLOOR + IMAGE_TOKENS * len(pages),
@@ -312,6 +332,11 @@ def ask(
         # retried once rather than losing the call to a version difference.
         "think": False,
     }
+    if schema is not None:
+        # The full schema, not the string "json". Constrained decoding is what
+        # keeps a small model from answering in prose about the receipt. Absent
+        # only for the measurement described above.
+        payload["format"] = schema
     url = f"{where.host.rstrip('/')}/api/chat"
     attempt = 0
     while attempt <= MAX_SIZED_RETRIES:
@@ -373,6 +398,13 @@ def _content(body: dict) -> dict | None:
     `length` means the answer was cut off mid-thought, and harvesting numbers
     from a reply the model never committed to is exactly the invention the
     arithmetic gate exists to catch. Better to return nothing.
+
+    The object is LOCATED in the text rather than assumed to be the whole of it.
+    Constrained decoding usually does make it the whole of it, but not always —
+    a model that wraps its answer in a code fence returned nothing at all here,
+    which reads downstream as a model that could not answer. `jsonscan` is the
+    repository's string-aware scanner and already handles the two things a
+    regex cannot: nesting, and a brace inside a string.
     """
     message = body.get("message") or {}
     text = (message.get("content") or "").strip()
@@ -380,11 +412,10 @@ def _content(body: dict) -> dict | None:
         text = (message.get("thinking") or "").strip()
     if not text:
         return None
-    try:
-        found = json.loads(text)
-    except ValueError:
-        return None
-    return found if isinstance(found, dict) else None
+    for _, _, found in jsonscan.iter_json(text):
+        if isinstance(found, dict):
+            return found
+    return None
 
 
 class _Rejected(RuntimeError):

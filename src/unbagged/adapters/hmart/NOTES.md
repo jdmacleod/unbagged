@@ -411,6 +411,92 @@ therefore decided some other way, and the decisions are worth keeping:
   than the receipt says was paid.
 
 
+### Which vision model, and the evidence for it
+
+Measured 2026-09-16 against Ollama 0.33.3 on one host, by
+`python -m tools.bakeoff_vision`. Twelve vision-capable models, six synthetic
+pages each, 144 calls, two tiers: **A** through the lane as it ships — the real
+prompt, the real schema, `from_reply` then `foots` — and **B** the same call with
+the schema left off and nothing else changed.
+
+Tier B goes through `ollama.ask` with `schema=None` rather than a transport of
+its own. The first run of this table did use its own, and it cost a real
+measurement: `qwen3-vl:30b` scored one page as no-answer that the lane's retry
+recovers. A tier whose entire output is the gap between it and Tier A cannot
+afford a second difference in it.
+
+Nothing here was measured on a real capture and nothing here can be. The pages
+come from `tools/bakeoff_cases.py`, which draws them from rows written in source,
+so the ground truth is the code and a score can be published.
+
+**`gate` is out of five**, not six: the cut-off page is the top half of a taller
+receipt and prints no total, so there is nothing for the gate to check. **Four
+is the ceiling** — the clipped page is refused by design, see the hazard above —
+and three models reach it.
+
+| Model | gate | mean s | strict | furniture | note |
+|---|---|---|---|---|---|
+| `minicpm-v4.5:8b` | **4/5** | **8.2** | 1.00 | 5 | fastest of the three that clear the hazards |
+| `qwen3-vl:8b` | 4/5 | 11.4 | 1.00 | 15 | same reading, half again the time, three times the furniture |
+| `qwen3-vl:30b` | 4/5 | 18.9 | 1.00 | 10 | no better than its 8b sibling and twice the cost |
+| `gemma3:4b` | 3/5 | 7.0 | 1.00 | 4 | best recall of any model (0.94); loses the scrawl |
+| `mistral-small3.2` | 3/5 | 27.1 | 1.00 | 3 | reads well, loses the scrawl, slow |
+| `gemma3:12b` | 3/4 | 40.3 | 0.83 | 6 | one page hit the 180s timeout outright |
+| `qwen3.8:27b` | 2/5 | 28.7 | 0.50 | 0 | loses the scrawl and half its amounts to the schema |
+| `gemma4:e4b` | 1/5 | 6.2 | 1.00 | 0 | fast and reads a third of the lines |
+| `glm-ocr` | 1/5 | 3.2 | 0.68 | 15 | fastest thing here; returns amounts in Chinese numerals |
+| `gemma4:12b` | 0/5 | 10.0 | 1.00 | 0 | quotes the total back and drops lines — what `foots` is for |
+| `qwen3.6:27b` | 0/5 | 37.3 | 0.12 | 0 | reads 0.90 of the lines and gates on none of them |
+| `qwen3.5:9b` | 0/5 | 4.4 | 0.17 | 0 | reads 0.17 under the schema, 0.77 without it |
+
+`strict` is the fraction of returned amounts `receipt._decimal` accepts, scored
+apart from whether the model read the digits. That separation is the whole
+reason the tier's first failure went unseen for as long as it did.
+
+#### What the two tiers actually told us
+
+**The schema is a reader, not just a validator.** The bottom two rows read the
+page perfectly well and score nothing through the lane. `qwen3.6:27b` returns
+0.90 of the lines and wraps every amount in `{"value": …}`, so `_decimal`
+accepts 12% of them; with the schema removed it gates on three pages at 0.92
+recall and 1.00 strict. `qwen3.5:9b` goes from 0.17 to 0.77 the same way.
+Screening on Tier A alone would have thrown both away as weak readers, and they
+are not weak readers.
+
+It runs the other way too, and harder than expected — worth knowing before
+anyone proposes dropping the schema. `glm-ocr` answers in 3.2s with it and
+rambles past the timeout without it, twice. `qwen3-vl:30b` goes from 18.9s to
+93.0s and `qwen3-vl:8b` from 11.4s to 68.2s. Constrained decoding is not only a
+correctness device here; it is most of the speed.
+
+**`foots` is load-bearing, not a formality.** `gemma4:12b` returns the printed
+total correctly on every page and still gates on none: it quotes the total back
+and loses a line on the way, which nothing in the reply itself can show. The
+arithmetic is what catches it.
+
+**The clipped page behaves exactly as the hazard above says it must.** Every
+model that answers returns the right total for it and none passes the gate,
+because the clip alters the lines rather than the total. No model reads its way
+out of that, which is the measurement behind "recovering the basket needs a
+capture that is not clipped".
+
+**The scrawl is the discriminator among competent models.** `gemma3:4b` has the
+best recall in the table and loses the scrawl page; so does `mistral-small3.2`.
+A dozen real captures carry one, so it is not an exotic case.
+
+#### What this did not settle
+
+The shipped default, `qwen2.5vl:7b`, **is not in this table because the host
+does not have it**. It was never measured against anything, which is what the
+bake-off was for; what is recorded here is the field it is being replaced by,
+not a comparison with it.
+
+Everything above is one host, one day, one quantisation of each tag. A re-pulled
+tag can be a different build — `gemma3:12b` hitting a 180s timeout on one page
+is the kind of result that may not reproduce. Re-run the bake-off rather than
+trusting this table after a model is re-pulled.
+
+
 ### Deliberately not read
 
 - **The flag column.** `WT`, `CL` and `***` are two glyphs of 10px type and come
