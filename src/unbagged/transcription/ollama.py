@@ -64,7 +64,7 @@ REMOTE_ENV = "UNBAGGED_ALLOW_REMOTE_OLLAMA"
 #: Measured, not chosen. `src/unbagged/adapters/hmart/NOTES.md` carries the
 #: bake-off this came out of: twelve vision models over six receipt-shaped
 #: pages, scored through this lane. Three clear the gate on every page it can be
-#: cleared on, and this is the fastest of them at a ~10s median against a 600s
+#: cleared on, and this is the fastest of them — an ~8s mean against a 600s
 #: budget for a whole response.
 #:
 #: It is one host on one day, and a re-pulled tag can be a different build.

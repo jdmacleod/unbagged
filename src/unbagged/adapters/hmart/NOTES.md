@@ -415,9 +415,15 @@ therefore decided some other way, and the decisions are worth keeping:
 
 Measured 2026-09-16 against Ollama 0.33.3 on one host, by
 `python -m tools.bakeoff_vision`. Twelve vision-capable models, six synthetic
-pages each, two tiers: **A** through the lane as it ships — the real prompt, the
-real schema, `from_reply` then `foots` — and **B** with the schema dropped and
-the context window doubled.
+pages each, 144 calls, two tiers: **A** through the lane as it ships — the real
+prompt, the real schema, `from_reply` then `foots` — and **B** the same call with
+the schema left off and nothing else changed.
+
+Tier B goes through `ollama.ask` with `schema=None` rather than a transport of
+its own. The first run of this table did use its own, and it cost a real
+measurement: `qwen3-vl:30b` scored one page as no-answer that the lane's retry
+recovers. A tier whose entire output is the gap between it and Tier A cannot
+afford a second difference in it.
 
 Nothing here was measured on a real capture and nothing here can be. The pages
 come from `tools/bakeoff_cases.py`, which draws them from rows written in source,
@@ -430,18 +436,18 @@ and three models reach it.
 
 | Model | gate | mean s | strict | furniture | note |
 |---|---|---|---|---|---|
-| `minicpm-v4.5:8b` | **4/5** | **9.9** | 1.00 | 5 | fastest of the three that clear the hazards |
-| `qwen3-vl:8b` | 4/5 | 12.9 | 1.00 | 15 | same reading, a third slower, three times the furniture |
-| `qwen3-vl:30b` | 4/5 | 28.8 | 1.00 | 10 | no better than its 8b sibling and three times the cost |
-| `gemma3:4b` | 3/5 | 7.9 | 1.00 | 4 | best recall of any model (0.94); loses the scrawl |
-| `mistral-small3.2` | 3/5 | 33.6 | 1.00 | 3 | reads well, loses the scrawl, slow |
-| `gemma3:12b` | 3/4 | 42.6 | 0.83 | 6 | one page hit the 180s timeout outright |
-| `qwen3.8:27b` | 2/5 | 36.3 | 0.50 | 0 | loses the scrawl and half its amounts to the schema |
-| `gemma4:e4b` | 1/5 | 7.2 | 1.00 | 0 | fast and reads a third of the lines |
-| `glm-ocr` | 1/5 | 3.6 | 0.68 | 15 | fastest thing here; returns amounts in Chinese numerals |
-| `gemma4:12b` | 0/5 | 11.1 | 1.00 | 0 | quotes the total back and drops lines — what `foots` is for |
-| `qwen3.6:27b` | 0/5 | 43.8 | 0.12 | 0 | reads 0.90 of the lines and gates on none of them |
-| `qwen3.5:9b` | 0/5 | 6.3 | 0.17 | 0 | reads 0.17 under the schema, 0.77 without it |
+| `minicpm-v4.5:8b` | **4/5** | **8.2** | 1.00 | 5 | fastest of the three that clear the hazards |
+| `qwen3-vl:8b` | 4/5 | 11.4 | 1.00 | 15 | same reading, half again the time, three times the furniture |
+| `qwen3-vl:30b` | 4/5 | 18.9 | 1.00 | 10 | no better than its 8b sibling and twice the cost |
+| `gemma3:4b` | 3/5 | 7.0 | 1.00 | 4 | best recall of any model (0.94); loses the scrawl |
+| `mistral-small3.2` | 3/5 | 27.1 | 1.00 | 3 | reads well, loses the scrawl, slow |
+| `gemma3:12b` | 3/4 | 40.3 | 0.83 | 6 | one page hit the 180s timeout outright |
+| `qwen3.8:27b` | 2/5 | 28.7 | 0.50 | 0 | loses the scrawl and half its amounts to the schema |
+| `gemma4:e4b` | 1/5 | 6.2 | 1.00 | 0 | fast and reads a third of the lines |
+| `glm-ocr` | 1/5 | 3.2 | 0.68 | 15 | fastest thing here; returns amounts in Chinese numerals |
+| `gemma4:12b` | 0/5 | 10.0 | 1.00 | 0 | quotes the total back and drops lines — what `foots` is for |
+| `qwen3.6:27b` | 0/5 | 37.3 | 0.12 | 0 | reads 0.90 of the lines and gates on none of them |
+| `qwen3.5:9b` | 0/5 | 4.4 | 0.17 | 0 | reads 0.17 under the schema, 0.77 without it |
 
 `strict` is the fraction of returned amounts `receipt._decimal` accepts, scored
 apart from whether the model read the digits. That separation is the whole
@@ -452,14 +458,16 @@ reason the tier's first failure went unseen for as long as it did.
 **The schema is a reader, not just a validator.** The bottom two rows read the
 page perfectly well and score nothing through the lane. `qwen3.6:27b` returns
 0.90 of the lines and wraps every amount in `{"value": …}`, so `_decimal`
-accepts 12% of them; with the schema removed it is the strongest Tier B reader
-in the table at 0.92 recall and 1.00 strict. `qwen3.5:9b` goes from 0.17 to
-0.77 the same way. Screening on Tier A alone would have thrown both away as
-weak readers, and they are not weak readers.
+accepts 12% of them; with the schema removed it gates on three pages at 0.92
+recall and 1.00 strict. `qwen3.5:9b` goes from 0.17 to 0.77 the same way.
+Screening on Tier A alone would have thrown both away as weak readers, and they
+are not weak readers.
 
-It runs the other way too, which is worth knowing before anyone proposes
-dropping the schema: `glm-ocr` answers in 3.6s with it and rambles for 88.8s
-without it, and `qwen3-vl:30b` goes from 28.8s to 168.4s.
+It runs the other way too, and harder than expected — worth knowing before
+anyone proposes dropping the schema. `glm-ocr` answers in 3.2s with it and
+rambles past the timeout without it, twice. `qwen3-vl:30b` goes from 18.9s to
+93.0s and `qwen3-vl:8b` from 11.4s to 68.2s. Constrained decoding is not only a
+correctness device here; it is most of the speed.
 
 **`foots` is load-bearing, not a formality.** `gemma4:12b` returns the printed
 total correctly on every page and still gates on none: it quotes the total back
