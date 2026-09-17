@@ -213,6 +213,13 @@ be asked about the pages tesseract could not read, and is **off unless you turn
 it on** — see `.env.example`. Its answer is kept only if it makes the receipt
 add up, the same gate everything else passes.
 
+The model it asks for, `minicpm-v4.5:8b`, is the one that came out of a bake-off
+of twelve; nothing measured read more of a page, and of those that read as much
+it was the fastest. Running it wants a machine with roughly 8GB of GPU or
+unified memory free, and answers a page in about eight seconds there. It can run
+on a CPU and will take minutes. `.env.example` has the rest of what the host
+needs; `src/unbagged/adapters/hmart/NOTES.md` has the measurements.
+
 ## What this is not
 
 - **Not a request generator.** Use [Datenanfragen](https://www.datarequests.org/) to file.

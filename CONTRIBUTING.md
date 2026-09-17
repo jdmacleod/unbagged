@@ -238,10 +238,18 @@ answer at once. Do not add an input path to it. Anything it writes is still
 yours to run `make check-pii` over before committing.
 
 It reports two tiers. **Tier A** drives the lane as it ships — the real prompt,
-the real schema, and `from_reply` plus `foots` for the verdict. **Tier B** drops
-the schema and widens the context window. A model that fails A and passes B is
-capable and tripped by the schema rather than a weak reader, which is a
+the real schema, and `from_reply` plus `foots` for the verdict. **Tier B** is the
+same call with the schema left off and nothing else changed: the same transport,
+so the window is widened on demand by `ollama.ask` exactly as production widens
+it, rather than by a factor this tool picked. A model that fails A and passes B
+is capable and tripped by the schema rather than a weak reader, which is a
 different thing to fix.
+
+The default it produced is `ollama.DEFAULT_MODEL`, currently `minicpm-v4.5:8b`.
+Beating it means clearing the gate on more pages than it does, not answering
+faster: the two models that tie with it already cost two to three times as much
+per page for the same reading. `.env.example` carries what the host serving it
+needs, and `NOTES.md` carries the derivation.
 
 ## Which tier a test belongs in
 

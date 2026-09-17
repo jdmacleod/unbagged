@@ -518,6 +518,34 @@ capture that is not clipped".
 best recall in the table and loses the scrawl page; so does `mistral-small3.2`.
 A dozen real captures carry one, so it is not an exotic case.
 
+#### What the host has to bring
+
+Nothing here is a second measurement; it is what the table above and the
+transport imply for the machine serving the model, collected in one place
+because `.env.example` needs somewhere to point.
+
+The shipped default is an 8B model, which is a few gigabytes of weights resident
+between calls. On top of those sits the window: `ollama._chat` asks for
+`NUM_CTX_FLOOR + IMAGE_TOKENS * pages` — 8192 plus 3072 a page — and doubles it
+up to `MAX_SIZED_RETRIES` times when the server says the prompt overran, so a
+single page can finish a call having asked for about 45k tokens of KV cache. The
+pair wants roughly 8GB of VRAM or unified memory to sit in without spilling.
+Exact figures belong to the host and not to this file: `ollama show` reports what
+was pulled and `ollama ps` what it occupies loaded.
+
+Below that, it still works and gets slower, and slower has a cliff in it.
+`TIMEOUT_SECONDS` is 180 for one call, which the 8.2s mean is nowhere near — but
+`gemma3:12b` at a 40.3s mean hit it outright on one page, so the margin is about
+one order of magnitude and not two. A host that answers in tens of seconds on a
+GPU answers in minutes on a cold CPU, which is the same distance. The first call
+after an idle period also pays the model load inside that budget, so a host
+serving pages minutes apart wants the model kept resident rather than reloaded
+per capture.
+
+How often any of this is paid is set by the lane, not by the host: one call per
+capture the deterministic reader could not make add up. One out of 46 on the
+corpus this was built against.
+
 #### What this did not settle
 
 The default this replaced, `qwen2.5vl:7b`, **is not in this table because the

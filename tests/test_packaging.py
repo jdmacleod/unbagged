@@ -562,3 +562,28 @@ class TestTheOcrTierActuallyRuns:
         assert "tesseract-ocr" in workflow, (
             "the test job installs no OCR engine, so the capture suites will skip"
         )
+
+
+class TestTheDocumentedVisionModelIsTheShippedOne:
+    """The default is named in prose three times and defined once.
+
+    `ollama.DEFAULT_MODEL` is the definition. `.env.example` also carries it as
+    a commented assignment, which is the line a reader uncomments — so if the
+    code moves to a better model and that line does not, copying the example
+    file silently pins the model the bake-off rejected, and nothing else in the
+    suite would notice. Same reason the port is asserted against the README
+    above: a documented value that can drift is a documented value that will.
+    """
+
+    def _default(self) -> str:
+        from unbagged.transcription import ollama
+
+        return ollama.DEFAULT_MODEL
+
+    def test_the_example_file_offers_the_default_and_not_an_older_one(self):
+        example = (ROOT / ".env.example").read_text(encoding="utf-8")
+        assert f"UNBAGGED_OLLAMA_VISION_MODEL={self._default()}" in example
+
+    def test_the_readme_names_the_same_model(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        assert self._default() in readme
