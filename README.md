@@ -36,7 +36,8 @@ docker compose up --build
 ```
 
 Then open <http://localhost:8420> and drag the retailer's response onto the upload
-area.
+area. The zip it arrived in can be dropped as it is: each file inside becomes its
+own document with its own citation, so nothing has to be unpacked by hand.
 
 The first run builds the app: it pulls two base images, compiles the UI, and
 installs the Python dependencies, which took about 75 seconds on a clean machine.
