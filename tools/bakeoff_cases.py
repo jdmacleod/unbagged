@@ -344,23 +344,45 @@ def score(reply: dict | None, case: Case, seconds: float, failed: str = "") -> S
         for candidate in returned:
             if candidate[1] != amount:
                 continue
-            ratio = SequenceMatcher(None, name.upper(), candidate[0].upper()).ratio()
+            ratio = alike(name, candidate[0])
             if ratio >= score_of_best:
                 best, score_of_best = candidate, ratio
         if best is not None:
             result.matched += 1
             returned.remove(best)
 
-    # A negative the model returned as a positive is not a miss, it is a wrong
-    # answer of the kind that reaches the database looking correct.
-    for _, amount in case.negatives:
-        if not any(candidate[1] == amount for candidate in rows_amounts(rows)):
+    # A discount returned as a charge is the worst single error this project can
+    # make, so it is asked of the LINE and not of the answer as a whole.
+    #
+    # Scored on the amount alone, this passed whenever the required negative
+    # appeared anywhere in the reply — so a model that flipped a discount to a
+    # charge and happened to carry the same negative on another row scored
+    # clean, which is exactly the error the case exists to catch.
+    #
+    # Read across every row the model sent, furniture included: a discount
+    # misfiled as the receipt's own furniture is still a discount the basket
+    # lost, and filtering first would hide it.
+    every = rows_amounts(rows)
+    for name, _ in case.negatives:
+        best, score_of_best = None, SIMILAR_ENOUGH
+        for description, value in every:
+            ratio = alike(name, description)
+            if ratio >= score_of_best:
+                best, score_of_best = value, ratio
+        # No match at all is a recall miss, which `matched` already counts. This
+        # is only about the line the model DID return for it.
+        if best is not None and best > 0:
             result.signs_ok = False
 
     claimed = loose(reply.get("balance"))
     result.total_seen = claimed is not None
     result.total_ok = claimed is not None and claimed == case.balance
     return result
+
+
+def alike(wanted: str, got: str) -> float:
+    """How nearly two descriptions read as the same line."""
+    return SequenceMatcher(None, wanted.upper(), got.upper()).ratio()
 
 
 def rows_amounts(rows: list) -> list[tuple[str, Decimal | None]]:

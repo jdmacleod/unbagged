@@ -129,6 +129,40 @@ class TestScoringCountsWhatTheGateCaresAbout:
             row["amount"] = row["amount"].lstrip("-")
         assert not score(reply, case, 1.0).signs_ok
 
+    def test_a_flipped_discount_is_caught_even_when_the_amount_appears_elsewhere(self):
+        """Asked of the LINE, not of the answer as a whole.
+
+        Scored on the amount alone, this passed whenever the required negative
+        turned up anywhere in the reply — so a model that flipped one discount
+        to a charge while carrying the same negative on an unrelated row scored
+        clean, which is precisely the error this case exists to catch.
+        """
+        case = CASES_BY_NAME["discount"]
+        flipped, *rest = case.negatives
+        reply = perfect(case)
+        for row in reply["lines"]:
+            if row["description"] == flipped[0]:
+                row["amount"] = str(-flipped[1])
+        # The very amount that went missing, sitting on a line of its own.
+        reply["lines"].append({"description": "SOMETHING ELSE", "amount": str(flipped[1])})
+        assert rest, "the case must carry another negative or this proves less"
+        assert not score(reply, case, 1.0).signs_ok
+
+    def test_a_line_the_model_never_returned_is_a_recall_miss_not_a_sign_error(self):
+        """The two failures are different and are counted differently.
+
+        A dropped discount costs recall. Calling it a sign error as well would
+        report one mistake twice and make `signs_ok` a second, worse recall
+        score — the sign check is only ever about the line the model DID return.
+        """
+        case = CASES_BY_NAME["discount"]
+        name, _ = case.negatives[0]
+        reply = perfect(case)
+        reply["lines"] = [row for row in reply["lines"] if row["description"] != name]
+        measured = score(reply, case, 1.0)
+        assert measured.matched == measured.expected - 1
+        assert measured.signs_ok
+
     def test_a_missing_line_costs_recall(self):
         case = CASES_BY_NAME["plain"]
         reply = perfect(case)

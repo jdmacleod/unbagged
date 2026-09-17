@@ -127,6 +127,80 @@ class TestWhetherAModelMayBeAsked:
         assert ollama.availability(opener=replies(TAGS)).usable
 
 
+class TestFindingTheAnswerInTheReply:
+    """Where the object is, rather than assuming it is the whole reply.
+
+    Constrained decoding usually does make the reply one bare JSON object, but
+    not always: a model that wraps its answer in a code fence returned nothing
+    at all, which reads downstream as a model that could not answer rather than
+    one that answered in a fence.
+    """
+
+    @pytest.fixture()
+    def where(self, monkeypatch):
+        monkeypatch.setenv(ollama.HOST_ENV, "localhost:11434")
+        return ollama.availability(opener=replies(TAGS))
+
+    def _reply(self, where, text):
+        opener = replies({"message": {"content": text}, "done": True, "done_reason": "stop"})
+        return vision.read_receipt([b"png"], where, opener=opener)
+
+    def test_a_bare_object_is_read(self, where):
+        assert self._reply(where, '{"lines": [], "tax": "0", "balance": "1"}') is not None
+
+    def test_an_object_inside_a_code_fence_is_read(self, where):
+        found = self._reply(where, '```json\n{"lines": [], "tax": "0", "balance": "1.00"}\n```')
+        assert found is not None
+        assert found["balance"] == "1.00"
+
+    def test_a_brace_inside_a_description_does_not_end_the_object(self, where):
+        """Depth counting that ignores string state stops at the wrong brace.
+
+        `jsonscan` is the repository's string-aware scanner and exists because
+        two other readers hit this independently.
+        """
+        found = self._reply(
+            where,
+            'Here you go: {"lines": [{"description": "ODD {NAME", "amount": "1.00"}],'
+            ' "tax": "0", "balance": "1.00"}',
+        )
+        assert found is not None
+        assert found["lines"][0]["description"] == "ODD {NAME"
+
+    def test_prose_with_no_object_in_it_is_no_answer(self, where):
+        assert self._reply(where, "I am unable to read this receipt.") is None
+
+
+class TestAskingWithoutASchema:
+    """`schema=None`, which no caller in the application may pass.
+
+    It exists for `tools/bakeoff_vision.py`, which measures what a model does
+    with the schema against what it does without — and that comparison is only
+    worth anything if the schema is the only difference between the two calls.
+    """
+
+    @pytest.fixture()
+    def where(self, monkeypatch):
+        monkeypatch.setenv(ollama.HOST_ENV, "localhost:11434")
+        return ollama.availability(opener=replies(TAGS))
+
+    def test_no_format_is_sent_at_all(self, where):
+        opener = replies(chat({"lines": [], "tax": "0", "balance": "0"}))
+        ollama.ask([b"png"], "read it", None, where, opener=opener)
+        assert "format" not in opener.sent[0]["body"]
+
+    def test_everything_else_is_the_call_the_lane_makes(self, where):
+        """The point of the parameter: one difference, not two."""
+        with_schema = replies(chat({"lines": [], "tax": "0", "balance": "0"}))
+        without = replies(chat({"lines": [], "tax": "0", "balance": "0"}))
+        ollama.ask([b"png"], "read it", vision.RECEIPT_SCHEMA, where, opener=with_schema)
+        ollama.ask([b"png"], "read it", None, where, opener=without)
+        a = dict(with_schema.sent[0]["body"])
+        b = dict(without.sent[0]["body"])
+        assert a.pop("format") == vision.RECEIPT_SCHEMA
+        assert a == b
+
+
 class TestWhatIsAsked:
     @pytest.fixture()
     def where(self, monkeypatch):

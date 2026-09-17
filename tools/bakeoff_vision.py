@@ -18,9 +18,13 @@ Two tiers, and the gap between them is the signal:
 * **Tier A** drives the lane as it ships — `hmart.vision.read_receipt`, so the
   real prompt and the real schema, and then `receipt.from_reply` for the gate.
   "Does it work through the lane today?"
-* **Tier B** drops the schema and widens the context. "Can the model do it at
+* **Tier B** is the same call with the schema left off, and NOTHING else
+  changed — same transport, same retries, same window. "Can the model do it at
   all?" A model that fails A and passes B is capable and tripped by the schema,
   not a weak reader. The currency-mark bug would have shown up here on day one.
+  A second transport written for this tier would have made every build quirk
+  look like a fact about the model, which is the one thing the gap must not
+  contain.
 
 Usage:
 
@@ -35,13 +39,14 @@ Usage:
 
 A remote host needs `UNBAGGED_ALLOW_REMOTE_OLLAMA=true`, which the app requires
 for its own reasons. Nothing sent from here is anyone's receipt, but the
-acknowledgement is the app's and this does not step around it.
+acknowledgement is the app's and this does not step around it: the check runs
+before any model is discovered, so an unacknowledged host is never contacted at
+all rather than being contacted and then refused a model at a time.
 """
 
 from __future__ import annotations
 
 import argparse
-import base64
 import json
 import os
 import statistics
@@ -69,11 +74,6 @@ TIER_B_TAIL = (
     'of the form {"lines": [{"description": "...", "amount": "..."}], '
     '"tax": "...", "balance": "..."}.'
 )
-
-#: Twice what the lane allows. "Widen the window" is the point of Tier B — a
-#: model that needs more room to answer is a different finding from one that
-#: cannot read.
-TIER_B_NUM_CTX = (ollama.NUM_CTX_FLOOR + ollama.IMAGE_TOKENS) * 2
 
 
 @dataclass
@@ -153,38 +153,31 @@ def run_tier_a(case: Case, where: ollama.Availability) -> Result:
     return _result(where.model, "A", measured)
 
 
-def run_tier_b(case: Case, host: str, model: str, timeout: float) -> Result:
-    """The same question with the schema taken away and the window widened.
+def run_tier_b(case: Case, where: ollama.Availability) -> Result:
+    """The same question with the schema taken away, and nothing else changed.
 
-    Not the production transport, and deliberately not: `ollama.ask` sends the
-    schema as `format` by construction, which is the thing this tier exists to
-    remove. Keeping that guarantee in the lane intact is worth thirty lines here.
+    Through `ollama.ask` with `schema=None`, so the transport is the one the lane
+    uses: the same retry when a build rejects `think`, the same widening when an
+    answer will not fit, the same reading of an answer routed through a
+    reasoning channel. A second transport written here instead would have
+    compared this code against that code — a build quirk would have scored as a
+    model that cannot read, and the A/B gap is the whole output of the tool.
+
+    So the window is not widened by a fixed factor any more. `ask` doubles it on
+    demand, twice, which is what production does and one confound fewer.
+
+    Unconstrained, the answer arrives however the model felt like sending it —
+    fenced, prefaced, or explained afterwards. `ollama._content` locates the
+    object in the text rather than assuming it is the whole of it, so the prose
+    case is handled on the production path too and this tier needs no scanner of
+    its own.
     """
-    payload = {
-        "model": model,
-        "messages": [
-            {
-                "role": "user",
-                "content": vision.PROMPT + TIER_B_TAIL,
-                "images": [base64.b64encode(case.png()).decode("ascii")],
-            }
-        ],
-        "stream": False,
-        "options": {"temperature": 0, "num_ctx": TIER_B_NUM_CTX},
-        "think": False,
-    }
     started = time.monotonic()
-    try:
-        body = _post(f"{host.rstrip('/')}/api/chat", payload, timeout)
-    except Exception as exc:  # noqa: BLE001 - a bake-off records failures, it does not raise on them
-        return _result(model, "B", score(None, case, time.monotonic() - started, _why(exc)))
+    reply = ollama.ask([case.png()], vision.PROMPT + TIER_B_TAIL, None, where)
     seconds = time.monotonic() - started
-
-    content = ((body.get("message") or {}).get("content")) or ""
-    reply = _json_in(content)
     measured = score(reply, case, seconds, "" if reply else "no json in answer")
     _gate(measured, reply, case)
-    return _result(model, "B", measured)
+    return _result(where.model, "B", measured)
 
 
 def _gate(measured: Score, reply: dict | None, case: Case) -> None:
@@ -228,34 +221,6 @@ def _result(model: str, tier: str, measured: Score) -> Result:
         gate_ok=measured.gate_ok,
         failed=measured.failed,
     )
-
-
-def _json_in(text: str) -> dict | None:
-    """The first JSON object in a model's prose, if it sent one.
-
-    Tier B has no constrained decoding, so the answer arrives however the model
-    felt like sending it — fenced, prefaced, or explained afterwards. Brace
-    matching rather than a regex, because a description can contain a brace.
-    """
-    depth = 0
-    start = -1
-    for index, character in enumerate(text):
-        if character == "{":
-            if depth == 0:
-                start = index
-            depth += 1
-        elif character == "}":
-            depth -= 1
-            if depth == 0 and start >= 0:
-                try:
-                    found = json.loads(text[start : index + 1])
-                except ValueError:
-                    start = -1
-                    continue
-                if isinstance(found, dict) and "lines" in found:
-                    return found
-                start = -1
-    return None
 
 
 def _why(exc: Exception) -> str:
@@ -418,6 +383,17 @@ def main(argv: list[str] | None = None) -> int:
 
     os.environ[ollama.HOST_ENV] = args.host
 
+    # The app's own gate, BEFORE anything is sent. `availability` tests the host
+    # policy before it contacts the host, so asking it first is what makes this
+    # tool's claim true — discovery used to reach `/api/tags` and `/api/show` on
+    # an unacknowledged remote host while the docstring said it did not step
+    # around the acknowledgement. The model named here is whatever is configured;
+    # only the REFUSED answer is about the host, and only that one stops us.
+    refusal = ollama.availability()
+    if refusal.status is ollama.Reachability.REFUSED:
+        print(refusal.message, file=sys.stderr)
+        return 2
+
     try:
         available = vision_models(args.host, ollama.PREFLIGHT_TIMEOUT_SECONDS)
     except Exception as exc:  # noqa: BLE001 - the host being down is a message, not a traceback
@@ -449,10 +425,7 @@ def main(argv: list[str] | None = None) -> int:
             continue
         for case in cases:
             for tier in tiers:
-                if tier == "A":
-                    result = run_tier_a(case, where)
-                else:
-                    result = run_tier_b(case, args.host, model, args.timeout)
+                result = run_tier_a(case, where) if tier == "A" else run_tier_b(case, where)
                 results.append(result)
                 print(
                     f"  {tier} {case.name:<10} {result.seconds:>6.1f}s "
