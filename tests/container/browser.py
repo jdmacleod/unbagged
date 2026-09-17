@@ -55,10 +55,17 @@ DROP_ATTEMPTS = 3
 #: Issuing a `fetch` takes milliseconds, so this is margin rather than budget.
 DROP_SETTLE_MS = 5_000
 
-#: How long to wait once the page says it is BUSY, in ms. A send has started by
-#: then, so this has to clear a real round trip — a long report is tens of
-#: seconds of parsing — rather than the milliseconds a dispatch takes.
-BUSY_GRACE_MS = 120_000
+#: How long to wait once the page says it is BUSY, in ms.
+#:
+#: This waits for the REQUEST to be issued, not for the response to come back,
+#: and `send()` issues its `fetch` microseconds after it sets the flag the page
+#: is reporting. Sized at two minutes first, against how long a long report
+#: takes to PARSE — the wrong quantity, and not a harmless one: stacked with the
+#: caller's own 120s `wait_for_selector` it reached past the tier's 180s cap in
+#: `conftest.py`, whose whole purpose is to sit ABOVE every internal deadline.
+#: Over it, pytest kills the test instead of letting either wait say what it was
+#: waiting for, which is the opaque failure this file exists to remove.
+BUSY_GRACE_MS = 10_000
 
 #: How long to wait for the file input to exist at all, in ms.
 FIELD_ATTACH_MS = 30_000
@@ -67,9 +74,22 @@ FIELD_ATTACH_MS = 30_000
 POLL_MS = 100
 
 
+#: The drop zone, which is the element carrying `aria-busy` AND holding the file
+#: input. Scoped rather than a bare `[aria-busy="true"]`: a second busy element
+#: anywhere on the page would otherwise send a drop into the busy branch for an
+#: unrelated reason and then misreport the timeout as the #48 mutex bug.
+BUSY_DROP_ZONE = '[aria-busy="true"]:has(input[type=file])'
+
+
 def _is_upload(request) -> bool:
-    """The one POST this app makes to `/api/requests` is an upload."""
-    return request.method == "POST" and request.url.rstrip("/").endswith("/requests")
+    """The one POST this app makes to `/api/requests` is an upload.
+
+    Matched on the PATH, not the whole URL. `endswith("/requests")` reads the
+    query string too, so adding one parameter to the upload call would stop
+    every drop being seen — and the failure would be this helper reporting "no
+    upload request" while a POST went out on every attempt.
+    """
+    return request.method == "POST" and urlparse(request.url).path.rstrip("/").endswith("/requests")
 
 
 def drop(page, *paths) -> None:
@@ -116,22 +136,27 @@ def drop(page, *paths) -> None:
         if _is_upload(request):
             sent.append(request.url)
 
-    page.on("request", _record)
-
-    # Re-resolved on every attempt rather than pinned to a handle: a remount is
-    # the thing being recovered from, so the next try wants the NEW input.
-    field = page.locator("input[type=file]")
-    field.wait_for(state="attached", timeout=FIELD_ATTACH_MS)
-
+    # Registered INSIDE the try. Outside it, a `wait_for` that timed out — the
+    # input never appeared, which is one of the states this helper exists to
+    # diagnose — skipped the removal below and left the handler on the page for
+    # the rest of the session, once per call site.
     try:
+        page.on("request", _record)
+        # Re-resolved on every attempt rather than pinned to a handle: a remount
+        # is the thing being recovered from, so the next try wants the NEW input.
+        field = page.locator("input[type=file]")
+        field.wait_for(state="attached", timeout=FIELD_ATTACH_MS)
+
         for _ in range(DROP_ATTEMPTS):
             before = len(sent)
             field.set_input_files([])
             field.set_input_files([str(x) for x in paths])
             if _sent_since(page, sent, before, DROP_SETTLE_MS):
+                _one_upload_only(sent, before)
                 return
-            if page.locator('[aria-busy="true"]').count():
+            if page.locator(BUSY_DROP_ZONE).count():
                 if _sent_since(page, sent, before, BUSY_GRACE_MS):
+                    _one_upload_only(sent, before)
                     return
                 raise AssertionError(
                     "the drop zone reports itself busy but issued no upload request — "
@@ -147,6 +172,23 @@ def drop(page, *paths) -> None:
         f"{', '.join(Path(x).name for x in paths)} — the change event reached no "
         "live handler, so nothing was ever sent"
     )
+
+
+def _one_upload_only(sent: list[str], before: int) -> None:
+    """One drop is one upload, and this helper must never hide otherwise.
+
+    `_sent_since` answers "did at least one request go out", which is the
+    question the retry needs and the wrong one to return on. A drop that somehow
+    produced two POSTs would satisfy it and be reported as success — quietly
+    turning the double-submit regression `TestOneDropIsOneUpload` exists to
+    catch into a green run, from inside the harness rather than the app.
+    """
+    extra = len(sent) - before
+    if extra > 1:
+        raise AssertionError(
+            f"one drop produced {extra} upload requests — the in-flight guard is "
+            "not holding, which is the shape of issue #48"
+        )
 
 
 def _sent_since(page, sent: list[str], before: int, timeout_ms: int) -> bool:
