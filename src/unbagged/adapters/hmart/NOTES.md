@@ -554,10 +554,29 @@ the bake-off was for; what is recorded here is the field that replaced it, not a
 comparison with it. `minicpm-v4.5:8b` is the shipped default from this release
 on.
 
+**`llama3.2-vision:11b` was never screened, and this run cannot say why.** #91
+named it as the one candidate to screen rather than assume about — it was
+reported broken on the sibling project's Ollama build — and it does not appear
+above. Absent from the table means one of two things: the host did not have it,
+or the host had it and did not report it as vision-capable, in which case
+`vision_models` dropped it silently. The record of the run distinguishes
+neither, which is precisely the assumption the issue asked us not to make. The
+tool now prints a line for every model it drops and the reason, so a re-run
+answers this; until one happens, the honest statement is that the twelve rows
+above are eleven of #91's twelve candidates plus `qwen3.8:27b`, which the host
+had and the issue did not name.
+
 Everything above is one host, one day, one quantisation of each tag. A re-pulled
 tag can be a different build — `gemma3:12b` hitting a 180s timeout on one page
 is the kind of result that may not reproduce. Re-run the bake-off rather than
 trusting this table after a model is re-pulled.
+
+Comparing a re-run against this table used to rest on that warning alone. A
+saved `--out` file now opens with the date, the host, the Ollama version, this
+repo's version, and a digest for each model measured — so two results files can
+be told apart, and a tag that changed underneath a re-run shows up as a changed
+digest rather than as an unexplained row. The prose above is still the only
+record for THIS run, which predates the header.
 
 
 ### Deliberately not read

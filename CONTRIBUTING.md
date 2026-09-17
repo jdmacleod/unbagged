@@ -228,6 +228,15 @@ results and the date they were taken on.
 
     python -m tools.bakeoff_vision --screen --host http://10.0.0.2:11434
     python -m tools.bakeoff_vision --models qwen3-vl:8b --out results.json
+    python -m tools.bakeoff_vision --from results.json
+
+A full matrix is measured in hours, so `--out` is written as it goes and
+`--from` re-renders it without asking a model anything. That file opens with the
+date, the host, the Ollama version, this repo's version and a digest for each
+model measured: a tag can be re-pulled into a different quantisation, and the
+digest is the only field that can tell a re-run it measured something else.
+Screening names what it skips and why, so a candidate missing from a table can
+be told from one the host never had.
 
 **Its inputs are synthetic by construction and there is no flag that takes a
 file.** Every page comes from `tools/bakeoff_cases.py`, which draws it from rows

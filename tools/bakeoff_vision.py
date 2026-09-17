@@ -37,6 +37,14 @@ Usage:
     # what a model does without the schema in its way
     python -m tools.bakeoff_vision --models glm-ocr:latest --tier b
 
+    # re-render a saved table, asking no model anything
+    python -m tools.bakeoff_vision --from results.json
+
+A `--out` file opens with the run's own provenance — date, host, Ollama version,
+this repo's version, and a digest per model — because a score belongs to a model
+on a day on a machine and a tag can be re-pulled into a different build. Files
+written before that header existed are still read.
+
 A remote host needs `UNBAGGED_ALLOW_REMOTE_OLLAMA=true`, which the app requires
 for its own reasons. Nothing sent from here is anyone's receipt, but the
 acknowledgement is the app's and this does not step around it: the check runs
@@ -47,6 +55,8 @@ all rather than being contacted and then refused a model at a time.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import datetime as dt
 import json
 import os
 import statistics
@@ -62,6 +72,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from tools.bakeoff_cases import CASES, CASES_BY_NAME, Case, Score, score  # noqa: E402
 
+from unbagged import __version__  # noqa: E402
 from unbagged.adapters.hmart import receipt as rc  # noqa: E402
 from unbagged.adapters.hmart import vision  # noqa: E402
 from unbagged.transcription import ollama  # noqa: E402
@@ -99,12 +110,66 @@ class Result:
     failed: str
 
 
+def provenance(host: str, timeout: float, models: list[str]) -> dict:
+    """What the host was, recorded beside the numbers it produced.
+
+    A score is about a model on a day on a machine, and every one of those three
+    can move without the table saying so. `NOTES.md` carries them in prose for
+    the run it publishes; a saved `--out` file is the machine-readable copy and
+    used to carry none of them, so two results files were indistinguishable and
+    neither could say which build it had measured.
+
+    The digest is the part that prose cannot keep up with. A re-pulled tag is
+    the same string and can be a different quantisation — the one hazard the
+    table's own closing paragraph warns about — and it is the only field here
+    that can prove a re-run measured what the last run measured.
+
+    Nothing here is asked of a model. It is two GETs against the host, and a
+    failure to answer them costs the header a field rather than the run.
+    """
+    header: dict = {
+        "measured": dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat(),
+        "host": host,
+        "unbagged": __version__,
+        "ollama": None,
+        "digests": {},
+    }
+    with contextlib.suppress(Exception):  # a host too old to report it is not a failed run
+        header["ollama"] = _get(f"{host.rstrip('/')}/api/version", timeout).get("version")
+    try:
+        entries = _get(f"{host.rstrip('/')}/api/tags", timeout).get("models") or []
+    except Exception:  # noqa: BLE001 - same
+        entries = []
+    wanted = set(models)
+    header["digests"] = {
+        str(entry.get("name")): str(entry.get("digest", ""))[:12]
+        for entry in entries
+        if str(entry.get("name")) in wanted
+    }
+    return header
+
+
+def describe(header: dict) -> str:
+    """The header as the one line a reader of the table needs."""
+    return (
+        f"{header.get('measured', '?')}  host {header.get('host', '?')}  "
+        f"ollama {header.get('ollama') or '?'}  unbagged {header.get('unbagged', '?')}"
+    )
+
+
 def vision_models(host: str, timeout: float) -> list[str]:
     """Every model on the host the server itself says can take images.
 
     Asked of `/api/show`, never inferred from the name, for the reason
     `ollama._can_see` gives: a text-only sibling shares a multimodal model's
     family, so the tag says nothing.
+
+    **What is dropped is named, and that is not decoration.** A model the host
+    has and does not report as vision-capable used to vanish here without a
+    word, which is indistinguishable in the record from a model the host never
+    had. #91 asked specifically for one candidate to be screened rather than
+    assumed about, and the run it produced cannot say which of the two happened
+    to it. One line per dropped model is what makes that answerable next time.
     """
     body = _get(f"{host.rstrip('/')}/api/tags", timeout)
     names = sorted(str(entry.get("name", "")) for entry in (body.get("models") or []))
@@ -114,10 +179,13 @@ def vision_models(host: str, timeout: float) -> list[str]:
             continue
         try:
             shown = _post(f"{host.rstrip('/')}/api/show", {"model": name}, timeout)
-        except Exception:  # noqa: BLE001, S112 - a server too old to report capabilities is not a failure
+        except Exception as exc:  # noqa: BLE001 - a server too old to report capabilities is not a failure
+            print(f"  skipped {name}: /api/show did not answer ({_why(exc)})")
             continue
         if "vision" in (shown.get("capabilities") or []):
             seeing.append(name)
+        else:
+            print(f"  skipped {name}: the host does not report it as vision-capable")
     return seeing
 
 
@@ -378,7 +446,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.replay:
         # A full matrix is measured in hours. Changing how it is REPORTED should
         # not cost another one.
-        report([Result(**row) for row in json.loads(args.replay.read_text())])
+        #
+        # Both shapes are read: a bare list is what this wrote before it recorded
+        # a header, and those files are the only copy of runs that cost hours.
+        # Refusing them to tidy the format up would throw the measurements away.
+        saved = json.loads(args.replay.read_text())
+        if isinstance(saved, dict):
+            print(describe(saved))
+            rows = saved.get("results") or []
+        else:
+            print(f"{args.replay}: no header — measured by a build that recorded none.")
+            rows = saved
+        report([Result(**row) for row in rows])
         return 0
 
     os.environ[ollama.HOST_ENV] = args.host
@@ -416,6 +495,13 @@ def main(argv: list[str] | None = None) -> int:
     cases = [CASES_BY_NAME[n.strip()] for n in args.cases.split(",")] if args.cases else list(CASES)
     tiers = ("A", "B") if args.tier == "both" else (args.tier.upper(),)
 
+    # Taken BEFORE the matrix, not after. A run measured in hours can end with a
+    # host that has been restarted or re-pulled since it started, and a header
+    # written at the end would describe that host rather than the one the
+    # numbers came from.
+    header = provenance(args.host, ollama.PREFLIGHT_TIMEOUT_SECONDS, models)
+    print(describe(header))
+
     results: list[Result] = []
     for model in models:
         where = _availability_for(model)
@@ -436,7 +522,9 @@ def main(argv: list[str] | None = None) -> int:
                 # Written as it goes. A matrix this size is measured in hours and
                 # a host that goes away should not cost every answer before it.
                 if args.out:
-                    args.out.write_text(json.dumps([asdict(r) for r in results], indent=1))
+                    args.out.write_text(
+                        json.dumps({**header, "results": [asdict(r) for r in results]}, indent=1)
+                    )
 
     report(results)
     return 0
