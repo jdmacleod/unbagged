@@ -41,13 +41,14 @@ own document with its own citation, so nothing has to be unpacked by hand. One
 exception: a password-protected archive cannot be opened here, and says so rather
 than failing quietly — unpack that one yourself and drop what was inside.
 
-The first run builds the app: it pulls two base images, compiles the UI, and
-installs the Python dependencies, which took about 75 seconds on a clean machine.
-There is no prebuilt image to download, deliberately — you run what you can read.
-Later starts re-check the build first and are immediate when nothing has changed,
-which measured at about two seconds. That check is why `--build` is on the
-command: without it Docker reuses the image it built last, and a pull would
-leave you running the previous version with nothing but the footer to say so. Reading a long report takes 10 to 30 seconds.
+The first run builds the app: two base images, the UI, and the Python dependencies,
+about 75 seconds on a clean machine. There is no prebuilt image to download,
+deliberately — you run what you can read. Later starts re-check the build and take
+about two seconds when nothing has changed. Keep `--build` on the command: without
+it Docker serves whatever it built last, so a pull can leave you running the
+previous version.
+
+Reading a long report takes 10 to 30 seconds.
 
 Your database and uploads live in `./data`, on your disk. Back it up by copying
 that directory.
@@ -155,29 +156,11 @@ the API proxied at `/api`. The backend's own port is deliberately not published 
 dev: it would serve the bundle frozen into the image at build time, with no way to
 tell from a browser.
 
-`make test-container` builds and runs a real container and checks the things only a
-running one can show: effective uid, data permissions, bounded restart, that the
-shipped image is the runtime stage, that no view scrolls sideways from 320px up,
-that a first upload's report — which retailer matched, and every parse warning — is
-still on screen once the response has loaded, and that adding a response switches to
-it rather than leaving you reading the one you added before. A second browser module
-covers the ten to thirty seconds between dropping a file and reading the report: that
-the upload lands on the view you are on when it finishes rather than the one you left,
-that no other response flashes up first, that Back still works afterwards, that the
-report takes focus and the outcome is announced, that a failed read of the response
-list keeps what is on screen instead of emptying the page, and that a second tab finds
-out when a response is removed.
-Tests needing real uid semantics skip loudly on Docker Desktop, where bind-mount
-ownership is remapped and they would otherwise pass without checking anything.
-
-The two frontend tiers split by what they can reach, and it matters where a test
-lands. `make test-frontend` runs vitest over the pure decisions — which response to
-show, whether a navigation goes anywhere, what the arrival announcement says — and
-that suite has no DOM renderer, so it cannot reach any of the wiring. A claim about
-real responses landing against a real DOM — a stale closure resolving half a minute
-later, a history entry, a focus move, an aborted fetch — belongs in the container
-tier, which drives a browser. The browser modules there share one harness
-(`tests/container/browser.py`), so two tests that mean to start the same app do.
+`make test-container` builds and runs a real container and checks what only a running
+one can show: how it starts, what it may touch on disk, and what the app actually
+does in a browser between dropping a file and reading the report. It is slow and it
+is where anything involving a real DOM belongs; `CONTRIBUTING.md` explains which tier
+a given test goes in and why.
 
 `make help` lists the rest. `CONTRIBUTING.md` covers the PII safeguards, which you
 should read before putting a real report anywhere near this repository.

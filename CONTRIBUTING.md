@@ -243,6 +243,25 @@ the schema and widens the context window. A model that fails A and passes B is
 capable and tripped by the schema rather than a weak reader, which is a
 different thing to fix.
 
+## Which tier a test belongs in
+
+Three tiers, split by what they can reach. Putting a test in the wrong one is how
+it passes while asserting nothing.
+
+| Tier | Command | Reaches |
+|---|---|---|
+| Fast | `make test` | Python: adapters, extraction, the schema, the API through `TestClient` |
+| Frontend | `make test-frontend` | vitest over pure decisions — which response to show, whether a navigation goes anywhere, what the arrival announcement says. **No DOM renderer**, so it cannot reach any of the wiring |
+| Container | `make test-container` | A real image, a real browser: uid and data permissions, bounded restart, that no view scrolls sideways from 320px up, and anything that happens against a real DOM |
+
+The line that matters is between the last two. A claim about real responses landing
+— a stale closure resolving half a minute later, a history entry, a focus move, an
+aborted fetch — cannot be made in vitest, because there is nothing there for it to
+land against. It goes in the container tier.
+
+Tests needing real uid semantics skip loudly on Docker Desktop, where bind-mount
+ownership is remapped and they would otherwise pass without checking anything.
+
 ## Writing a test that needs a browser
 
 Mark it with `requires_browser` from `tests/container/conftest.py`, not
@@ -419,8 +438,8 @@ compatibility contract is read against your database rather than a code API, and
 a prebuilt image would ask people to trust a binary in a project whose whole
 pitch is that they can read every line first.
 
-    git tag -s v0.13.0 -m "unbagged 0.13.0"
-    git push origin v0.13.0
+    git tag -s v0.16.0 -m "unbagged 0.16.0"
+    git push origin v0.16.0
 
 That is the whole procedure. `.github/workflows/release.yml` fires on the tag,
 runs `tools/release_notes.py`, and creates the release from the CHANGELOG
@@ -448,7 +467,7 @@ commit cannot be quietly moved — it has to be superseded by a new version.
 Tags are signed, and `.github/allowed_signers` is what lets you check one:
 
     git config gpg.ssh.allowedSignersFile .github/allowed_signers
-    git verify-tag v0.12.0
+    git verify-tag v0.16.0
     # Good "git" signature for ... with ED25519 key SHA256:...
 
 GitHub verifies independently and shows a Verified badge either way. The file
