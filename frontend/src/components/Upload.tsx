@@ -183,16 +183,16 @@ export function Upload({
           <h2 className="font-serif text-[17px] font-semibold">
             Start with a retailer&rsquo;s response
           </h2>
-          {/* Said "The PDF or zip". The app reads PDF and text and nothing
-              else — `extraction.py` answers a zip with "unzip an archive
-              first" — so the first screen was inviting the one action that
-              cannot work. */}
+          {/* Said "The PDF or zip" when the app could read neither, then said
+              to unzip when it could not read an archive. It can now, so the
+              instruction is gone rather than softened: a sentence telling
+              somebody to do work the machine does is worse than no sentence. */}
           <p className="mt-1 max-w-[62ch] text-muted">
             The PDF, text file, spreadsheet export or screen captures a
-            retailer sent back when you filed a right-to-know request. If it
-            arrived as a zip, unzip it first and drop what was inside — all of
-            it at once, since it is one response. It is read here, on this
-            machine, and nothing is uploaded anywhere.
+            retailer sent back when you filed a right-to-know request — or the
+            zip they arrived in. Drop all of it at once, since it is one
+            response. It is read here, on this machine, and nothing is uploaded
+            anywhere.
           </p>
         </div>
       )}
@@ -229,15 +229,17 @@ export function Upload({
           // Mirrors extraction.py's TEXT_SUFFIXES plus PDF and the image
           // formats `classify()` routes. Only filters the picker — a drop still
           // accepts anything and the server still explains what it could not
-          // read — but it stops the file dialog offering the zip the reader was
-          // told not to use.
+          // read.
           //
           // Images are here because a response can arrive as screen captures of
-          // a receipt viewer, which is what one store could supply. Unzip the
-          // folder first and select all of them.
+          // a receipt viewer, which is what one store could supply. `.zip` is
+          // here because that is how such a folder arrives: `ingest` expands an
+          // archive into its members, each its own document with its own
+          // citation, so the reader no longer has to unpack it and select every
+          // file by hand — which cost a visit if they missed one.
           accept={
-            ".pdf,.txt,.text,.json,.csv,.md,.xls,.png,.jpg,.jpeg,.webp,.gif," +
-            "application/pdf,text/plain,image/*"
+            ".pdf,.txt,.text,.json,.csv,.md,.xls,.png,.jpg,.jpeg,.webp,.gif,.zip," +
+            "application/pdf,text/plain,application/zip,image/*"
           }
           disabled={busy}
           className="hidden"

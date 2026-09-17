@@ -95,9 +95,30 @@ class TestFailures:
             extract(doc)
 
     def test_an_unsupported_format_names_the_way_out(self, tmp_path):
+        path = tmp_path / "report.rtf"
+        path.write_bytes(b"{\\rtf1 not a format this reads}")
+        with pytest.raises(ExtractionError, match="Supported inputs"):
+            extract(document(path))
+
+    def test_an_archive_reaching_this_layer_is_one_inside_another(self, tmp_path):
+        """`ingest` expands an archive before a bundle exists, so nothing
+        ordinary arrives here as one. What does is a member that is itself an
+        archive, which is refused by name rather than recursed into."""
         path = tmp_path / "bundle.zip"
         path.write_bytes(b"PK\x03\x04nope")
-        with pytest.raises(ExtractionError, match="unzip"):
+        with pytest.raises(ExtractionError, match="archive inside an archive"):
+            extract(document(path))
+
+    def test_an_xlsx_is_not_claimed_as_an_archive(self, tmp_path):
+        """Order matters in `classify`: every Office format is a zip.
+
+        A magic-bytes test placed before the suffix check would claim `.xlsx`,
+        `.docx` and `.odt` as archives to unpack, and the reader would be told to
+        unpack a spreadsheet.
+        """
+        path = tmp_path / "book.xlsx"
+        path.write_bytes(b"PK\x03\x04and the rest of a workbook")
+        with pytest.raises(ExtractionError, match="XML Spreadsheet 2003"):
             extract(document(path))
 
     def test_an_empty_file_is_an_extraction_failure(self, tmp_path):

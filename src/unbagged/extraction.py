@@ -37,6 +37,29 @@ from unbagged.models import SourceDocument
 log = logging.getLogger(__name__)
 
 PDF_MAGIC = b"%PDF"
+
+#: How a zip can begin. `PK\x03\x04` is a local file header and is what an
+#: archive with anything in it starts with; `PK\x05\x06` is an end-of-central-
+#: directory record, which is the whole of an EMPTY archive; `PK\x07\x08` marks
+#: one spanned across volumes. All three are recognised so that an archive is
+#: answered as an archive rather than falling through to "this is a .zip file
+#: and is not supported", which is the one sentence that would be untrue.
+#:
+#: Recognition is by these records only, so a self-extracting archive — a zip
+#: with an executable stub in front of it — is NOT one of these. That is
+#: deliberate: it is a program, and unpacking a program somebody mailed you is
+#: not a thing this should offer to do.
+#:
+#: Being zip-shaped is the point and also the difficulty: it is the container
+#: under `.xlsx`, `.docx` and `.odt` too. Routing on it alone would claim all of
+#: them, so `classify` tests it after the formats that live inside a zip have
+#: had their say.
+ZIP_MAGICS: tuple[bytes, ...] = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
+
+#: The one that carries a member. `ingest` expands only these, because the other
+#: two hold nothing to expand.
+ZIP_MAGIC = ZIP_MAGICS[0]
+
 TEXT_SUFFIXES = {".txt", ".text", ".json", ".csv", ".md"}
 
 #: Image formats, by their magic bytes, mapped to the media type to store.
@@ -490,6 +513,21 @@ def looks_like_pdf(path: Path) -> bool:
         return False
 
 
+def looks_like_zip(path: Path) -> bool:
+    """Magic bytes only. Says nothing about whether the archive is readable.
+
+    An empty archive and a truncated one both fail later, with their own
+    messages — this answers "is this shaped like a zip", which is the routing
+    question.
+    """
+    try:
+        with path.open("rb") as fh:
+            head = fh.read(4)
+    except OSError:
+        return False
+    return head in ZIP_MAGICS
+
+
 def looks_like_image(path: Path) -> str | None:
     """The image media type of this file, or None if it is not one.
 
@@ -573,6 +611,14 @@ def classify(document: SourceDocument, path: Path) -> str:
     document gets stored with one media type and read with another. Routing is
     by content rather than by suffix wherever content can answer: `.xls` covers
     two unrelated formats and only one of them is the XML kind this reads.
+
+    `archive` is tested LAST among the content checks, and the order is
+    load-bearing. `.xlsx`, `.docx` and `.odt` are zips, so a magic-bytes test
+    placed first would claim every one of them as an archive to be unpacked.
+    Everything this can actually read is identified before the question is
+    asked. An archive never reaches `extract()` in the ordinary case — `ingest`
+    expands one into its members before a bundle is built — so this exists for
+    the case that slips past: a member that is itself an archive.
     """
     suffix = path.suffix.lower()
     if suffix == ".pdf" or looks_like_pdf(path):
@@ -585,6 +631,8 @@ def classify(document: SourceDocument, path: Path) -> str:
         return "text"
     if suffix in {".xls", ".xlsx"}:
         return "binary_workbook"
+    if looks_like_zip(path):
+        return "archive"
     return "unsupported"
 
 
@@ -702,11 +750,20 @@ def extract(document: SourceDocument, max_pages: int | None = None) -> Extracted
             "reads is the XML kind: in Excel choose Save As and pick XML "
             "Spreadsheet 2003, or export CSV."
         )
+    elif kind == "archive":
+        # Reached only for an archive INSIDE an archive: `ingest` expands the
+        # outer one before a bundle exists, and refuses a nested one by name
+        # rather than recursing. A reader who gets here has an archive whose
+        # members are archives, and the fix is theirs to make.
+        raise ExtractionError(
+            f"{document.original_filename} is an archive inside an archive. "
+            "Unpack the inner one and upload what is in it."
+        )
     else:
         raise ExtractionError(
             f"{document.original_filename} is a {suffix or 'typeless'} file. "
-            "Supported inputs are PDF, text, and the XML kind of spreadsheet "
-            "export; unzip an archive first."
+            "Supported inputs are PDF, text, images, the XML kind of spreadsheet "
+            "export, and a zip of those."
         )
 
     if not any(page.strip() for page in pages):

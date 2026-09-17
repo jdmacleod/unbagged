@@ -276,16 +276,27 @@ def create_request(
     """
     stored = []
     total = 0
+    # What is LEFT of what this request may unpack to. Carried across the loop
+    # rather than applied per file: a per-archive cap honoured ten times over is
+    # ten times the cap on disk.
+    unpacking = ingest.MAX_ARCHIVE_BYTES
     for upload in files:
         content = upload.file.read()
         total += len(content)
         if total > MAX_UPLOAD_BYTES:
             raise ingest.IngestError(
                 f"The upload exceeds {MAX_UPLOAD_BYTES // (1024 * 1024)} MB. A "
-                "right-to-know response is a document, not a data lake — if this "
-                "is an archive, extract it and upload the report itself."
+                "right-to-know response is a document, not a data lake. Note "
+                "that this bounds what you send: an archive is also bounded by "
+                "what it expands to."
             )
-        stored.append(ingest.store_upload(upload.filename or "upload", content))
+        # `store_upload_many`, because a response can arrive as a zip: one
+        # upload, many documents. Anything that is not an archive comes back as
+        # a list of one, so the rest of this is the same for both.
+        members = ingest.store_upload_many(upload.filename or "upload", content, budget=unpacking)
+        stored.extend(members)
+        if ingest.looks_like_archive(content):
+            unpacking -= sum(member.size for member in members)
 
     result = ingest.ingest(conn, stored, declared_retailer=declared_retailer)
     return {

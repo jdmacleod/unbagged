@@ -1,5 +1,7 @@
 """The API, end to end, against the synthetic fixture."""
 
+import io
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -257,14 +259,48 @@ class TestUpload:
         assert "no text" in detail or "ocr" in detail
         assert "writing-an-adapter" not in detail
 
-    def test_an_archive_is_told_to_unzip_first(self, client):
-        # A zip is what Safeway sends, per docs/handoff.md section 4.
+    def test_a_response_that_arrives_as_a_zip_is_read(self, client):
+        """A zip is what Safeway sends, per `docs/handoff.md` section 4, and it
+        is how a folder of screen captures arrives. The reader used to be told
+        to unpack it and select every file by hand."""
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("history.xls", HMART_FIXTURE.read_bytes())
+        response = client.post(
+            "/api/requests",
+            files={"files": ("response.zip", buffer.getvalue(), "application/zip")},
+        )
+        assert response.status_code == 201, response.text
+        assert response.json()["retailer_id"] == "hmart"
+        assert response.json()["summary"]["transactions"] > 0
+
+    def test_each_member_is_its_own_document(self, client):
+        """`SourceBundle` carries per-document provenance, so flattening an
+        archive into one document would put every record behind one citation."""
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("letter.txt", b"Dear customer, hello.\n")
+            archive.writestr("notes/second.txt", b"A second page, filed elsewhere.\n")
+        created = client.post(
+            "/api/requests",
+            files={"files": ("response.zip", buffer.getvalue(), "application/zip")},
+        )
+        assert created.status_code == 201, created.text
+        documents = client.get(f"/api/requests/{created.json()['request_id']}").json()["documents"]
+        # The folder a member sat in is not part of the name the retailer's
+        # export produced, and the capture reader takes a date out of that name.
+        assert sorted(d["original_filename"] for d in documents) == [
+            "letter.txt",
+            "second.txt",
+        ]
+
+    def test_a_zip_that_cannot_be_opened_says_so(self, client):
         response = client.post(
             "/api/requests",
             files={"files": ("bundle.zip", b"PK\x03\x04nope", "application/zip")},
         )
         assert response.status_code == 400
-        assert "unzip" in response.json()["detail"].lower()
+        assert "could not be opened" in response.json()["detail"].lower()
 
     def test_the_same_file_twice_in_one_upload_is_refused(self, client):
         payload = FIXTURE.read_bytes()
