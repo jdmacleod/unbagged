@@ -12,6 +12,7 @@ means importing a name nothing appears to use.
 
 from __future__ import annotations
 
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -45,24 +46,77 @@ The Privacy Team
 """
 
 
+#: How many times a drop is retried when it produced no upload request.
+#: Three is two more than the observed failures ever needed; the point is that
+#: the retry exists at all, not the count.
+DROP_ATTEMPTS = 3
+
+#: How long to wait for the request a drop should have produced, in ms.
+#: Issuing a `fetch` takes milliseconds — this is generous against a loaded
+#: machine, and still a twenty-fourth of the 120s the callers allow. It has to
+#: stay well under a real round trip: `send()` refuses a second file while one
+#: is in flight, so retrying on top of a slow-but-live upload would replace the
+#: answer under test with "Still reading the last file".
+DROP_SETTLE_MS = 5_000
+
+
 def drop(page, *paths) -> None:
-    """Put files on the upload input and guarantee a change event.
+    """Put files on the upload input and confirm the app actually read them.
+
+    Two failures live here, and the second one outlived the fix for the first.
 
     `set_input_files` fires nothing when the input already holds exactly those
     files, and several tests here deliberately re-drop the same report to reach
-    the duplicate-refusal path. Whether that fired at all depended on the
-    `<Upload>` component having remounted in between — it is mounted at one
-    position while there are no responses and another once there is one — so the
-    second drop worked most of the time and hung for 120 seconds when the DOM
-    query won the race.
+    the duplicate-refusal path. Clearing first makes the next assignment a
+    change whatever the input was holding.
 
-    Clearing first makes the next assignment a change whatever the input was
-    holding. Measured before this: five different tests in this tier failed that
-    way across a day's runs, each passing in isolation and on re-run, which is
-    the "fails opaquely" half of issue #51.
+    What that did not fix is the DOM race underneath it. `<Upload>` is mounted
+    at one position while there are no responses and another once there is one,
+    so a drop arriving during the remount can land on an input React is in the
+    middle of replacing: the event fires into a handler that has already been
+    torn down, `send()` never runs, no request is issued, and the caller waits
+    its full 120 seconds for an outcome nothing is coming for. Each such test
+    passes alone and on re-run, which is the "fails opaquely" half of issue #51
+    — and the half the clear-first fix left open. Measured across two full-tier
+    runs of this suite: one failure each, a different test both times, both
+    passing in isolation in twenty seconds.
+
+    So the drop is no longer assumed to have happened. The upload request is
+    watched for directly, because "did the browser POST" is the thing actually
+    meant and it cannot be missed the way a transient spinner can. No request
+    inside the settle window means the event went nowhere, and the drop is
+    simply made again against a freshly resolved input.
     """
-    page.set_input_files("input[type=file]", [])
-    page.set_input_files("input[type=file]", [str(x) for x in paths])
+    sent: list[str] = []
+
+    def _record(request) -> None:
+        if request.method == "POST" and request.url.rstrip("/").endswith("/requests"):
+            sent.append(request.url)
+
+    # Re-resolved on every attempt rather than pinned to a handle: a remount is
+    # the thing being recovered from, so the next try wants the NEW input.
+    field = page.locator("input[type=file]")
+    field.wait_for(state="attached", timeout=30_000)
+
+    page.on("request", _record)
+    try:
+        for _ in range(DROP_ATTEMPTS):
+            field.set_input_files([])
+            field.set_input_files([str(x) for x in paths])
+            waited = 0
+            while not sent and waited < DROP_SETTLE_MS:
+                page.wait_for_timeout(100)
+                waited += 100
+            if sent:
+                return
+    finally:
+        page.remove_listener("request", _record)
+
+    raise AssertionError(
+        f"the file input produced no upload request after {DROP_ATTEMPTS} drops of "
+        f"{', '.join(Path(x).name for x in paths)} — the change event reached no "
+        "live handler, so nothing was ever sent"
+    )
 
 
 def upload(page, *paths) -> None:
