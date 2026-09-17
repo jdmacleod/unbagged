@@ -44,7 +44,9 @@ Measured across the response, as counts and ratios only:
 - seconds are `00` on 67 of 67 rows, so the real resolution is minutes
 - no negative amounts, no zero amounts, no blank cells
 - **`Point == round(Amount)` on 67 of 67 rows.** Not floor (24/67), not ceil
-  (43/67)
+  (43/67). Emitted as a single `FIRST_PARTY_MODEL` inference — a value the
+  retailer computed from another column in the same file. See the caveat below
+  for why the check is written as a distance rather than as a rounding
 - two distinct branches, one dominant
 
 ## What it does not contain
@@ -162,11 +164,26 @@ constructed row, a merged `Branch` put the points value in the amount column
 and a $12.34 basket recorded as $12.00, silently. `tests/test_merged_cells.py`
 holds that case.
 
-**`ss:MergeDown` is not honoured, and that gap is open.** It swallows a column
-in the rows *beneath* the cell, so those rows omit it and everything after it
-in them shifts left — the same corruption across rows instead of along one.
-Handling it means carrying spans between rows, which `read_tables` has no place
-for today. The observed export contains none. Filed rather than guessed at.
+**`ss:MergeDown` is honoured too, and it rests on the specification rather than
+on the sample.** It swallows a column in the rows *beneath* the cell, so those
+rows omit it and everything after it in them shifts left — the same corruption
+across rows instead of along one. The observed export contains none, so there is
+no file here to check a fix against; the rule is the one `ss:MergeAcross`
+follows, which the SpreadsheetML documentation states independently of any
+response. #44 asks for exactly this footing.
+
+Handling it means `read_tables` carrying state between rows, which it had no
+place for. Open spans are kept as `{column: last row covered}` — numbers, never
+references into the tree, because every row is cleared as it is consumed and
+anything outliving a row would point at a cleared element. Keyed on the last row
+a span covers rather than as a countdown: `ss:Index` on a `Row` skips rows, and
+a countdown would hold a span open across the gap.
+
+The damage it prevents is the damage the `MergeAcross` case prevents, and it is
+quieter still. `Point == round(Amount)`, so a row shifted one column left reads
+the points value as the amount — a basket total wrong by less than a dollar,
+with nothing downstream able to catch it. `tests/test_merged_cells.py` holds
+that case at the adapter's own boundary.
 
 **A short row is defined in the header's columns, not as a count.** After
 placement, a row is short when a column the header named holds nothing. A count
@@ -251,14 +268,25 @@ exists because the scale is meant to differ from the reference file, which makes
 a width change plausible, and `PAYMENT_CARD` stays armed inside a generated
 fixtures directory while `LOYALTY_NUMBER` stands down.
 
-### One caveat worth carrying
+### One caveat worth carrying, and how the inference works around it
 
 Python's `round()` is half-even; a Java portal is near-certainly half-up. At 67
 rows a half-cent case is unlikely to have occurred, so a single response cannot
 distinguish them. The generator and the fixture both use Python's `round()`, so
-a test asserting that relationship would be self-consistent and would prove
-nothing about the format. Nothing asserts it. It matters more if the deferred
-`FIRST_PARTY_MODEL` inference is ever built.
+a test asserting `point == round(amount)` would be self-consistent and would
+prove nothing about the format.
+
+The `FIRST_PARTY_MODEL` inference is now built, and it sidesteps the question
+rather than answering it. `_point_inferences` never rounds anything. What it
+checks is the property every tie-break rule agrees on — **a rounded value is
+within half a unit of what it was rounded from** — which holds under half-up,
+half-even, half-away-from-zero and the rest. So the claim needs no view about
+which rule the portal uses, a half-cent row cannot falsify it, and the test
+demonstrates exactly that by feeding the same tie broken both ways and
+asserting both are accepted.
+
+What is still unknown is which rule it is. That needs a tie, and no response has
+carried one.
 
 ## The second response: screen captures of the receipt viewer
 

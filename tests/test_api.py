@@ -792,12 +792,21 @@ class TestDisclosedVersusZero:
         """Regression: issue #43, through the whole stack.
 
         H Mart's adapter grades SPECIFIC_PIECES partial on purpose: it disclosed
-        what each visit cost and nothing about what was in any of them. The
-        response never addressed inferences, so a 0 in that cell was a claim
-        about the company that nothing in the file supports.
+        what each visit cost and nothing about what was in any of them. A 0 in a
+        cell that was never addressed is a claim about the company that nothing
+        in the file supports, and it has to render as an em dash instead.
+
+        The appended column is the one carrying that case now. H Mart discloses
+        one first-party inference — the `Point` column, which is `Amount`
+        rounded (#36) — so `inference_count` is a disclosed fact and prints. It
+        bought nothing from a broker, and `appended_inference_count` is the zero
+        this tool may not quote.
+
+        `zero_is_claimable` gates the zero and never the figure, which is what
+        lets these two cells disagree on one row.
         """
         rows = {r["id"]: r for r in client.get("/api/compare").json()["requests"]}
-        assert rows[hmart]["inference_count"] is None
+        assert rows[hmart]["inference_count"] == 1
         assert rows[hmart]["appended_inference_count"] is None
 
     def test_the_same_response_still_reports_the_card_it_did_disclose(self, client, hmart):

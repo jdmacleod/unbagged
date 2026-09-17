@@ -19,7 +19,7 @@ import logging
 import time
 from dataclasses import replace
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from unbagged.adapters.base import (
     AdapterError,
@@ -30,9 +30,12 @@ from unbagged.adapters.base import (
     FollowUpKind,
     Identity,
     IdType,
+    Inference,
+    InferenceOrigin,
     ParseResult,
     Provenance,
     RequestMeta,
+    Scale,
     Severity,
     SniffResult,
     SourceBundle,
@@ -283,6 +286,11 @@ class HMartAdapter:
 
         transactions: list[Transaction] = []
         cards: dict[str, Provenance] = {}
+        #: Every (Amount, Point) as printed, for `_point_carries_nothing_new`.
+        #: Kept as the strings the sheet holds rather than as parsed floats: the
+        #: question is whether one column is the other rounded, and that is a
+        #: question about exact decimal values.
+        point_pairs: list[tuple[str | None, str | None]] = []
         for table, columns, document_id in matched:
             _check_declared(table, warnings)
             header_row = next(
@@ -299,6 +307,7 @@ class HMartAdapter:
                 card = row.value(columns["smartcard"])
                 if card and card not in cards:
                     cards[card] = _provenance(table, row.number, columns["smartcard"], document_id)
+                point_pairs.append((row.value(columns["amount"]), row.value(columns["point"])))
 
         # Sorted, because a bundle of several files arrives in upload order and
         # a timeline built from it would otherwise jump between them.
@@ -353,6 +362,7 @@ class HMartAdapter:
                 for card, where in cards.items()
             ),
             transactions=tuple(transactions),
+            inferences=_point_inferences(point_pairs, matched),
             disclosures=_disclosures(transactions, provenance, _captures(bundle)),
             follow_ups=_follow_ups(),
             warnings=warnings.as_tuple(),
@@ -1191,6 +1201,134 @@ def _amount(value: str | None) -> float | None:
         return float(value.strip().replace(",", "").lstrip("$"))
     except ValueError:
         return None
+
+
+#: How many rows a claim about the `Point` column needs before it is worth
+#: making. Low on purpose: this is a statement about THIS response, not about
+#: the format, and the count travels with the claim so a reader can weigh it.
+#: Not one — a single pair agreeing is a coincidence with a name.
+MIN_POINT_ROWS = 3
+
+
+def _point_inferences(
+    pairs: list[tuple[str | None, str | None]], matched: list
+) -> tuple[Inference, ...]:
+    """The `Point` column, where it turns out to hold nothing `Amount` does not.
+
+    H Mart's export carries `Point` beside `Amount`, and the retailer's own
+    published terms state the rule independently: "$1 of purchase (excluding
+    tax) equals 1 point". Where the response bears that out, the column is a
+    value the retailer computed from data in the same response — an inference
+    with `origin=FIRST_PARTY_MODEL`, and a checkable statement about the quality
+    of the disclosure rather than an opinion about it.
+
+    **Measured as a distance, never by rounding.** Python's `round()` is
+    half-even and a Java-backed portal is near-certainly half-up, so a check
+    written as `point == round(amount)` bakes one of the two rules into the
+    answer — and if the fixture generator then uses `round()` as well, the test
+    is self-consistent and proves nothing about the format. `NOTES.md` has
+    carried that caveat since before this was written.
+
+    What is asserted instead is the thing both rules agree on: a rounded value
+    is within half a unit of what it was rounded from. That holds under half-up,
+    half-even, half-away-from-zero and every other tie-break there is, so the
+    claim needs no view about which one the portal uses and a half-cent row
+    cannot falsify it. Distinguishing the rules needs a tie, and a tie is
+    exactly what the observed response has never contained.
+
+    Emitted only when it holds on EVERY row carrying both values. One row where
+    it does not is the interesting case, and a claim that quietly tolerated it
+    would be worth less than no claim.
+    """
+    checked = 0
+    for amount_raw, point_raw in pairs:
+        if amount_raw is None or point_raw is None:
+            # The row does not carry both, so it has nothing to say either way.
+            # A blank cell is the ordinary sparse row this format really sends.
+            continue
+        amount = _exact(amount_raw)
+        point = _exact(point_raw)
+        if amount is None or point is None:
+            # Present and unreadable, which is NOT the same as absent and was
+            # passed over as if it were. The claim is that the relationship
+            # holds on every row carrying both values, and this row carries
+            # both — so it cannot be evaluated, and a claim resting on the rows
+            # that happened to parse would overstate what was checked. The
+            # reader already has a warning naming the cell.
+            return ()
+        if point != point.to_integral_value():
+            # Not a rounded anything. Whatever this column is, it is not that.
+            return ()
+        if abs(point - amount) > Decimal("0.5"):
+            return ()
+        checked += 1
+
+    if checked < MIN_POINT_ROWS:
+        return ()
+    return (
+        Inference(
+            label="Point",
+            value_raw=f"Amount rounded to the nearest whole number, on all {checked} rows",
+            origin=InferenceOrigin.FIRST_PARTY_MODEL,
+            scale=Scale.PROSE,
+            # The response never says whose. The card is one per household by
+            # the retailer's own terms and one per person by nothing at all, so
+            # naming a subject here would invent the thing `Identity` already
+            # declines to name.
+            subject=None,
+            # The whole finding. The retailer disclosed a column it could have
+            # derived from another column in the same file.
+            derivable_from_txns=True,
+            provenance=_point_header_provenance(matched),
+        ),
+    )
+
+
+def _point_header_provenance(matched: list) -> Provenance:
+    """The `Point` header cell itself, not the corner of the sheet.
+
+    `_statement_provenance` cites column A, which is right for a finding about
+    the response as a whole and wrong for one about a named column: a reader
+    following the citation should land on the thing the claim is about.
+    """
+    if not matched:
+        return Provenance()
+    table, columns, document_id = matched[0]
+    header_row = next(
+        row.number
+        for row in table.rows[:SNIFF_ROWS]
+        if all(h in {_normalise(c) for c in row.cells} for h in EXPECTED)
+    )
+    return _provenance(table, header_row, columns["point"], document_id)
+
+
+def _exact(value: str | None) -> Decimal | None:
+    """An amount as the sheet printed it, to the digit. None if it is not one.
+
+    `_amount` returns a float, which is right for a total and wrong here: this
+    compares against a half, and a half is one of the values binary floating
+    point does hold exactly but its neighbours are not. Reading the string again
+    costs nothing and removes the question.
+
+    **`is_finite` is the load-bearing line.** `Decimal` parses `NaN`, `sNaN` and
+    `Infinity` without raising, and they do not behave like numbers afterwards:
+    a quiet NaN compares false against everything, so it slips past a bounds
+    check rather than failing it, and arithmetic on a signalling NaN raises
+    `InvalidOperation` from wherever it is finally touched. A cell reading
+    `sNaN` therefore aborted the whole upload with an `AdapterError` — from an
+    adapter whose contract is to degrade with a `ParseWarning` and never raise.
+
+    `receipt._decimal` guards the same way for the same reason, and its comment
+    is worth repeating here: the check should not be load-bearing for type
+    safety.
+    """
+    if value is None:
+        return None
+    try:
+        found = Decimal(value.strip().replace(",", "").lstrip("$"))
+    except (InvalidOperation, ValueError):
+        return None
+    return found if found.is_finite() else None
 
 
 def _disclosures(
