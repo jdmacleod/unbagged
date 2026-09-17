@@ -126,15 +126,50 @@ def store_upload(filename: str, content: bytes, *, directory: Path | None = None
     )
 
 
-def looks_like_archive(content: bytes) -> bool:
-    """Is this a zip, by the record it opens with?
+#: What a zip that is really a DOCUMENT has inside it. OOXML — `.xlsx`, `.docx`,
+#: `.pptx` — carries `[Content_Types].xml` at its root; ODF — `.odt`, `.ods` —
+#: opens with an uncompressed `mimetype` entry.
+DOCUMENT_MARKERS = frozenset({"[Content_Types].xml", "mimetype"})
 
-    All three openings count, not only the one that carries a member: an empty
-    archive is `PK\x05\x06` alone, and answering it as "a .zip file, which is
-    not supported" would be the one sentence that is untrue. It is expanded like
-    any other and refused for holding nothing readable, which is what it holds.
+
+def looks_like_archive(content: bytes) -> bool:
+    """Is this an archive of a response, rather than a single document?
+
+    All three zip openings count, not only the one that carries a member: an
+    empty archive is `PK\x05\x06` alone, and answering it as "a .zip file, which
+    is not supported" would be the one sentence that is untrue. It is expanded
+    like any other and refused for holding nothing readable, which is what it
+    holds.
+
+    **Zip-shaped is not the same as an archive**, and this is the second place
+    that has to know it. `extraction.classify` tests `archive` LAST among its
+    content checks and its comment says exactly why: `.xlsx`, `.docx` and `.odt`
+    are zips, so a magic-bytes test placed first claims every one of them. This
+    runs BEFORE `classify` ever sees the file — `store_upload_many` expands an
+    archive into documents, and classification happens per document afterwards —
+    so ordering cannot save it here and the check has to be made directly.
+
+    Measured before this: a workbook dropped on the upload area was expanded
+    into `[Content_Types].xml`, `workbook.xml` and `sheet1.xml`, three documents
+    named after nothing the reader recognises, instead of reaching the message
+    in `extraction.py` that tells them to save it as XML Spreadsheet 2003. The
+    same test inside an archive refused a response for "containing another
+    archive" and told the reader to unpack a spreadsheet.
+
+    Decided by what is INSIDE, not by the filename, because the filename is the
+    least reliable thing about a file that reached here through a mail client.
     """
-    return content[:4] in ZIP_MAGICS
+    if content[:4] not in ZIP_MAGICS:
+        return False
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            names = archive.namelist()
+    except zipfile.BadZipFile:
+        # Zip-shaped and unopenable. Still an archive as far as routing goes:
+        # `_archive_members` produces the honest "could not be opened" message,
+        # which is better than falling through to "unsupported format".
+        return True
+    return DOCUMENT_MARKERS.isdisjoint(names)
 
 
 def store_upload_many(
@@ -241,11 +276,15 @@ def _archive_members(filename: str, content: bytes, budget: int) -> list[tuple[s
             ) from exc
 
         if len(member) > remaining:
+            # The REMAINING budget, not the constant. One upload may hold several
+            # archives and they share the allowance, so the second one to blow it
+            # was being told it exceeded 256 MB when what it actually exceeded
+            # was whatever the first one left — a number the reader could not
+            # reconcile with the file in front of them.
             raise IngestError(
-                f"{filename} expands to more than "
-                f"{MAX_ARCHIVE_BYTES // (1024 * 1024)} MB of files, which is "
-                "what one upload may unpack to in total. Nothing in it has "
-                "been kept."
+                f"{filename} expands to more than {remaining // (1024 * 1024)} MB, "
+                f"which is what is left of the {MAX_ARCHIVE_BYTES // (1024 * 1024)} MB "
+                "one upload may unpack to in total. Nothing in it has been kept."
             )
         remaining -= len(member)
         if not member:

@@ -612,10 +612,10 @@ Wrap the Docker commands so contributors never need to remember overlay syntax.
 
 ## 9. Milestones
 
-> **Complete as of 0.9.0 (2026-09-03).** Kept because the tests still cite these
-> by name: `test_scan_pii.py`, `test_repository.py`, `test_kroger_degradation.py`
-> and `test_generic_adapter.py` each assert one of the acceptance criteria below,
-> and `repository.py` cites M1. The build order they record is history; shipped
+> **Complete as of 0.9.0 (2026-09-03).** Kept because the names are still cited:
+> four test modules assert one of the acceptance criteria below, `tests/factories.py`
+> and §0 of this file refer to a milestone by name, and `repository.py` cites M1.
+> Grep for `M0`..`M7` before touching this table. The build order it records is history; shipped
 > work is in `CHANGELOG.md` and planned work is filed as
 > [GitHub issues](https://github.com/jdmacleod/unbagged/issues).
 

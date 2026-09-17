@@ -37,18 +37,22 @@ docker compose up --build
 
 Then open <http://localhost:8420> and drag the retailer's response onto the upload
 area. The zip it arrived in can be dropped as it is: each file inside becomes its
-own document with its own citation, so nothing has to be unpacked by hand. Some
-archives are refused rather than opened — a password-protected one, one holding
-another archive, one carrying more files or unpacking to more bytes than a
-response plausibly contains, or one naming a path outside itself. Each says which
-it was, so you can unpack that one yourself and drop what was inside.
+own document with its own citation, so nothing has to be unpacked by hand. An
+archive is refused rather than half-read when it will not open, when it holds
+another archive, when it names a path outside itself, or when it carries more
+files or unpacks to more bytes than a response plausibly contains. Each refusal
+says which. A member that cannot be read — most often because the archive is
+password-protected — says that too, rather than being skipped in silence.
+
+A spreadsheet or a word-processor file is itself a zip, and is left alone: those
+arrive as one document, not as the XML parts inside them.
 
 The first run builds the app: two base images, the OCR engine, the UI, and the
 Python dependencies. Budget a couple of minutes on a clean machine. There is no
-prebuilt image to download, deliberately — you run what you can read. Later starts re-check the build and take
-about two seconds when nothing has changed. Keep `--build` on the command: without
-it Docker serves whatever it built last, so a pull can leave you running the
-previous version.
+prebuilt image to download, deliberately: you run what you can read. Later
+starts re-check the build and take about two seconds when nothing has changed.
+Keep `--build` on the command: without it Docker serves whatever it built last,
+so a pull can leave you running the previous version.
 
 Reading a long report takes 10 to 30 seconds.
 
@@ -114,7 +118,7 @@ listed with what their amounts look like, and no price change is claimed for the
 
 ![The prices view](docs/screenshots/prices.png)
 
-**Products** — every product you actually bought, set as a typographic index:
+**Products** — the products you bought, set as a typographic index:
 alphabetical, sized by purchase count, with an A-Z rail. Clicking one opens the visits
 that contained it. Under the index is a control that saves what you are looking at
 as an SVG — text, not a rasterised screenshot, so it stays selectable and searchable
@@ -147,8 +151,8 @@ make setup-frontend  # npm install
 make dev             # compose + Vite, on http://localhost:5173
 make test            # fast suite
 make test-frontend   # UI unit tests (vitest)
+make setup-browser   # once: without it the browser tests SKIP rather than run
 make test-container  # slow: builds and runs a real container (needs Docker + Chromium)
-make setup-browser   # once, to get the Chromium the container tier drives
 make lint            # ruff check + ruff format --check, the two gates CI runs
 make format          # apply the formatter
 make screenshots     # regenerate docs/screenshots from the fixture

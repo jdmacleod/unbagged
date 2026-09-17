@@ -42,6 +42,10 @@ from a specific response. See `CONTRIBUTING.md`.
   archive holding another archive. A folder of Mac metadata is quietly ignored
   rather than reported as dozens of unreadable files.
 
+  A spreadsheet or a word-processor file is a zip too, and is left alone. Those
+  are one document, not the XML parts inside them, and a response that carries
+  one is read rather than refused for containing an archive.
+
 - **H Mart's Point column is reported as something the shop worked out about
   you.** The response carries a points figure beside every amount, and on every
   row seen it is that amount rounded to the nearest whole number — which the
@@ -107,6 +111,25 @@ from a specific response. See `CONTRIBUTING.md`.
   would have sent the same response twice. The suite runs in about half the time
   it did. This is the other half of the same fault the previous release capped
   the hanging of, rather than a new one.
+
+### Documentation
+
+- **The screenshots show what the app draws now.** They were captured before the
+  two releases above and three of the five had gone stale — the timeline, the
+  products index and the prices view all render figures that moved in 0.15.0.
+  They come from a throwaway container holding nothing but the synthetic
+  fixture, which is why they can be published at all.
+
+- **Claims the code had stopped supporting are corrected.** The Quickstart said
+  a password-protected archive was the only zip it would refuse, when there are
+  several; the receipt section described a page being checked by arithmetic
+  alone, when a page captured through its own amounts is now set aside on the
+  cut before the arithmetic is reached; and the command list omitted the two
+  formatting gates CI runs, so following it and pushing earned a red build.
+
+- **`SECURITY.md` names the archive surface**, which is the part of this release
+  with something to attack: what a zip is allowed to expand to, how many files
+  it may carry, and what happens to an entry naming a path outside itself.
 
 ## [0.15.0] - 2026-09-16
 

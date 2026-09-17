@@ -468,3 +468,91 @@ class TestWhatAMemberIsCalledOnceItIsOut:
         # agree — and both survive to be read rather than one being dropped.
         (group,) = rc.group_by_visit(["visit-a/sc_030419.png", "visit-b/sc_030419.png"])
         assert len(group) == 2
+
+
+class TestAZipThatIsReallyADocument:
+    """Office formats are zips, and expanding one shreds it.
+
+    `extraction.classify` tests `archive` last among its content checks and its
+    comment says why: `.xlsx`, `.docx` and `.odt` are zips, so a magic-bytes test
+    placed first claims every one of them. `store_upload_many` runs BEFORE
+    `classify` ever sees the file, so ordering cannot save it there — it has to
+    make the check itself.
+
+    Measured before the fix: a workbook dropped on the upload area came back as
+    `[Content_Types].xml`, `workbook.xml` and `sheet1.xml`, three documents named
+    after nothing a reader recognises, instead of the message telling them to
+    save it as XML Spreadsheet 2003.
+    """
+
+    def test_a_workbook_stays_one_document(self, tmp_path):
+        book = archive(
+            {
+                "[Content_Types].xml": b"<Types/>",
+                "xl/workbook.xml": b"<workbook/>",
+                "xl/worksheets/sheet1.xml": b"<worksheet/>",
+            }
+        )
+        (stored,) = store_upload_many("history.xlsx", book, directory=tmp_path)
+        assert stored.original_filename == "history.xlsx"
+
+    def test_an_opendocument_file_stays_one_document(self, tmp_path):
+        doc = archive(
+            {"mimetype": b"application/vnd.oasis.opendocument.text", "content.xml": b"<doc/>"}
+        )
+        (stored,) = store_upload_many("letter.odt", doc, directory=tmp_path)
+        assert stored.original_filename == "letter.odt"
+
+    def test_a_response_holding_a_workbook_is_not_refused_for_it(self, tmp_path):
+        """The same test, one level in.
+
+        A response zip carrying a spreadsheet was refused as "containing another
+        archive", which told the reader to unpack a workbook — and unpacking one
+        gives them `xl/worksheets/sheet1.xml`.
+        """
+        book = archive({"[Content_Types].xml": b"<Types/>", "xl/workbook.xml": b"<workbook/>"})
+        stored = store_upload_many(
+            "response.zip",
+            archive({"history.xlsx": book, "sc_030419.png": b"x"}),
+            directory=tmp_path,
+        )
+        assert [f.original_filename for f in stored] == ["history.xlsx", "sc_030419.png"]
+
+    def test_a_real_archive_is_still_expanded(self, tmp_path):
+        stored = store_upload_many(
+            "response.zip",
+            archive({"history.xls": b"<Workbook/>", "sc_030419.png": b"x"}),
+            directory=tmp_path,
+        )
+        assert [f.original_filename for f in stored] == ["history.xls", "sc_030419.png"]
+
+    def test_an_archive_of_archives_is_still_refused(self, tmp_path):
+        """The nested-archive refusal has to survive the fix, not be traded for it."""
+        with pytest.raises(IngestError, match="another archive"):
+            store_upload_many(
+                "outer.zip",
+                archive({"inner.zip": archive({"a.txt": b"x"})}),
+                directory=tmp_path,
+            )
+
+    def test_a_zip_shaped_file_that_will_not_open_is_still_an_archive(self, tmp_path):
+        """Routing it anywhere else costs the reader the honest message.
+
+        "Could not be opened, the download may be incomplete" is actionable;
+        "unsupported format" for a file named `.zip` is not.
+        """
+        with pytest.raises(IngestError, match="could not be opened"):
+            store_upload_many("truncated.zip", b"PK\x03\x04broken", directory=tmp_path)
+
+
+class TestWhatTheBudgetMessageSays:
+    def test_it_names_what_is_left_not_the_whole_allowance(self, tmp_path):
+        """One upload may hold several archives and they share the allowance.
+
+        Naming the constant told the second archive it had exceeded 256 MB when
+        what it actually exceeded was whatever the first one left — a number the
+        reader cannot reconcile with the file in front of them.
+        """
+        payload = archive({"big.txt": b"0" * 200_000}, compress=True)
+        with pytest.raises(IngestError, match="more than 0 MB, which is what is left"):
+            store_upload_many("second.zip", payload, directory=tmp_path, budget=1024)

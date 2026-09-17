@@ -252,7 +252,7 @@ it passes while asserting nothing.
 |---|---|---|
 | Fast | `make test` | Python: adapters, extraction, the schema, the API through `TestClient` |
 | Frontend | `make test-frontend` | vitest over pure decisions — which response to show, whether a navigation goes anywhere, what the arrival announcement says. **No DOM renderer**, so it cannot reach any of the wiring |
-| Container | `make test-container` | A real image, a real browser: uid and data permissions, bounded restart, that no view scrolls sideways from 320px up, and anything that happens against a real DOM |
+| Container | `make test-container` | A real image, a real browser: uid and data permissions, bounded restart, that the shipped image is the runtime stage and not the dev one, that no view scrolls sideways from 320px up, and anything that happens against a real DOM |
 
 The line that matters is between the last two. A claim about real responses landing
 — a stale closure resolving half a minute later, a history entry, a focus move, an
@@ -467,7 +467,7 @@ commit cannot be quietly moved — it has to be superseded by a new version.
 Tags are signed, and `.github/allowed_signers` is what lets you check one:
 
     git config gpg.ssh.allowedSignersFile .github/allowed_signers
-    git verify-tag v0.14.1
+    git verify-tag vX.Y.Z    # any released tag
     # Good "git" signature for ... with ED25519 key SHA256:...
 
 GitHub verifies independently and shows a Verified badge either way. The file
