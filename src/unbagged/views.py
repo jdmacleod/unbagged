@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 import sqlite3
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from statistics import median
 from typing import Any
 
@@ -761,6 +761,24 @@ def price_history(
             }
         )
 
+    # The same join `product_index` makes, on the same rule and for the same
+    # reason. Left out of the first version and the two views immediately
+    # disagreed: one product on Products, two price series on Prices, for one
+    # item a stray character had split in two. That is the fourth time this
+    # pair has come apart over a rule only one of them applied, which is why
+    # the decision now lives in `_name_split_groups` and only the merging
+    # differs — points and dates here, purchase counts and a window there.
+    absorbed: set[str] = set()
+    for group in _name_split_groups(series.values(), "descriptions"):
+        head, rest = group[0], group[1:]
+        for other in rest:
+            for name, count in other["descriptions"].items():
+                head["descriptions"][name] += count
+            head["points"].extend(other["points"])
+            absorbed.add(other["key"])
+        head["joined"] = True
+    series = {k: v for k, v in series.items() if k not in absorbed}
+
     products = []
     for entry in series.values():
         points = entry["points"]
@@ -811,9 +829,9 @@ def price_history(
                 # apart, and when each chose its own label they could show two
                 # different names for one product with nothing to explain it.
                 "description": label,
-                # The printed spelling, for the collision pass below and for
-                # the same matching reason `product_index` carries it.
-                "match_name": raw,
+                # The handle a click sends the timeline, and the string the
+                # collision pass below reverts to. See `handle_for`.
+                "match_name": handle_for(label, raw, entry.get("joined", False)),
                 "purchases": len(points),
                 # "unit"     — amounts look like one item at a stable-ish price
                 # "multiple" — some amounts are near-exact integer multiples of
@@ -1176,6 +1194,96 @@ def is_non_product(label: str) -> bool:
     return bool(words) and all(word in NON_PRODUCT_WORDS for word in words)
 
 
+def _join_name_split_products(merged: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Rejoin one product that a stray character split into two.
+
+    `PRODUCT_KEY` falls back to the printed name where a retailer disclosed no
+    code, so two spellings of one item are two keys. Usually that is the
+    retailer renaming something, which the key's own comment accepts as the
+    weakness of a name. But a leading bracket or a printed price is not a
+    rename: both spellings clean to the same name, and what a reader sees is
+    one product listed twice with its visits divided between the rows.
+
+    Found on a real response: `(CHINESE BROCCOLI` at one purchase beside
+    `CHINESE BROCCOLI` at two. The collision rule further down then refused to
+    clean either, because cleaning would have shown one name on two rows — so
+    the bracket on screen was the app declining to hide a split it could not
+    fix at the label layer. Joining them here removes the split, and the
+    collision disappears with it.
+
+    **Only where NO member of the group carries a code.** A code is the
+    retailer distinguishing two products itself, and two coded items printing
+    one name are two items however alike the names read: measured on the
+    corpus, one response has 22 such groups and every one of them is coded.
+    Joining those would merge genuinely different products on the strength of
+    a shared label, which is the opposite of this function's job.
+    """
+    absorbed: set[str] = set()
+    for group in _name_split_groups(merged.values(), "names"):
+        head, rest = group[0], group[1:]
+        for other in rest:
+            for name, count in other["names"].items():
+                head["names"][name] += count
+            head["purchases"] += other["purchases"]
+            head["first_seen"] = min(head["first_seen"], other["first_seen"])
+            head["last_seen"] = max(head["last_seen"], other["last_seen"])
+            absorbed.add(other["key"])
+        head["joined"] = True
+    return {k: v for k, v in merged.items() if k not in absorbed}
+
+
+def _name_split_groups(
+    entries: Iterable[dict[str, Any]], names_field: str
+) -> list[list[dict[str, Any]]]:
+    """Entries that are one product split by a stray character, grouped.
+
+    The decision only, so both product views make it the same way. What each
+    view then merges differs — one folds purchase counts and a date range, the
+    other a list of priced points — but which entries belong together must not.
+    `price_history` was left out of the first version of this and immediately
+    disagreed with Products: one product on one tab, two price series on the
+    next, which is the fourth time this pair has split over a shared rule.
+
+    Groups of one are not returned; neither is a group where ANY member carries
+    a code, because a code is the retailer distinguishing two items itself.
+
+    Each group is ordered so its head is the entry whose printed name needs
+    least taken off it: the one a reader would have called correct keeps its
+    identity. Ties break alphabetically, because a `GROUP BY` with no
+    `ORDER BY` hands them over in no order at all and the same response must
+    render the same page twice.
+    """
+    by_clean: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for entry in entries:
+        label, _ = label_for(entry[names_field])
+        by_clean[clean_label(label).upper() or label.upper()].append(entry)
+
+    groups = []
+    for group in by_clean.values():
+        if len(group) > 1 and not any(e["upc"] for e in group):
+            group.sort(key=lambda e: (len(str(e["key"])), str(e["key"])))
+            groups.append(group)
+    return groups
+
+
+def handle_for(label: str, raw: str, joined: bool) -> str:
+    """The string a click on this product sends the timeline to match on.
+
+    For a row that was not joined, the spelling the retailer printed: exact,
+    and not resting on the cleaned label happening to remain a substring of it.
+
+    **For a JOINED row it has to be the cleaned label**, and that is not a
+    style choice. A joined row counts visits from every spelling in its group,
+    and one member's printed name only matches its own rows — so a row saying
+    two purchases opened a timeline of one, which is the page-disagrees-with-
+    timeline bug the join was written to fix, recreated one shape over. Caught
+    by the ship coverage audit on #103. The cleaned label is a substring of
+    every spelling that cleans to it, because cleaning only ever strips a
+    prefix, so it is the one handle that finds all of them.
+    """
+    return label if joined else raw
+
+
 def label_for(spellings: Mapping[str, int]) -> tuple[str, str]:
     """One product's label, and the raw spelling that backs it.
 
@@ -1272,6 +1380,8 @@ def product_index(
         entry["first_seen"] = min(entry["first_seen"], row["first_seen"])
         entry["last_seen"] = max(entry["last_seen"], row["last_seen"])
 
+    merged = _join_name_split_products(merged)
+
     coverage_end = max((e["last_seen"] for e in merged.values()), default=None)
     stale_before = _minus_days(coverage_end, STALE_AFTER_DAYS) if coverage_end else None
 
@@ -1297,8 +1407,11 @@ def product_index(
                 "key": entry["key"],
                 "upc": entry["upc"],
                 "description": label,
-                # The spelling the retailer actually printed. `App.tsx` sends
-                # this to the timeline where a product has no UPC.
+                # The handle a click sends the timeline. See `handle_for`:
+                # the printed spelling normally, the cleaned label where this
+                # row was joined from several spellings.
+                #
+                # `App.tsx` sends this where a product has no UPC.
                 #
                 # The cleaned label would match too, as it happens: cleaning
                 # only ever strips a PREFIX, so the label is always a substring
@@ -1310,7 +1423,7 @@ def product_index(
                 # reads as "this was never bought" rather than as a bug. Sending
                 # what the retailer printed costs one field and does not rest on
                 # the accident.
-                "match_name": raw,
+                "match_name": handle_for(label, raw, entry.get("joined", False)),
                 "purchases": entry["purchases"],
                 "tier": _tier(entry["purchases"]),
                 "first_seen": entry["first_seen"],

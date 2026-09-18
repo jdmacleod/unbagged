@@ -711,6 +711,163 @@ class TestWhatTheIndexCallsAProduct:
         assert index["lines_disclosed"] is True, "the response DID disclose lines"
         assert views.stats(conn, request_id)["distinct_products"] == 0
 
+    def test_a_stray_character_does_not_split_one_product_into_two(self, conn):
+        """Regression: a leading bracket made one item read as two products.
+
+        `PRODUCT_KEY` falls back to the printed name where no code was
+        disclosed, so two spellings became two keys with the visits divided
+        between them. The collision rule then refused to clean either label,
+        because cleaning would have shown one name on two rows — so what
+        reached the reader was a bracket, a split count, and a timeline that
+        disagreed with the page: the substring search from the clean spelling
+        already reached the bracketed one, so a row saying two purchases
+        opened three visits.
+        """
+        request_id = self._bought(
+            conn,
+            [
+                ("(CHINESE BROCCOLI", None, 3.99),
+                ("CHINESE BROCCOLI", None, 3.99),
+                ("CHINESE BROCCOLI", None, 4.49),
+            ],
+        )
+
+        index = views.product_index(conn, request_id)
+
+        assert [p["description"] for p in index["products"]] == ["CHINESE BROCCOLI"]
+        assert index["products"][0]["purchases"] == 3, "all three visits, on one row"
+        assert index["total_products"] == 1
+
+    def test_two_coded_products_sharing_a_name_stay_two_products(self, conn):
+        """The guard on the join, and the case that makes it narrow.
+
+        A code is the retailer distinguishing two items itself. Measured on the
+        corpus, one response carries 22 groups of same-named products and every
+        one of them is coded; joining those would merge genuinely different
+        items on the strength of a shared label.
+        """
+        request_id = self._bought(
+            conn, [("RICE CAKE", "00000001", 2.99), ("RICE CAKE", "00000002", 3.49)]
+        )
+
+        index = views.product_index(conn, request_id)
+
+        assert index["total_products"] == 2
+        assert [p["description"] for p in index["products"]] == ["RICE CAKE", "RICE CAKE"]
+
+    def test_the_joined_row_keeps_a_name_that_finds_every_visit(self, conn):
+        """The merged entry's `match_name` has to reach both spellings, or the
+        join fixes the count and breaks the link in the same move.
+        """
+        request_id = self._bought(
+            conn, [("(CHINESE BROCCOLI", None, 3.99), ("CHINESE BROCCOLI", None, 4.49)]
+        )
+
+        product = views.product_index(conn, request_id)["products"][0]
+        found = views.timeline(conn, request_id, query=product["match_name"])
+
+        assert len(found["baskets"]) == 2, "both visits, from the one handle"
+
+    def test_a_joined_row_carries_a_handle_that_finds_every_visit_it_counts(self, conn):
+        """Regression: the join recreated the bug it was written to fix.
+
+        Where no member of a joined group carries the clean spelling, the
+        handle used to be one member's printed name, which matches only its own
+        rows. The row then said two purchases and its timeline opened one —
+        page disagreeing with timeline, one shape over from the split this
+        function exists to close. Asserted as the relationship, not a literal:
+        whatever the row claims, the handle has to find that many visits.
+        """
+        request_id = self._bought(conn, [("(RYE LOAF", None, 1.99), ("$1.00 RYE LOAF", None, 2.49)])
+
+        product = views.product_index(conn, request_id)["products"][0]
+        found = views.timeline(conn, request_id, query=product["match_name"])
+
+        assert product["purchases"] == 2
+        # `>=`, not `==`. A name filter is a substring match, so a longer
+        # product containing this one is also returned — `ProductIndex.tsx`
+        # records the measured case, where a product bought 20 times opened a
+        # timeline claiming 26 visits. That over-match predates the join and
+        # the join does not widen it. What the join MUST guarantee is the
+        # other direction: the handle finds at least every visit the row
+        # counts, which is what was broken. Asserting equality here would pass
+        # on this fixture and fail the moment a neighbour shared the name.
+        assert len(found["baskets"]) >= product["purchases"]
+
+    def test_prices_joins_a_split_product_the_way_products_does(self, conn):
+        """Regression: Products joined and Prices did not, so one item rendered
+        as one product on one tab and two price series on the next.
+
+        Fourth time this pair has come apart over a rule only one of them
+        applied, which is why the decision lives in one place now.
+        """
+        request_id = self._bought(
+            conn,
+            [
+                ("(RYE LOAF", None, 1.0),
+                ("RYE LOAF", None, 1.5),
+                ("(RYE LOAF", None, 1.2),
+                ("RYE LOAF", None, 1.7),
+            ],
+        )
+
+        indexed = views.product_index(conn, request_id)
+        priced = views.price_history(conn, request_id, min_observations=2)["products"]
+
+        assert indexed["total_products"] == 1
+        assert len(priced) == 1
+        assert priced[0]["description"] == indexed["products"][0]["description"]
+
+    def test_a_mixed_group_does_not_join(self, conn):
+        """One coded, one not. The code is the retailer distinguishing them, so
+        the join stays out of it and the reader still sees the printed names.
+
+        The residual case this change does not close, pinned so it is a
+        decision rather than an oversight.
+        """
+        request_id = self._bought(conn, [("(RYE LOAF", None, 1.99), ("RYE LOAF", "00000001", 2.49)])
+
+        assert views.product_index(conn, request_id)["total_products"] == 2
+
+    def test_three_spellings_of_one_name_join_into_one(self, conn):
+        request_id = self._bought(
+            conn,
+            [("(RYE LOAF", None, 1.0), ("RYE LOAF", None, 1.5), ("$1.00 RYE LOAF", None, 2.0)],
+        )
+
+        index = views.product_index(conn, request_id)
+
+        assert index["total_products"] == 1
+        assert index["products"][0]["purchases"] == 3
+
+    def test_a_joined_row_spans_the_dates_of_everything_in_it(self, conn):
+        """`coverage_end`, `stale_before` and the stopped flag all read these,
+        so a dropped min or max moves three things downstream.
+        """
+        request_id = self._bought(conn, [("(RYE LOAF", None, 1.0), ("RYE LOAF", None, 1.5)])
+
+        product = views.product_index(conn, request_id)["products"][0]
+
+        assert product["first_seen"] == "2019-03-01"
+        assert product["last_seen"] == "2019-03-02"
+
+    def test_two_unreadable_names_are_two_refusals_not_one_join(self, conn):
+        """The fallback that keeps the empty-label group from collapsing.
+
+        Every name that cleans to nothing would otherwise land in one group
+        and, being uncoded, be joined into a single entry — turning N refusals
+        into 1 and moving `set_aside`, which is the figure that reconciles the
+        headline count.
+        """
+        request_id = self._bought(
+            conn, [("(", None, 1.0), ("*", None, 1.0), ("SOURDOUGH BOULE", None, 5.0)]
+        )
+
+        index = views.product_index(conn, request_id)
+
+        assert [p["description"] for p in index["products"]] == ["SOURDOUGH BOULE"]
+        assert index["set_aside"] == 2, "two unreadable names, two refusals"
+
     def test_a_reader_can_still_search_for_what_the_retailer_printed(self, conn):
         """Typing the price prefix off the receipt has to find the row it came
         from, even though that string is no longer on screen.
