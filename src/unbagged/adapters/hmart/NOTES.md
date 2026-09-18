@@ -518,6 +518,34 @@ capture that is not clipped".
 best recall in the table and loses the scrawl page; so does `mistral-small3.2`.
 A dozen real captures carry one, so it is not an exotic case.
 
+#### What the host has to bring
+
+Nothing here is a second measurement; it is what the table above and the
+transport imply for the machine serving the model, collected in one place
+because `.env.example` needs somewhere to point.
+
+The shipped default is an 8B model, which is a few gigabytes of weights resident
+between calls. On top of those sits the window: `ollama._chat` asks for
+`NUM_CTX_FLOOR + IMAGE_TOKENS * pages` — 8192 plus 3072 a page — and doubles it
+up to `MAX_SIZED_RETRIES` times when the server says the prompt overran, so a
+single page can finish a call having asked for about 45k tokens of KV cache. The
+pair wants roughly 8GB of VRAM or unified memory to sit in without spilling.
+Exact figures belong to the host and not to this file: `ollama show` reports what
+was pulled and `ollama ps` what it occupies loaded.
+
+Below that, it still works and gets slower, and slower has a cliff in it.
+`TIMEOUT_SECONDS` is 180 for one call, which the 8.2s mean is nowhere near — but
+`gemma3:12b` at a 40.3s mean hit it outright on one page, so the margin is about
+one order of magnitude and not two. A host that answers in tens of seconds on a
+GPU answers in minutes on a cold CPU, which is the same distance. The first call
+after an idle period also pays the model load inside that budget, so a host
+serving pages minutes apart wants the model kept resident rather than reloaded
+per capture.
+
+How often any of this is paid is set by the lane, not by the host: one call per
+capture the deterministic reader could not make add up. One out of 46 on the
+corpus this was built against.
+
 #### What this did not settle
 
 The default this replaced, `qwen2.5vl:7b`, **is not in this table because the
@@ -526,10 +554,29 @@ the bake-off was for; what is recorded here is the field that replaced it, not a
 comparison with it. `minicpm-v4.5:8b` is the shipped default from this release
 on.
 
+**`llama3.2-vision:11b` was never screened, and this run cannot say why.** #91
+named it as the one candidate to screen rather than assume about — it was
+reported broken on the sibling project's Ollama build — and it does not appear
+above. Absent from the table means one of two things: the host did not have it,
+or the host had it and did not report it as vision-capable, in which case
+`vision_models` dropped it silently. The record of the run distinguishes
+neither, which is precisely the assumption the issue asked us not to make. The
+tool now prints a line for every model it drops and the reason, so a re-run
+answers this; until one happens, the honest statement is that the twelve rows
+above are eleven of #91's twelve candidates plus `qwen3.8:27b`, which the host
+had and the issue did not name.
+
 Everything above is one host, one day, one quantisation of each tag. A re-pulled
 tag can be a different build — `gemma3:12b` hitting a 180s timeout on one page
 is the kind of result that may not reproduce. Re-run the bake-off rather than
 trusting this table after a model is re-pulled.
+
+Comparing a re-run against this table used to rest on that warning alone. A
+saved `--out` file now opens with the date, the host, the Ollama version, this
+repo's version, and a digest for each model measured — so two results files can
+be told apart, and a tag that changed underneath a re-run shows up as a changed
+digest rather than as an unexplained row. The prose above is still the only
+record for THIS run, which predates the header.
 
 
 ### Deliberately not read

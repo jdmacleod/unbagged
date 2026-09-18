@@ -228,6 +228,20 @@ results and the date they were taken on.
 
     python -m tools.bakeoff_vision --screen --host http://10.0.0.2:11434
     python -m tools.bakeoff_vision --models qwen3-vl:8b --out results.json
+    python -m tools.bakeoff_vision --from results.json
+
+A full matrix is measured in hours, so `--out` is written as it goes and
+`--from` re-renders it without asking a model anything. That file opens with the
+date, the host, the Ollama version, this repo's version and a digest for each
+model measured: a tag can be re-pulled into a different quantisation, and the
+digest is the only field that can tell a re-run it measured something else.
+**Each digest is read next to its own model**, immediately before that model's
+first call, rather than all of them up front — a tag re-pulled in hour three of
+a matrix is then recorded as the build that actually answered rather than the
+one the host happened to hold when the run started. `--from` refuses a file that
+carries no measurements rather than rendering an empty table over it.
+Screening names what it skips and why, so a candidate missing from a table can
+be told from one the host never had.
 
 **Its inputs are synthetic by construction and there is no flag that takes a
 file.** Every page comes from `tools/bakeoff_cases.py`, which draws it from rows
@@ -238,10 +252,18 @@ answer at once. Do not add an input path to it. Anything it writes is still
 yours to run `make check-pii` over before committing.
 
 It reports two tiers. **Tier A** drives the lane as it ships — the real prompt,
-the real schema, and `from_reply` plus `foots` for the verdict. **Tier B** drops
-the schema and widens the context window. A model that fails A and passes B is
-capable and tripped by the schema rather than a weak reader, which is a
+the real schema, and `from_reply` plus `foots` for the verdict. **Tier B** is the
+same call with the schema left off and nothing else changed: the same transport,
+so the window is widened on demand by `ollama.ask` exactly as production widens
+it, rather than by a factor this tool picked. A model that fails A and passes B
+is capable and tripped by the schema rather than a weak reader, which is a
 different thing to fix.
+
+The default it produced is `ollama.DEFAULT_MODEL`, currently `minicpm-v4.5:8b`.
+Beating it means clearing the gate on more pages than it does, not answering
+faster: the two models that tie with it already cost two to three times as much
+per page for the same reading. `.env.example` carries what the host serving it
+needs, and `NOTES.md` carries the derivation.
 
 ## Which tier a test belongs in
 

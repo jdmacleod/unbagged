@@ -562,3 +562,63 @@ class TestTheOcrTierActuallyRuns:
         assert "tesseract-ocr" in workflow, (
             "the test job installs no OCR engine, so the capture suites will skip"
         )
+
+
+class TestTheDocumentedVisionModelIsTheShippedOne:
+    """The default is named in prose three times and defined once.
+
+    `ollama.DEFAULT_MODEL` is the definition. `.env.example` also carries it as
+    a commented assignment, which is the line a reader uncomments — so if the
+    code moves to a better model and that line does not, copying the example
+    file silently pins the model the bake-off rejected, and nothing else in the
+    suite would notice. Same reason the port is asserted against the README
+    above: a documented value that can drift is a documented value that will.
+    """
+
+    def _default(self) -> str:
+        from unbagged.transcription import ollama
+
+        return ollama.DEFAULT_MODEL
+
+    #: Every file that states the current default in prose. A file added here
+    #: is a file the suite will hold to `DEFAULT_MODEL` from then on.
+    CLAIMANTS = (
+        ".env.example",
+        "README.md",
+        "CONTRIBUTING.md",
+        "src/unbagged/adapters/hmart/NOTES.md",
+    )
+
+    def _default(self) -> str:
+        from unbagged.transcription import ollama
+
+        return ollama.DEFAULT_MODEL
+
+    def test_the_example_file_offers_the_default(self):
+        example = (ROOT / ".env.example").read_text(encoding="utf-8")
+        assert f"UNBAGGED_OLLAMA_VISION_MODEL={self._default()}" in example
+
+    def test_the_example_file_offers_ONLY_the_default(self):
+        """Presence is half the guard, and the weaker half.
+
+        A move to a better model that edits the prose and leaves the old
+        commented assignment behind passes a presence check and still hands a
+        reader the rejected model to uncomment. Caught by review on #97.
+        """
+        example = (ROOT / ".env.example").read_text(encoding="utf-8")
+        assignments = re.findall(r"UNBAGGED_OLLAMA_VISION_MODEL=(\S+)", example)
+
+        assert assignments == [self._default()], (
+            f"expected exactly one model assignment, the default; found {assignments}"
+        )
+
+    @pytest.mark.parametrize("path", CLAIMANTS)
+    def test_every_file_that_names_a_default_names_this_one(self, path):
+        """Four files state the current default in prose and one defines it.
+
+        Asserting only two of them let the other two drift into contradicting
+        the code while the suite stayed green — which is the same failure the
+        drift guard was written to stop, one file over.
+        """
+        text = (ROOT / path).read_text(encoding="utf-8")
+        assert self._default() in text, f"{path} no longer names the shipped default"
