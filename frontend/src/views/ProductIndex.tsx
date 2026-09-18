@@ -379,8 +379,13 @@ function Headline({ data }: { data: Index }) {
             never do. */}
         {data.set_aside > 0 && (
           <p className="mt-0.5 max-w-[62ch] text-[11.5px] text-faint">
+            {/* Entries, not lines. The count is per product key, which is what
+                makes it reconcile against the figure above it: a deposit
+                charged on nine visits is one entry that is not a product, and
+                calling it nine lines would describe a subtraction the total
+                never made. Caught by review on #102. */}
             {number(data.set_aside)}{" "}
-            {data.set_aside === 1 ? "line was" : "lines were"} set aside as
+            {data.set_aside === 1 ? "entry was" : "entries were"} set aside as
             charges rather than products: deposits, taxes, and names that were
             only punctuation.
           </p>
