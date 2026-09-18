@@ -110,7 +110,7 @@ class Result:
     failed: str
 
 
-def provenance(host: str, timeout: float, models: list[str]) -> dict:
+def provenance(host: str, timeout: float) -> dict:
     """What the host was, recorded beside the numbers it produced.
 
     A score is about a model on a day on a machine, and every one of those three
@@ -119,13 +119,12 @@ def provenance(host: str, timeout: float, models: list[str]) -> dict:
     used to carry none of them, so two results files were indistinguishable and
     neither could say which build it had measured.
 
-    The digest is the part that prose cannot keep up with. A re-pulled tag is
-    the same string and can be a different quantisation — the one hazard the
-    table's own closing paragraph warns about — and it is the only field here
-    that can prove a re-run measured what the last run measured.
+    The date, host and versions are taken once, at the start. `digests` starts
+    empty and is filled by `digest_for` as each model is reached — see there for
+    why one snapshot up front is the wrong shape.
 
-    Nothing here is asked of a model. It is two GETs against the host, and a
-    failure to answer them costs the header a field rather than the run.
+    Nothing here is asked of a model. It is one GET against the host, and a
+    failure to answer it costs the header a field rather than the run.
     """
     header: dict = {
         "measured": dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat(),
@@ -136,17 +135,35 @@ def provenance(host: str, timeout: float, models: list[str]) -> dict:
     }
     with contextlib.suppress(Exception):  # a host too old to report it is not a failed run
         header["ollama"] = _get(f"{host.rstrip('/')}/api/version", timeout).get("version")
+    return header
+
+
+def digest_for(host: str, model: str, timeout: float) -> str:
+    """The build behind one tag, read when that tag is about to be measured.
+
+    **Per model, at its own measurement, and not once for the field up front.**
+    A full matrix runs for hours. Capturing every digest before the first call
+    records what the host held at the start, so a tag re-pulled in hour three is
+    measured with new weights and saved under the old build's digest — the file
+    then attributes results to something that did not produce them, which is
+    worse than carrying no digest at all, because it reads as evidence.
+
+    The same argument rules out doing it at the end. The only reading that is
+    true of a model's numbers is the one taken next to them. Caught by review
+    on #97; the first version took one snapshot and a comment explaining why
+    the start beat the end, which was a choice between two wrong times.
+
+    Returns `""` when the host will not say, which is a missing field rather
+    than a failed run.
+    """
     try:
         entries = _get(f"{host.rstrip('/')}/api/tags", timeout).get("models") or []
-    except Exception:  # noqa: BLE001 - same
-        entries = []
-    wanted = set(models)
-    header["digests"] = {
-        str(entry.get("name")): str(entry.get("digest", ""))[:12]
-        for entry in entries
-        if str(entry.get("name")) in wanted
-    }
-    return header
+    except Exception:  # noqa: BLE001 - a host that will not say costs a field, not the run
+        return ""
+    for entry in entries:
+        if str(entry.get("name")) == model:
+            return str(entry.get("digest", ""))[:12]
+    return ""
 
 
 def describe(header: dict) -> str:
@@ -450,13 +467,34 @@ def main(argv: list[str] | None = None) -> int:
         # Both shapes are read: a bare list is what this wrote before it recorded
         # a header, and those files are the only copy of runs that cost hours.
         # Refusing them to tidy the format up would throw the measurements away.
+        #
+        # The envelope is CHECKED rather than coaxed. `saved.get("results") or
+        # []` accepted any JSON object at all: an unrelated file, or one whose
+        # write was cut off mid-run, replayed as a table of nothing and exited
+        # 0 — a corrupted measurement reported as a successful empty one, which
+        # is the shape of failure this tool exists to refuse. Caught by review
+        # on #97.
         saved = json.loads(args.replay.read_text())
         if isinstance(saved, dict):
+            rows = saved.get("results")
+            if not isinstance(rows, list):
+                print(
+                    f"{args.replay}: has a header but no `results` list — not a saved run.",
+                    file=sys.stderr,
+                )
+                return 2
             print(describe(saved))
-            rows = saved.get("results") or []
-        else:
+        elif isinstance(saved, list):
             print(f"{args.replay}: no header — measured by a build that recorded none.")
             rows = saved
+        else:
+            print(f"{args.replay}: not a saved run.", file=sys.stderr)
+            return 2
+        if not rows:
+            # No run this tool can produce is empty: a model that answered
+            # nothing still records a row per case saying so.
+            print(f"{args.replay}: no measurements in it.", file=sys.stderr)
+            return 2
         report([Result(**row) for row in rows])
         return 0
 
@@ -495,11 +533,10 @@ def main(argv: list[str] | None = None) -> int:
     cases = [CASES_BY_NAME[n.strip()] for n in args.cases.split(",")] if args.cases else list(CASES)
     tiers = ("A", "B") if args.tier == "both" else (args.tier.upper(),)
 
-    # Taken BEFORE the matrix, not after. A run measured in hours can end with a
-    # host that has been restarted or re-pulled since it started, and a header
-    # written at the end would describe that host rather than the one the
-    # numbers came from.
-    header = provenance(args.host, ollama.PREFLIGHT_TIMEOUT_SECONDS, models)
+    # The date, host and versions are one reading and belong at the start. The
+    # per-model digests are NOT: they are read next to the model they describe,
+    # inside the loop below. See `digest_for`.
+    header = provenance(args.host, ollama.PREFLIGHT_TIMEOUT_SECONDS)
     print(describe(header))
 
     results: list[Result] = []
@@ -509,6 +546,11 @@ def main(argv: list[str] | None = None) -> int:
         if not where.usable:
             print(f"  skipped: {where.message or where.status.value}")
             continue
+        # Read here, against this model, immediately before its first call. A
+        # tag re-pulled during a matrix that runs for hours is then recorded as
+        # the build that actually answered rather than the one the host held
+        # when the run started.
+        header["digests"][model] = digest_for(args.host, model, ollama.PREFLIGHT_TIMEOUT_SECONDS)
         for case in cases:
             for tier in tiers:
                 result = run_tier_a(case, where) if tier == "A" else run_tier_b(case, where)

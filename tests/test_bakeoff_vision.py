@@ -43,29 +43,35 @@ def host_answering(monkeypatch):
 
 class TestASavedRunNamesWhatProducedIt:
     def test_it_records_the_host_the_versions_and_the_date(self, host_answering):
-        header = bv.provenance("http://10.0.0.2:11434", 1.0, ["minicpm-v4.5:8b"])
+        header = bv.provenance("http://10.0.0.2:11434", 1.0)
 
         assert header["host"] == "http://10.0.0.2:11434"
         assert header["ollama"] == "0.33.3"
         assert header["unbagged"]
         assert header["measured"].startswith("20")
 
-    def test_it_records_a_digest_for_the_models_actually_measured(self, host_answering):
+    def test_the_header_starts_with_no_digests(self, host_answering):
+        """They are filled per model, next to the model they describe.
+
+        A snapshot of every digest before the matrix records what the host held
+        at the START. A tag re-pulled during a run that takes hours is then
+        measured with new weights and saved under the old build's digest, which
+        attributes results to something that did not produce them — worse than
+        no digest, because it reads as evidence.
+        """
+        assert bv.provenance("http://h:1", 1.0)["digests"] == {}
+
+    def test_a_digest_is_read_for_the_model_asked_about(self, host_answering):
         """The field prose cannot keep up with.
 
         A tag is the same string across a re-pull and the weights behind it need
         not be. Nothing else recorded here can tell a re-run that it measured
         something other than what the table says.
         """
-        header = bv.provenance("http://h:1", 1.0, ["minicpm-v4.5:8b"])
+        assert bv.digest_for("http://h:1", "minicpm-v4.5:8b", 1.0) == "0123456789ab"
 
-        assert header["digests"] == {"minicpm-v4.5:8b": "0123456789ab"}
-
-    def test_a_model_not_measured_is_not_described(self, host_answering):
-        """The header describes this run, not the host's shelf."""
-        header = bv.provenance("http://h:1", 1.0, ["minicpm-v4.5:8b"])
-
-        assert "not-measured:1b" not in header["digests"]
+    def test_a_model_the_host_does_not_have_reads_as_no_digest(self, host_answering):
+        assert bv.digest_for("http://h:1", "never-pulled:1b", 1.0) == ""
 
     def test_a_host_that_cannot_say_costs_a_field_and_not_the_run(self, monkeypatch):
         """An older server answers neither, and the matrix still runs.
@@ -78,11 +84,12 @@ class TestASavedRunNamesWhatProducedIt:
 
         monkeypatch.setattr(bv, "_get", no)
 
-        header = bv.provenance("http://h:1", 1.0, ["minicpm-v4.5:8b"])
+        header = bv.provenance("http://h:1", 1.0)
 
         assert header["ollama"] is None
         assert header["digests"] == {}
         assert header["host"] == "http://h:1"
+        assert bv.digest_for("http://h:1", "minicpm-v4.5:8b", 1.0) == ""
 
 
 class TestReplayReadsBothShapes:
@@ -140,3 +147,52 @@ class TestReplayReadsBothShapes:
         printed = capsys.readouterr().out
         assert "minicpm-v4.5:8b" in printed
         assert "no header" in printed
+
+
+class TestReplayRefusesWhatIsNotARun:
+    """A corrupted or unrelated file must not report as a successful empty run.
+
+    `saved.get("results") or []` accepted any JSON object at all, rendered a
+    table of nothing, and exited 0 — so a write cut off mid-run, or a file that
+    was never a bake-off, looked exactly like a clean measurement of nothing.
+    That is the shape of failure this tool exists to refuse. Caught by review
+    on #97.
+    """
+
+    def _write(self, tmp_path, payload):
+        path = tmp_path / "saved.json"
+        path.write_text(json.dumps(payload))
+        return str(path)
+
+    def test_a_header_with_no_results_list_is_refused(self, tmp_path, capsys):
+        path = self._write(tmp_path, {"measured": "2026-09-16T00:00:00+00:00", "host": "h"})
+
+        assert bv.main(["--from", path]) == 2
+        assert "no `results` list" in capsys.readouterr().err
+
+    def test_a_header_whose_results_is_not_a_list_is_refused(self, tmp_path, capsys):
+        path = self._write(tmp_path, {"host": "h", "results": {"model": "x"}})
+
+        assert bv.main(["--from", path]) == 2
+        assert "no `results` list" in capsys.readouterr().err
+
+    def test_an_empty_run_is_refused(self, tmp_path, capsys):
+        """No run this tool produces is empty: a model that answered nothing
+        still records a row per case saying so.
+        """
+        path = self._write(tmp_path, {"host": "h", "results": []})
+
+        assert bv.main(["--from", path]) == 2
+        assert "no measurements" in capsys.readouterr().err
+
+    def test_an_empty_bare_list_is_refused_too(self, tmp_path, capsys):
+        path = self._write(tmp_path, [])
+
+        assert bv.main(["--from", path]) == 2
+        assert "no measurements" in capsys.readouterr().err
+
+    def test_json_that_is_neither_shape_is_refused(self, tmp_path, capsys):
+        path = self._write(tmp_path, "not a run at all")
+
+        assert bv.main(["--from", path]) == 2
+        assert "not a saved run" in capsys.readouterr().err

@@ -235,6 +235,11 @@ A full matrix is measured in hours, so `--out` is written as it goes and
 date, the host, the Ollama version, this repo's version and a digest for each
 model measured: a tag can be re-pulled into a different quantisation, and the
 digest is the only field that can tell a re-run it measured something else.
+**Each digest is read next to its own model**, immediately before that model's
+first call, rather than all of them up front — a tag re-pulled in hour three of
+a matrix is then recorded as the build that actually answered rather than the
+one the host happened to hold when the run started. `--from` refuses a file that
+carries no measurements rather than rendering an empty table over it.
 Screening names what it skips and why, so a candidate missing from a table can
 be told from one the host never had.
 

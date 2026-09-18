@@ -580,10 +580,45 @@ class TestTheDocumentedVisionModelIsTheShippedOne:
 
         return ollama.DEFAULT_MODEL
 
-    def test_the_example_file_offers_the_default_and_not_an_older_one(self):
+    #: Every file that states the current default in prose. A file added here
+    #: is a file the suite will hold to `DEFAULT_MODEL` from then on.
+    CLAIMANTS = (
+        ".env.example",
+        "README.md",
+        "CONTRIBUTING.md",
+        "src/unbagged/adapters/hmart/NOTES.md",
+    )
+
+    def _default(self) -> str:
+        from unbagged.transcription import ollama
+
+        return ollama.DEFAULT_MODEL
+
+    def test_the_example_file_offers_the_default(self):
         example = (ROOT / ".env.example").read_text(encoding="utf-8")
         assert f"UNBAGGED_OLLAMA_VISION_MODEL={self._default()}" in example
 
-    def test_the_readme_names_the_same_model(self):
-        readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        assert self._default() in readme
+    def test_the_example_file_offers_ONLY_the_default(self):
+        """Presence is half the guard, and the weaker half.
+
+        A move to a better model that edits the prose and leaves the old
+        commented assignment behind passes a presence check and still hands a
+        reader the rejected model to uncomment. Caught by review on #97.
+        """
+        example = (ROOT / ".env.example").read_text(encoding="utf-8")
+        assignments = re.findall(r"UNBAGGED_OLLAMA_VISION_MODEL=(\S+)", example)
+
+        assert assignments == [self._default()], (
+            f"expected exactly one model assignment, the default; found {assignments}"
+        )
+
+    @pytest.mark.parametrize("path", CLAIMANTS)
+    def test_every_file_that_names_a_default_names_this_one(self, path):
+        """Four files state the current default in prose and one defines it.
+
+        Asserting only two of them let the other two drift into contradicting
+        the code while the suite stayed green — which is the same failure the
+        drift guard was written to stop, one file over.
+        """
+        text = (ROOT / path).read_text(encoding="utf-8")
+        assert self._default() in text, f"{path} no longer names the shipped default"
