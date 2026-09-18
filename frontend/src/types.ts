@@ -309,7 +309,15 @@ export type IndexEntry = {
    *  in the mono stack as a numeral, so it has to be absent rather than
    *  substituted when there is none. */
   upc: string | null;
+  /** The label to render: the retailer's name with a price prefix or leading
+   *  punctuation taken off. Where cleaning it would read the same as another
+   *  row's, it is left exactly as printed instead. */
   description: string;
+  /** The spelling the retailer actually printed. What to MATCH on — the
+   *  timeline searches `description_raw`, and this does not depend on the
+   *  cleaned label happening to remain a substring of it. Never rendered:
+   *  `description` is the label. */
+  match_name: string;
   purchases: number;
   /** 1 (bought once) to 5 (bought most often). Absolute, not normalised. */
   tier: number;
@@ -333,6 +341,10 @@ export type ProductIndex = {
   /** Before filtering, because the headline is a fact about the response. */
   total_products: number;
   bought_once_total: number;
+  /** Lines the response carried that name no product: a container deposit, a
+   *  tax row, a name that was only punctuation. Reported so the total can
+   *  shrink without the page going quiet about why. */
+  set_aside: number;
   /** After filtering. */
   product_count: number;
   bought_once: number;

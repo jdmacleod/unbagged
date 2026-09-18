@@ -5,7 +5,7 @@ import { RemoveRequest } from "./components/RemoveRequest";
 import { StaleReading } from "./components/StaleReading";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Upload } from "./components/Upload";
-import type { UploadResult } from "./types";
+import type { IndexEntry, UploadResult } from "./types";
 import { Caveat, ErrorBox, Spine, Spinner } from "./components/ui";
 import { Compare } from "./views/Compare";
 import { Compliance } from "./views/Compliance";
@@ -128,6 +128,34 @@ export function resolveCurrent(
  * entry that renders identically to the one before it is a Back press that
  * appears to do nothing, which teaches people the button is broken. Issue #61.
  */
+/**
+ * What a click on a product sends the timeline to filter by.
+ *
+ * The code where the retailer disclosed one, and the printed name where it did
+ * not. `ProductIndex` records why the code is preferred: the timeline's search
+ * is a substring match and this catalogue is full of names containing each
+ * other, so a name filter opens a timeline claiming more visits "included" the
+ * product than actually did.
+ *
+ * **`match_name`, never `description`.** The label on screen has had a price
+ * prefix or leading punctuation taken off it; the timeline matches what the
+ * retailer printed. Today the cleaned label would also match, because cleaning
+ * only strips a prefix and the LIKE is a substring test — but nothing declares
+ * that, and a cleaner that touched the middle of a name would break every
+ * name-filtered timeline in silence. Extracted from the JSX so both branches
+ * are reachable from a test: it was inline, and the one field the whole
+ * `match_name` change exists to serve had no frontend coverage at all.
+ */
+export function productQuery(entry: Pick<IndexEntry, "upc" | "match_name">): string {
+  // `||`, not `??`. A row can carry an EMPTY code rather than a null one —
+  // `PRODUCT_KEY` coalesces `''` away when building the key, but the `upc`
+  // field is emitted as the column holds it. `??` keeps `""`, and an empty
+  // query is dropped from the URL by `href`, so the click opened an entirely
+  // UNFILTERED timeline: every visit, presented as the visits that included
+  // this product. Pre-existing; found writing the test for this function.
+  return entry.upc || entry.match_name;
+}
+
 export function isSameEntry(a: View, b: View): boolean {
   return (
     a.tab === b.tab &&
@@ -634,8 +662,8 @@ export default function App() {
           unbagged
         </h1>
         <p className="mt-2 max-w-[62ch] text-muted">
-          Read what the grocery store knows about you. Everything here stays on
-          this machine.
+          Read what the grocery store knows about you. Nothing leaves this
+          machine.
         </p>
       </header>
 
@@ -817,7 +845,9 @@ export default function App() {
                       // retailer disclosed no codes there is no exact handle to
                       // use, so the name goes through and `exact` tells the
                       // timeline to stop claiming the stronger thing.
-                      query: entry.upc ?? entry.description,
+                      // The QUERY is the printed spelling, the LABEL is the one
+                      // on screen. See `productQuery` for why.
+                      query: productQuery(entry),
                       label: entry.description,
                     }).search
                   }
@@ -901,8 +931,8 @@ export default function App() {
 
       <footer className="mt-10 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-rule pt-4 text-[11.5px] text-faint">
         <span className="max-w-[62ch]">
-          unbagged reports what a response contained and what it did not. It is
-          not legal advice, and it never sends anything anywhere.
+          unbagged reports what a response contained and what it did not. Not
+          legal advice. Nothing is ever sent anywhere.
         </span>
         <Version />
       </footer>

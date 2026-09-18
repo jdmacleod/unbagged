@@ -221,12 +221,10 @@ function PriceBody({
 function QuantityNote() {
   return (
     <p className="max-w-[62ch] text-muted">
-      A line in this response carries an amount and nothing else: no quantity,
-      no weight. Two of something bought together arrive as one line at twice
-      the price, and an item sold by the pound arrives at whatever it weighed
-      that day. Neither is a price change, and the response gives no way to tell
-      them apart from one. Where the amounts give it away, this view says so and
-      leaves the price change unclaimed.
+      A line here carries an amount and nothing else: no quantity, no weight. So
+      two of something reads as one expensive line. A per-pound item reads as
+      whatever it weighed that day. Neither is a price change, and nothing here
+      can tell them apart. Where the amounts give it away, this view says so.
     </p>
   );
 }
@@ -450,11 +448,10 @@ function Unpriced({ series }: { series: PriceSeries }) {
       <p className="mt-3 max-w-[62ch] text-muted">
         {series.shape === "weight" ? (
           <>
-            The amounts for this product never settle and range too widely to be
-            one item at a price: that is what a per-pound product weighed at the
-            till looks like. No price series is drawn, because a line between
-            two of these points would assert a price change that the response
-            does not support.
+            These amounts range too widely to be one item at one price. That is
+            what a product sold by the pound looks like, weighed at the
+            register. No price line is drawn: it would assert a change the
+            response cannot support.
           </>
         ) : (
           <>

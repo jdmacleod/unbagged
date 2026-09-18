@@ -442,7 +442,7 @@ class TestWhatCompareAsserts:
         # asks whether a dash is present rather than whether a whole column
         # disclosed nothing: H Mart's column IS disclosed, so the old condition
         # hid the sentence on exactly the case that needed it.
-        assert "not the same as a zero" in body
+        assert "It is not a zero" in body
 
     def test_the_two_cells_disagree_on_screen(self, page, empty_app):
         """The dash and the number must both be there, in the right rows.

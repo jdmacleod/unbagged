@@ -369,10 +369,27 @@ function Headline({ data }: { data: Index }) {
               covered two years and stated it as a fact about every other one.
               The window is on the Timeline, measured; it is not restated here
               where nothing checks it. */}
-          Your shopping, in the words the retailer files it under. Size is how
-          often you bought it, in five steps. Most of this page is a single
-          trip.
+          Your groceries, in the retailer&rsquo;s own words. Size is how often
+          you bought it, in five steps. Most of this page is one trip.
         </p>
+        {/* Said out loud, because the count above moved. A deposit line and a
+            tax row are charges the receipt made, not things anybody chose, and
+            they are the only rows this page removes. A total that shrinks with
+            nothing on screen to account for it is the one thing this app must
+            never do. */}
+        {data.set_aside > 0 && (
+          <p className="mt-0.5 max-w-[62ch] text-[11.5px] text-faint">
+            {/* Entries, not lines. The count is per product key, which is what
+                makes it reconcile against the figure above it: a deposit
+                charged on nine visits is one entry that is not a product, and
+                calling it nine lines would describe a subtraction the total
+                never made. Caught by review on #102. */}
+            {number(data.set_aside)}{" "}
+            {data.set_aside === 1 ? "entry was" : "entries were"} set aside as
+            charges rather than products: deposits, taxes, and names that were
+            only punctuation.
+          </p>
+        )}
       </div>
     </div>
   );
@@ -648,10 +665,10 @@ function Stopped({
         Bought more than once, and not since
       </h3>
       <p className="mt-0.5 mb-4 max-w-[62ch] text-muted">
-        These were part of the shopping and then stopped appearing, with nothing
-        after <span className="num">{staleBefore}</span> and the coverage window
-        still running. The response records the dates, not the reason: a season
-        ending, a brand switched and a habit dropped look identical here.
+        These stopped appearing after{" "}
+        <span className="num">{staleBefore}</span>, while the coverage window
+        kept running. The response gives dates, not reasons: a season ending, a
+        brand switched and a habit dropped look identical here.
       </p>
       <ul className="border-t border-rule">
         {entries.map((entry) => (
