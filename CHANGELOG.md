@@ -23,6 +23,26 @@ from a specific response. See `CONTRIBUTING.md`.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/
 
+## [Unreleased]
+
+Repo tooling and documentation only. Nothing about the application changed, so
+there is no version behind this yet.
+
+### Changed
+
+- **The vision model default is documented as the default**, rather than shown
+  as one option among several. `minicpm-v4.5:8b` has been the shipped default
+  since 0.16.0 and the example file presented it as a suggestion. The docs now
+  also say what the machine running the model needs: roughly 8GB of GPU or
+  unified memory, about eight seconds a page there, minutes on a CPU, against a
+  180s per-call ceiling.
+
+- **A saved bake-off run records what produced it.** Date, host, Ollama version,
+  this repo's version, and a digest per model, each read next to its own model's
+  measurement rather than snapshotted before a matrix that runs for hours. The
+  replay now refuses a file carrying no measurements instead of rendering an
+  empty table over it and exiting cleanly.
+
 ## [0.17.0] - 2026-09-18
 
 **This changes what responses you have already loaded look like.** No migration
