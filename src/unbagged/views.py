@@ -1176,6 +1176,57 @@ def is_non_product(label: str) -> bool:
     return bool(words) and all(word in NON_PRODUCT_WORDS for word in words)
 
 
+def _join_name_split_products(merged: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Rejoin one product that a stray character split into two.
+
+    `PRODUCT_KEY` falls back to the printed name where a retailer disclosed no
+    code, so two spellings of one item are two keys. Usually that is the
+    retailer renaming something, which the key's own comment accepts as the
+    weakness of a name. But a leading bracket or a printed price is not a
+    rename: both spellings clean to the same name, and what a reader sees is
+    one product listed twice with its visits divided between the rows.
+
+    Found on a real response: `(CHINESE BROCCOLI` at one purchase beside
+    `CHINESE BROCCOLI` at two. The collision rule further down then refused to
+    clean either, because cleaning would have shown one name on two rows — so
+    the bracket on screen was the app declining to hide a split it could not
+    fix at the label layer. Joining them here removes the split, and the
+    collision disappears with it.
+
+    **Only where NO member of the group carries a code.** A code is the
+    retailer distinguishing two products itself, and two coded items printing
+    one name are two items however alike the names read: measured on the
+    corpus, one response has 22 such groups and every one of them is coded.
+    Joining those would merge genuinely different products on the strength of
+    a shared label, which is the opposite of this function's job.
+    """
+    by_clean: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for entry in merged.values():
+        label, _ = label_for(entry["names"])
+        by_clean[clean_label(label).upper() or label.upper()].append(entry)
+
+    joined: dict[str, dict[str, Any]] = {}
+    for group in by_clean.values():
+        if len(group) > 1 and not any(e["upc"] for e in group):
+            # The surviving key is the one whose printed name needs least
+            # taken off it, so the entry a reader would have called correct
+            # is the one that keeps its identity. Ties break alphabetically,
+            # because a GROUP BY with no ORDER BY hands them over in no order
+            # at all and the same response must render the same page twice.
+            group.sort(key=lambda e: (len(str(e["key"])), str(e["key"])))
+            head, rest = group[0], group[1:]
+            for other in rest:
+                for name, count in other["names"].items():
+                    head["names"][name] += count
+                head["purchases"] += other["purchases"]
+                head["first_seen"] = min(head["first_seen"], other["first_seen"])
+                head["last_seen"] = max(head["last_seen"], other["last_seen"])
+            group = [head]
+        for entry in group:
+            joined[entry["key"]] = entry
+    return joined
+
+
 def label_for(spellings: Mapping[str, int]) -> tuple[str, str]:
     """One product's label, and the raw spelling that backs it.
 
@@ -1271,6 +1322,8 @@ def product_index(
         entry["purchases"] += row["purchases"]
         entry["first_seen"] = min(entry["first_seen"], row["first_seen"])
         entry["last_seen"] = max(entry["last_seen"], row["last_seen"])
+
+    merged = _join_name_split_products(merged)
 
     coverage_end = max((e["last_seen"] for e in merged.values()), default=None)
     stale_before = _minus_days(coverage_end, STALE_AFTER_DAYS) if coverage_end else None
