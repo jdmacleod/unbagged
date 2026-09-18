@@ -784,7 +784,15 @@ class TestWhatTheIndexCallsAProduct:
         found = views.timeline(conn, request_id, query=product["match_name"])
 
         assert product["purchases"] == 2
-        assert len(found["baskets"]) == product["purchases"]
+        # `>=`, not `==`. A name filter is a substring match, so a longer
+        # product containing this one is also returned — `ProductIndex.tsx`
+        # records the measured case, where a product bought 20 times opened a
+        # timeline claiming 26 visits. That over-match predates the join and
+        # the join does not widen it. What the join MUST guarantee is the
+        # other direction: the handle finds at least every visit the row
+        # counts, which is what was broken. Asserting equality here would pass
+        # on this fixture and fail the moment a neighbour shared the name.
+        assert len(found["baskets"]) >= product["purchases"]
 
     def test_prices_joins_a_split_product_the_way_products_does(self, conn):
         """Regression: Products joined and Prices did not, so one item rendered
