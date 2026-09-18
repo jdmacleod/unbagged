@@ -480,3 +480,161 @@ class TestThePriceHistoryContract:
             s["key"] for s in views.price_history(conn, request_id, min_observations=2)["products"]
         }
         assert series_keys <= index_keys
+
+
+class TestWhatTheIndexCallsAProduct:
+    """Labels, and the lines that turn out not to be products at all.
+
+    Every name here is invented. The SHAPES come from measurement — a price
+    printed into the name field, deposit vocabulary standing alone, a drink
+    carrying the same word beside a size — but no value resembles anything in
+    the corpus, because `tools/scan_pii.py` has no rule for a product name and
+    the habit is the only guard. See `CONTRIBUTING.md`.
+    """
+
+    def _bought(self, conn, purchases):
+        from unbagged.models import TxnItem
+
+        return repository.save_parse_result(
+            conn,
+            ParseResult(
+                request=RequestMeta(retailer_id="r", display_name="R"),
+                disclosures=(
+                    Disclosure(
+                        category=DisclosureCategory.SPECIFIC_PIECES,
+                        status=DisclosureStatus.PARTIAL,
+                        provenance=PROV,
+                    ),
+                ),
+                transactions=tuple(
+                    Transaction(
+                        occurred_at=f"2019-03-{day:02d}T10:00:00",
+                        total_pre_discount=amount,
+                        items=(TxnItem(description_raw=name, upc=upc, retail_amt=amount),),
+                    )
+                    for day, (name, upc, amount) in enumerate(purchases, start=1)
+                ),
+            ),
+        )
+
+    def test_a_price_printed_into_the_name_does_not_reach_the_reader(self, conn):
+        request_id = self._bought(conn, [("$4.99 OAT MILK HALF GAL", "00000001", 4.99)])
+
+        product = views.product_index(conn, request_id)["products"][0]
+
+        assert product["description"] == "OAT MILK HALF GAL"
+
+    def test_the_printed_spelling_travels_beside_the_label(self, conn):
+        """The timeline filters by name where a retailer disclosed no codes, and
+        it matches `description_raw`. `App.tsx` sends THIS field.
+
+        Not a regression test, and worth being honest about why. The cleaned
+        label would also find the visit today: cleaning only ever strips a
+        prefix, so the label stays a substring of the printed name and the
+        timeline's LIKE is a substring test. Nothing declares that, nothing
+        tests it from the other side, and a cleaner that touched the middle or
+        the end of a name would break every name-filtered timeline in silence.
+        Matching on what the retailer printed does not rest on the accident.
+        """
+        request_id = self._bought(conn, [("$4.99 OAT MILK HALF GAL", None, 4.99)])
+
+        product = views.product_index(conn, request_id)["products"][0]
+
+        assert product["match_name"] == "$4.99 OAT MILK HALF GAL"
+        assert product["description"] == "OAT MILK HALF GAL"
+        # The field really does find the visit, which is the part that matters.
+        found = views.timeline(conn, request_id, query=product["match_name"])
+        assert len(found["baskets"]) == 1
+
+    def test_a_deposit_line_is_not_something_you_bought(self, conn):
+        request_id = self._bought(
+            conn, [("$0.05 CRV DEPOSIT", "00000001", 0.05), ("SOURDOUGH BOULE", None, 5.00)]
+        )
+
+        index = views.product_index(conn, request_id)
+
+        assert [p["description"] for p in index["products"]] == ["SOURDOUGH BOULE"]
+        assert index["set_aside"] == 1
+
+    def test_a_drink_carrying_the_same_word_is_still_a_product(self, conn):
+        """The expensive mistake. These carry codes and are bought repeatedly;
+        matching the word rather than the whole name deletes real purchases.
+        """
+        request_id = self._bought(conn, [("2.5 LITR 12 CRV", "00000002", 3.49)])
+
+        index = views.product_index(conn, request_id)
+
+        assert [p["description"] for p in index["products"]] == ["2.5 LITR 12 CRV"]
+        assert index["set_aside"] == 0
+
+    def test_a_name_that_is_only_punctuation_names_no_product(self, conn):
+        request_id = self._bought(conn, [("©", None, 2.00), ("SOURDOUGH BOULE", None, 5.00)])
+
+        index = views.product_index(conn, request_id)
+
+        assert [p["description"] for p in index["products"]] == ["SOURDOUGH BOULE"]
+        assert index["set_aside"] == 1
+
+    def test_a_percentage_in_a_name_survives(self, conn):
+        request_id = self._bought(conn, [("2% MILK GALLON", None, 3.19)])
+
+        index = views.product_index(conn, request_id)
+
+        assert [p["description"] for p in index["products"]] == ["2% MILK GALLON"]
+
+    def test_two_rows_that_would_read_alike_keep_what_was_printed(self, conn):
+        """Cleaning is abandoned for both rather than applied to one.
+
+        They are two products — different keys, so the retailer distinguished
+        them — and one name twice in an alphabetical list reads as double
+        counting. Appending the code instead is what the 2026-09-15 decisions
+        row forbids, and it would reach the downloadable index poster.
+        """
+        request_id = self._bought(
+            conn, [("$1.99 RYE LOAF", "00000001", 1.99), ("RYE LOAF", "00000002", 2.49)]
+        )
+
+        labels = {p["description"] for p in views.product_index(conn, request_id)["products"]}
+
+        assert labels == {"$1.99 RYE LOAF", "RYE LOAF"}
+
+    def test_prices_and_products_call_one_product_by_one_name(self, conn):
+        """**Regression.** The rule lived in two places and only one was
+        changed, so the same product showed a tidy name on one tab and the
+        printed name on the next, with nothing on screen to explain it.
+        """
+        request_id = self._bought(
+            conn, [("$4.99 OAT MILK", "00000001", 4.99), ("$5.49 OAT MILK", "00000001", 5.49)]
+        )
+
+        indexed = views.product_index(conn, request_id)["products"][0]["description"]
+        priced = views.price_history(conn, request_id, min_observations=2)["products"][0][
+            "description"
+        ]
+
+        assert indexed == priced == "OAT MILK"
+
+    def test_the_headline_count_still_matches_the_page_after_a_line_is_set_aside(self, conn):
+        """**Regression.** `stats` counted in SQL over the raw text while the
+        page filtered in Python, so the figure stayed at the pre-label number
+        and the list under it was shorter. The module docstring already warned
+        that several answers to "what is a product" must not live here.
+        """
+        request_id = self._bought(
+            conn, [("$0.05 CRV DEPOSIT", "00000001", 0.05), ("SOURDOUGH BOULE", None, 5.00)]
+        )
+
+        index = views.product_index(conn, request_id)
+
+        assert views.stats(conn, request_id)["distinct_products"] == index["total_products"]
+        assert index["total_products"] == len(index["products"])
+
+    def test_a_reader_can_still_search_for_what_the_retailer_printed(self, conn):
+        """Typing the price prefix off the receipt has to find the row it came
+        from, even though that string is no longer on screen.
+        """
+        request_id = self._bought(conn, [("$4.99 OAT MILK HALF GAL", None, 4.99)])
+
+        found = views.product_index(conn, request_id, query="$4.99")["products"]
+
+        assert [p["description"] for p in found] == ["OAT MILK HALF GAL"]

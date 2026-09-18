@@ -125,9 +125,9 @@ export function Compare() {
             know". */}
         {anyDash && (
           <Caveat>
-            An em dash means the response did not disclose that, which is not
-            the same as a zero. A figure is only written as zero where the
-            retailer answered the category in full.
+            An em dash means the response did not disclose that. It is not a
+            zero. A zero appears only where the retailer answered the category
+            in full.
           </Caveat>
         )}
 

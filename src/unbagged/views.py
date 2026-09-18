@@ -10,8 +10,10 @@ Every function returns plain dicts and lists, ready to serialise.
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from collections import defaultdict
+from collections.abc import Mapping
 from statistics import median
 from typing import Any
 
@@ -353,6 +355,16 @@ def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
         (request_id,),
     ).fetchone()
     result = dict(row)
+    # Taken from the index rather than from the COUNT above, which now stands
+    # only as the pre-label figure the query's own comment describes.
+    #
+    # The comment above records this going wrong twice already. It goes wrong a
+    # third way the moment the index refuses a row the SQL still counts: a
+    # deposit line, or a name that was punctuation. Those refusals happen in
+    # Python, after the label is chosen, and no COUNT can see them. Deriving the
+    # figure from the list makes "three different answers to what is a product"
+    # impossible rather than merely discouraged.
+    result["distinct_products"] = product_index(conn, request_id)["total_products"]
     result["lines_disclosed"] = request_lines_disclosed(conn, request_id)
     # Its own query, not a column above: the LEFT JOIN onto line items
     # multiplies each basket's stated total by its line count, so summing it in
@@ -783,9 +795,12 @@ def price_history(
             {
                 "key": entry["key"],
                 "upc": entry["upc"],
-                # The description can vary between visits; the commonest one is
-                # the honest label, and the raw values stay reachable per point.
-                "description": max(entry["descriptions"].items(), key=lambda kv: kv[1])[0],
+                # The description can vary between visits, and the raw values
+                # stay reachable per point. Through `label_for` rather than
+                # picking the commonest here: this view and Products sit one tab
+                # apart, and when each chose its own label they could show two
+                # different names for one product with nothing to explain it.
+                "description": label_for(entry["descriptions"])[0],
                 "purchases": len(points),
                 # "unit"     — amounts look like one item at a stable-ish price
                 # "multiple" — some amounts are near-exact integer multiples of
@@ -1058,6 +1073,97 @@ def _tier(purchases: int) -> int:
 #: was showing nothing and letting them conclude nothing was disclosed.
 PRODUCT_KEY = "COALESCE(NULLIF(i.upc, ''), NULLIF(i.description_raw, ''))"
 
+#: A price the retailer printed into the name field, e.g. `$0.05 CRV DEPOSIT`.
+#:
+#: **The currency symbol is required, and that is the whole point.** A rule that
+#: stripped any leading number was measured against the corpus and matched seven
+#: names: the five that really carry a price, and two that open with a bottle
+#: size followed by a unit. Eating the size off those leaves a name that is
+#: wrong and still reads like a plausible product, which is worse than an ugly
+#: one — it is the `2% MILK` hazard, one step along. Requiring the symbol
+#: matched five of five and nothing else.
+_PRICE_PREFIX = re.compile(r"^\s*\$\s*\d+(?:[.,]\d+)?\s+")
+
+#: Punctuation a name opens with and no reader needs: a stray bracket, a
+#: quotation mark, an OCR artefact. Digits are NOT punctuation here and must
+#: survive — `2% MILK` and `7UP` are products.
+_LEADING_PUNCTUATION = re.compile(r"^[^A-Za-z0-9]+")
+
+#: Words a receipt uses for a line that is a charge but not a thing you bought:
+#: a container deposit, a redemption value, a tax printed as its own row.
+#:
+#: **Every token has to be in here before a line is refused**, never one of
+#: them. Measured against the corpus: matching on containment drops eight rows
+#: where five are meant, and the three it takes are real drinks whose names
+#: carry the word beside a size and a unit. `adapters/hmart/receipt.py`
+#: `_is_furniture` records the same lesson from the other direction, where
+#: matching the word `TENDER` alone deleted a real `GIFT CARD` purchase and the
+#: basket then came up short for a reason nobody could see.
+#:
+#: Kept as a module constant rather than asked of the adapter. `RetailerAdapter`
+#: is a structural Protocol that no adapter inherits, so it cannot hand one a
+#: default, and `product_index` holds no retailer to ask. CLAUDE.md's rule is
+#: that core must not branch on retailer IDENTITY; a shared constant branches on
+#: nothing. It moves behind the protocol the first time a jurisdiction disagrees
+#: with it — see issue #100.
+NON_PRODUCT_WORDS = frozenset({"CRV", "DEPOSIT", "DEP", "BOTTLE", "TAX"})
+
+
+def clean_label(raw: str) -> str:
+    """The name with the retailer's furniture taken off the front.
+
+    Display only. The raw spelling is what every lookup still matches on, which
+    is why `product_index` returns it alongside as `match_name`: the timeline
+    searches `description_raw` with a LIKE, so a cleaned string sent as a query
+    finds a product that was bought and reports that it never was.
+
+    Returns `""` where nothing is left, which means the row names no product.
+    """
+    return _LEADING_PUNCTUATION.sub("", _PRICE_PREFIX.sub("", raw)).strip()
+
+
+def is_non_product(label: str) -> bool:
+    """Is this line a charge rather than something bought?
+
+    True only when EVERY word is deposit or tax vocabulary. `CRV DEPOSIT` is
+    the receipt charging you for a container; a drink whose name happens to end
+    in `CRV` is a drink.
+    """
+    words = label.upper().split()
+    return bool(words) and all(word in NON_PRODUCT_WORDS for word in words)
+
+
+def label_for(spellings: Mapping[str, int]) -> tuple[str, str]:
+    """One product's label, and the raw spelling that backs it.
+
+    A retailer spells the same product differently between visits and both
+    product views have to choose one. They each used to do it separately —
+    `max(counter.items(), …)` in two places with the dict key renamed — so
+    changing one made Prices and Products disagree about a name, which is the
+    kind of difference that costs a reader their trust in the whole report.
+
+    Counts are folded by the CLEANED spelling, so `$4.99 OAT MILK` and
+    `OAT MILK` are two sightings of one name rather than two candidates
+    splitting the vote.
+
+    The order is total, because `max` over a counter returns whichever key was
+    inserted first on a tie, and insertion order here comes from a `GROUP BY`
+    with no `ORDER BY` — which is to say from nothing. Most sightings first,
+    then the label itself; among the raw spellings behind one label, the
+    shortest, then alphabetical.
+    """
+    folded: dict[str, list] = {}
+    for raw, count in spellings.items():
+        # A spelling that cleans away to nothing keeps its raw form as the key
+        # so the row is still counted and can still be recognised as unreadable.
+        key = clean_label(raw) or raw
+        slot = folded.setdefault(key, [0, raw])
+        slot[0] += count
+        if (len(raw), raw) < (len(slot[1]), slot[1]):
+            slot[1] = raw
+    label = min(folded, key=lambda k: (-folded[k][0], k))
+    return label, folded[label][1]
+
 
 def product_index(
     conn: sqlite3.Connection,
@@ -1127,13 +1233,41 @@ def product_index(
     stale_before = _minus_days(coverage_end, STALE_AFTER_DAYS) if coverage_end else None
 
     products = []
+    set_aside = 0
     for entry in merged.values():
-        name = max(entry["names"].items(), key=lambda kv: kv[1])[0]
+        label, raw = label_for(entry["names"])
+        # Two reasons a row names no product, and both are refusals rather than
+        # findings. A label that cleans away to nothing was punctuation — an OCR
+        # artefact, a stray bracket — and `test_a_line_with_no_readable_name`
+        # already says an entry in an index of what you bought has to be
+        # something a reader can recognise. A label that is deposit vocabulary
+        # end to end is a charge the receipt made, not a thing anybody chose.
+        #
+        # Counted, not silent. `total_products` moves when these are dropped,
+        # and a figure that shrinks with nothing on screen to explain it is the
+        # one thing this app must never do.
+        if not clean_label(raw) or is_non_product(label):
+            set_aside += 1
+            continue
         products.append(
             {
                 "key": entry["key"],
                 "upc": entry["upc"],
-                "description": name,
+                "description": label,
+                # The spelling the retailer actually printed. `App.tsx` sends
+                # this to the timeline where a product has no UPC.
+                #
+                # The cleaned label would match too, as it happens: cleaning
+                # only ever strips a PREFIX, so the label is always a substring
+                # of the raw and the timeline's LIKE is a substring test. That
+                # is an accident of the current rule rather than a property
+                # anything guarantees, and it is invisible from either end — a
+                # cleaner that touched the middle or the end of a name would
+                # break every name-filtered timeline in silence, and the failure
+                # reads as "this was never bought" rather than as a bug. Sending
+                # what the retailer printed costs one field and does not rest on
+                # the accident.
+                "match_name": raw,
                 "purchases": entry["purchases"],
                 "tier": _tier(entry["purchases"]),
                 "first_seen": entry["first_seen"],
@@ -1149,6 +1283,22 @@ def product_index(
             }
         )
 
+    # Where cleaning would make two rows read identically, neither is cleaned.
+    #
+    # Two entries are two products — they have different keys, so the retailer
+    # distinguished them somehow — and an alphabetical list showing one name
+    # twice with different counts reads as double-counting. The alternative was
+    # appending the code to the label, which the 2026-09-15 decisions row
+    # forbids in the mirror case: a code and a name are different kinds of thing
+    # and neither belongs in the other's slot. It would also reach the
+    # downloadable index poster, which sets `description` in the serif.
+    collisions = defaultdict(int)
+    for product in products:
+        collisions[product["description"]] += 1
+    for product in products:
+        if collisions[product["description"]] > 1:
+            product["description"] = product["match_name"]
+
     total_products = len(products)
     bought_once_total = sum(1 for p in products if p["purchases"] == 1)
 
@@ -1161,10 +1311,16 @@ def product_index(
         # typing either matches products containing that character, which is
         # what someone typing it into a search box meant.
         needle = query.strip().lower()
+        # Both spellings, because the reader can be typing either. The label is
+        # what is on screen; `match_name` is what the retailer printed, which is
+        # what they will type if they are reading off the receipt itself or
+        # pasting from the timeline.
         products = [
             p
             for p in products
-            if needle in p["description"].lower() or needle in (p["upc"] or "").lower()
+            if needle in p["description"].lower()
+            or needle in p["match_name"].lower()
+            or needle in (p["upc"] or "").lower()
         ]
     if min_purchases > 1:
         products = [p for p in products if p["purchases"] >= min_purchases]
@@ -1181,6 +1337,10 @@ def product_index(
         # and not about whatever is currently typed in the filter box.
         "total_products": total_products,
         "bought_once_total": bought_once_total,
+        # Lines that were in the response and are not products: a container
+        # deposit, a tax row, a name that was punctuation. Reported rather than
+        # subtracted in silence — see the loop above.
+        "set_aside": set_aside,
         "product_count": len(products),
         "bought_once": sum(1 for p in products if p["purchases"] == 1),
         "min_purchases": min_purchases,

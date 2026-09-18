@@ -23,6 +23,49 @@ from a specific response. See `CONTRIBUTING.md`.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/
 
+## [Unreleased]
+
+**This changes what responses you have already loaded look like.** No migration
+runs and nothing needs re-reading, but the Products page will list fewer items
+than it did and the "Distinct products" figure on Compare moves with it. The
+lines that went are named on the page. Not a PATCH.
+
+### Changed
+
+- **A product is listed under its name, not under the retailer's furniture.**
+  Some responses print a promotional price into the name field, so the page
+  listed the price where the product should have been; others open a name with
+  a stray bracket, and one entry was a single copyright glyph with no product
+  behind it at all. A price prefix and leading punctuation now come off the
+  label. The name the retailer printed is still what the app matches on, so
+  clicking a product still opens the visits it was bought on.
+
+  Two things it deliberately does not do. A name opening with a bare number
+  keeps it, because that is a size and not a price — `2% MILK` is the shape, and
+  a rule that stripped it would leave a name that is wrong and still reads like
+  a product. And where cleaning two entries would make them read identically,
+  neither is cleaned: they are two products, and one name twice in an
+  alphabetical list reads as double counting.
+
+- **A deposit or a tax line is no longer counted as something you bought.** A
+  container deposit is a charge the receipt made, not a thing anybody chose. It
+  is refused only where the whole name is that vocabulary, never where a name
+  merely contains it — a drink whose name carries a redemption value beside its
+  size is a drink. **The page says how many lines it set aside**, because a
+  total that shrinks with nothing on screen to account for it is exactly what
+  this tool exists not to do.
+
+- **Prices and Products call a product by the same name.** The rule for
+  choosing among a retailer's spellings lived in two places, so the two tabs
+  could disagree about one product with nothing to explain the difference.
+
+- **Shorter, plainer copy across every view, in American English.** Four
+  British idioms reached shipped text; the longest paragraph in the app lost a
+  third of its length without losing a claim. `DESIGN.md` gains a Words section
+  so the next sentence has a rule to meet: reader-facing strings are American,
+  identifiers and wire-format fields are untouched, and a line holds about 80
+  characters.
+
 ## [0.16.0] - 2026-09-16
 
 ### Added

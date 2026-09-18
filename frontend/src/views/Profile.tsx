@@ -71,16 +71,15 @@ export function Profile({ requestId }: { requestId: number }) {
       {mine.length === 0 && bought.length === 0 && unclear.length === 0 && (
         <Movement
           heading="What they worked out about you"
-          blurb="Nothing. This response carried no inferred attributes at all —
-                 no scores computed from your baskets, and nothing bought in
+          blurb="Nothing. No scores computed from your baskets, nothing bought
                  from anywhere else."
           count={0}
           marginalia={<Aside>none disclosed</Aside>}
         >
           <Empty>
             That is what the response contained, not what this tool could read.
-            A retailer that holds inferences and does not disclose them looks
-            exactly like this from here, which is itself worth knowing.
+            A retailer holding inferences it never disclosed looks exactly like
+            this, which is worth knowing.
           </Empty>
         </Movement>
       )}

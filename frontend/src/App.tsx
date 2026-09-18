@@ -634,8 +634,8 @@ export default function App() {
           unbagged
         </h1>
         <p className="mt-2 max-w-[62ch] text-muted">
-          Read what the grocery store knows about you. Everything here stays on
-          this machine.
+          Read what the grocery store knows about you. Nothing leaves this
+          machine.
         </p>
       </header>
 
@@ -817,7 +817,17 @@ export default function App() {
                       // retailer disclosed no codes there is no exact handle to
                       // use, so the name goes through and `exact` tells the
                       // timeline to stop claiming the stronger thing.
-                      query: entry.upc ?? entry.description,
+                      // The QUERY is the printed spelling, the LABEL is the one
+                      // on screen. Today the cleaned label would also match,
+                      // because cleaning only ever strips a prefix and the
+                      // timeline's LIKE is a substring test — but that is an
+                      // accident of the current rule, not a property anyone
+                      // declared. A cleaner that touched the middle or the end
+                      // of a name would break the lookup silently, and the
+                      // failure looks like a disclosure gap rather than a bug.
+                      // Matching on what the retailer printed costs nothing and
+                      // does not depend on that accident holding.
+                      query: entry.upc ?? entry.match_name,
                       label: entry.description,
                     }).search
                   }
@@ -901,8 +911,8 @@ export default function App() {
 
       <footer className="mt-10 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-rule pt-4 text-[11.5px] text-faint">
         <span className="max-w-[62ch]">
-          unbagged reports what a response contained and what it did not. It is
-          not legal advice, and it never sends anything anywhere.
+          unbagged reports what a response contained and what it did not. Not
+          legal advice. Nothing is ever sent anywhere.
         </span>
         <Version />
       </footer>
