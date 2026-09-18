@@ -23,6 +23,33 @@ from a specific response. See `CONTRIBUTING.md`.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/
 
+## [0.18.0] - 2026-09-18
+
+**This changes what responses you have already loaded look like.** The Products
+page lists one item fewer where a retailer printed the same product two ways.
+No migration runs and nothing needs re-reading. Not a PATCH.
+
+### Fixed
+
+- **A stray character no longer splits one product into two.** Where a retailer
+  disclosed no code, the app identifies a product by the name printed on the
+  receipt, so one item written `(CHINESE BROCCOLI` on one visit and
+  `CHINESE BROCCOLI` on the next was listed twice with its visits divided
+  between the rows. The label cleaner then declined to trim the bracket,
+  because trimming would have shown one name on two rows, so what reached the
+  page was a bracket standing in for a split nobody could see.
+
+  The split was already visible somewhere worse: the row saying you bought it
+  twice opened a timeline of three visits, because searching the clean spelling
+  also finds the bracketed one. Both now agree.
+
+  Entries are joined only where **no** spelling in the group carries a code. A
+  code is the retailer telling the two apart itself, and two coded products
+  printing one name are two products however alike the names read.
+
+  Prices joins on the same rule, so it cannot list two price series for a
+  product Products calls one thing.
+
 ## [Unreleased]
 
 Repo tooling and documentation only. Nothing about the application changed, so
