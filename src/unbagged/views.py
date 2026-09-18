@@ -811,6 +811,9 @@ def price_history(
                 # apart, and when each chose its own label they could show two
                 # different names for one product with nothing to explain it.
                 "description": label,
+                # The printed spelling, for the collision pass below and for
+                # the same matching reason `product_index` carries it.
+                "match_name": raw,
                 "purchases": len(points),
                 # "unit"     — amounts look like one item at a stable-ish price
                 # "multiple" — some amounts are near-exact integer multiples of
@@ -832,6 +835,20 @@ def price_history(
                 "points": points,
             }
         )
+
+    # The same collision rule the index follows, for the same reason.
+    #
+    # Two keys whose names clean alike are two products, and two series under
+    # one name is worse here than in a list: the reader is comparing prices and
+    # has nothing to tell the lines apart. Caught by review on #102 — the guard
+    # was written into `product_index` only, so Products restored the printed
+    # names and Prices went on showing both series as `RYE LOAF`.
+    collisions: dict[str, int] = defaultdict(int)
+    for product in products:
+        collisions[product["description"]] += 1
+    for product in products:
+        if collisions[product["description"]] > 1:
+            product["description"] = product["match_name"]
 
     # Priceable products first: those are the ones the view can actually plot.
     products.sort(key=lambda p: (not p["priceable"], -p["purchases"], p["description"]))
@@ -1094,10 +1111,26 @@ PRODUCT_KEY = "COALESCE(NULLIF(i.upc, ''), NULLIF(i.description_raw, ''))"
 #: matched five of five and nothing else.
 _PRICE_PREFIX = re.compile(r"^\s*\$\s*\d+(?:[.,]\d+)?\s+")
 
-#: Punctuation a name opens with and no reader needs: a stray bracket, a
-#: quotation mark, an OCR artefact. Digits are NOT punctuation here and must
-#: survive — `2% MILK` and `7UP` are products.
-_LEADING_PUNCTUATION = re.compile(r"^[^A-Za-z0-9]+")
+
+def _strip_leading_punctuation(text: str) -> str:
+    """Drop what a name opens with that no reader needs.
+
+    A stray bracket, a quotation mark, an OCR artefact. Digits are NOT
+    punctuation here and must survive: `2% MILK` and `7UP` are products.
+
+    **Letters means letters in any script, which an `A-Za-z` class does not.**
+    This was written as `^[^A-Za-z0-9]+` and would have stripped the whole of a
+    name written in Hangul or Han, leaving the empty string — which the caller
+    reads as "this row names no product" and drops from Products AND Prices. On
+    a Korean grocer's response that is not an edge case, it is the shelf. Caught
+    by review on #102. `str.isalnum` is Unicode-aware, so 한 and é and 7 all
+    count as the start of a name and only punctuation is taken.
+    """
+    for index, char in enumerate(text):
+        if char.isalnum():
+            return text[index:]
+    return ""
+
 
 #: Words a receipt uses for a line that is a charge but not a thing you bought:
 #: a container deposit, a redemption value, a tax printed as its own row.
@@ -1129,7 +1162,7 @@ def clean_label(raw: str) -> str:
 
     Returns `""` where nothing is left, which means the row names no product.
     """
-    return _LEADING_PUNCTUATION.sub("", _PRICE_PREFIX.sub("", raw)).strip()
+    return _strip_leading_punctuation(_PRICE_PREFIX.sub("", raw)).strip()
 
 
 def is_non_product(label: str) -> bool:
@@ -1347,9 +1380,11 @@ def product_index(
         # and not about whatever is currently typed in the filter box.
         "total_products": total_products,
         "bought_once_total": bought_once_total,
-        # Lines that were in the response and are not products: a container
-        # deposit, a tax row, a name that was punctuation. Reported rather than
-        # subtracted in silence — see the loop above.
+        # Entries that were in the response and are not products: a container
+        # deposit, a tax row, a name that was punctuation. Counted per product
+        # key, NOT per receipt line, so it reconciles against `total_products`
+        # directly: a deposit charged on nine visits is one entry the total
+        # does not carry. Reported rather than subtracted in silence.
         "set_aside": set_aside,
         "product_count": len(products),
         "bought_once": sum(1 for p in products if p["purchases"] == 1),

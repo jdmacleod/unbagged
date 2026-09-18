@@ -23,7 +23,7 @@ other side, where matching the word `TENDER` alone deleted a real `GIFT CARD`
 purchase.
 """
 
-from unbagged.views import clean_label, is_non_product, label_for
+from unbagged.views import NON_PRODUCT_WORDS, clean_label, is_non_product, label_for
 
 
 class TestCleanLabel:
@@ -53,6 +53,32 @@ class TestCleanLabel:
 
     def test_an_ordinary_name_is_returned_unchanged(self):
         assert clean_label("SOURDOUGH BOULE") == "SOURDOUGH BOULE"
+
+    def test_a_name_in_a_non_latin_script_survives_whole(self):
+        """The rule is "letters", and letters are not only A-Za-z.
+
+        Written first as `^[^A-Za-z0-9]+`, which strips every character of a
+        name in Hangul or Han. The result is the empty string, which the caller
+        reads as "this row names no product" and drops from Products AND
+        Prices. On a Korean grocer's response that is not an edge case.
+        """
+        assert clean_label("오이") == "오이"
+        assert clean_label("青葱") == "青葱"
+
+    def test_an_accented_name_keeps_its_first_letter(self):
+        assert clean_label("ÉCLAIR CHOCOLAT") == "ÉCLAIR CHOCOLAT"
+
+    def test_punctuation_comes_off_a_non_latin_name_too(self):
+        assert clean_label("(青葱") == "青葱"
+
+    def test_a_price_prefix_comes_off_a_non_latin_name(self):
+        assert clean_label("$4.99 青葱") == "青葱"
+
+    def test_a_price_with_a_space_after_the_symbol_still_comes_off(self):
+        assert clean_label("$ 4.99 OAT MILK") == "OAT MILK"
+
+    def test_a_whole_dollar_price_with_no_decimal_comes_off(self):
+        assert clean_label("$5 OAT MILK") == "OAT MILK"
 
     def test_a_price_and_punctuation_together_both_come_off(self):
         assert clean_label("$1.25 -CART FEE RETURN") == "CART FEE RETURN"
@@ -90,6 +116,11 @@ class TestIsNonProduct:
     def test_the_match_is_case_insensitive(self):
         assert is_non_product("crv deposit") is True
 
+    def test_every_word_in_the_vocabulary_is_refused_on_its_own(self):
+        """Each token, so an edit to the constant cannot quietly drop one."""
+        for word in NON_PRODUCT_WORDS:
+            assert is_non_product(word) is True, word
+
 
 class TestLabelFor:
     def test_the_commonest_spelling_wins(self):
@@ -126,3 +157,17 @@ class TestLabelFor:
     def test_a_name_that_cleans_to_nothing_keeps_its_raw_form(self):
         """So the caller can still see there was a row and still refuse it."""
         assert label_for({"©": 2}) == ("©", "©")
+
+    def test_the_raw_representative_is_the_same_one_every_time(self):
+        """Which raw spelling comes back is not cosmetic: it is what the
+        timeline matches on, so an unstable pick is a lookup that works on one
+        page load and not the next.
+
+        Shortest first, then alphabetical, among the spellings that clean alike.
+        """
+        spellings = {"$4.99 OAT MILK": 1, "OAT MILK": 1, "$12.00 OAT MILK": 1}
+        first = label_for(spellings)
+        second = label_for(dict(reversed(list(spellings.items()))))
+
+        assert first == second
+        assert first[1] == "OAT MILK"

@@ -615,11 +615,9 @@ class TestWhatTheIndexCallsAProduct:
         assert indexed == priced == "OAT MILK"
 
     def test_prices_refuses_a_deposit_line_the_index_already_refused(self, conn):
-        """Regression: ISSUE-001 — Prices charted a price series for a line
-        Products had set aside, so one tab said it was not a product while the
-        tab beside it tracked what it cost over four visits.
-        Found by /qa on 2026-09-18.
-        Report: .gstack/qa-reports/qa-report-localhost-8420-2026-09-18.md
+        """Regression: Prices charted a price series for a line Products had
+        set aside, so one tab said it was not a product while the tab beside it
+        tracked what it cost over four visits.
 
         The refusal was written into `product_index` only. `price_history` took
         the shared label and never asked whether the thing it had labelled was
@@ -653,6 +651,65 @@ class TestWhatTheIndexCallsAProduct:
 
         assert views.stats(conn, request_id)["distinct_products"] == index["total_products"]
         assert index["total_products"] == len(index["products"])
+
+    def test_prices_keeps_printed_names_where_cleaning_would_read_alike(self, conn):
+        """The collision rule is the index's AND the chart's.
+
+        Two series under one name is worse on Prices than in a list: the reader
+        is comparing prices and has nothing to tell the lines apart. The guard
+        was written into `product_index` only, so Products restored the printed
+        names while Prices showed both series as one.
+        """
+        request_id = self._bought(
+            conn,
+            [
+                ("$1.99 RYE LOAF", "00000001", 1.99),
+                ("$1.99 RYE LOAF", "00000001", 2.49),
+                ("RYE LOAF", "00000002", 3.99),
+                ("RYE LOAF", "00000002", 4.49),
+            ],
+        )
+
+        priced = views.price_history(conn, request_id, min_observations=2)["products"]
+
+        assert sorted(p["description"] for p in priced) == ["$1.99 RYE LOAF", "RYE LOAF"]
+
+    def test_prices_refuses_a_name_that_is_only_punctuation(self, conn):
+        """The other half of the same refusal. Only the vocabulary half had a
+        test, so this one could regress without anything failing.
+        """
+        request_id = self._bought(
+            conn,
+            [
+                ("\u00a9", None, 2.00),
+                ("\u00a9", None, 2.50),
+                ("SOURDOUGH BOULE", None, 5.00),
+                ("SOURDOUGH BOULE", None, 5.50),
+            ],
+        )
+
+        priced = views.price_history(conn, request_id, min_observations=2)["products"]
+
+        assert [p["description"] for p in priced] == ["SOURDOUGH BOULE"]
+
+    def test_a_response_that_is_only_charges_lists_nothing_and_says_why(self, conn):
+        """The boundary where every row is set aside.
+
+        `total_products` reaches zero while the response really did disclose
+        lines, so the page must not read as "they disclosed nothing" — the
+        count is the only thing on screen that separates the two.
+        """
+        request_id = self._bought(
+            conn, [("CRV", None, 0.05), ("$0.05 CRV DEPOSIT", "00000001", 0.05)]
+        )
+
+        index = views.product_index(conn, request_id)
+
+        assert index["products"] == []
+        assert index["total_products"] == 0
+        assert index["set_aside"] == 2
+        assert index["lines_disclosed"] is True, "the response DID disclose lines"
+        assert views.stats(conn, request_id)["distinct_products"] == 0
 
     def test_a_reader_can_still_search_for_what_the_retailer_printed(self, conn):
         """Typing the price prefix off the receipt has to find the row it came
