@@ -10,7 +10,7 @@ import { gaugeWidth, scopeNote } from "./views/Profile";
 import { draftRows } from "./views/Compliance";
 import { rowsFor } from "./views/Compare";
 import { nothingWasItemised } from "./views/ProductIndex";
-import { announceUpload, isSameEntry, resolveCurrent } from "./App";
+import { announceUpload, isSameEntry, productQuery, resolveCurrent } from "./App";
 import type { View } from "./App";
 import type {
   Basket,
@@ -571,5 +571,36 @@ describe("rowsFor", () => {
     expect(paid.map((r) => r.key)).toEqual(spent.map((r) => r.key));
     const differing = paid.filter((r, i) => r.label !== spent[i].label);
     expect(differing.map((r) => r.key)).toEqual(["total_paid"]);
+  });
+});
+
+describe("productQuery", () => {
+  // What a click on a product sends the timeline to filter by. The whole
+  // `match_name` field exists to serve this one expression, and it was inline
+  // in JSX with no test reaching it — caught by the ship coverage audit on
+  // #102. Every name here is invented; nothing comes from a real response.
+
+  it("sends the retailer's code where one was disclosed", () => {
+    expect(productQuery({ upc: "00000001", match_name: "$4.99 OAT MILK" })).toBe("00000001");
+  });
+
+  it("sends the PRINTED name where the retailer disclosed no code", () => {
+    // Not the cleaned label. The timeline matches `description_raw`, and a
+    // retailer that publishes no codes routes every product click through here.
+    expect(productQuery({ upc: null, match_name: "$4.99 OAT MILK" })).toBe("$4.99 OAT MILK");
+  });
+
+  it("prefers the code even when the printed name would also match", () => {
+    // The code is exact; a name is a substring match and over-matches products
+    // whose names contain each other.
+    expect(productQuery({ upc: "00000002", match_name: "MILK" })).toBe("00000002");
+  });
+
+  it("treats an empty code as no code rather than as a handle", () => {
+    // A row can carry "" rather than null. Under `??` that reached the URL as
+    // an empty query, which `href` drops, so the click opened an UNFILTERED
+    // timeline: every visit, presented as the visits that included this
+    // product. The printed name is the handle whenever the code is not one.
+    expect(productQuery({ upc: "", match_name: "SOURDOUGH BOULE" })).toBe("SOURDOUGH BOULE");
   });
 });

@@ -188,10 +188,9 @@ export function Upload({
               instruction is gone rather than softened: a sentence telling
               somebody to do work the machine does is worse than no sentence. */}
           <p className="mt-1 max-w-[62ch] text-muted">
-            The PDF, text file, spreadsheet export or screen captures a
-            retailer sent back when you filed a right-to-know request — or the
-            zip they arrived in. Drop all of it at once, since it is one
-            response. It is read here, on this machine, and nothing is uploaded
+            Whatever the retailer sent back: a PDF, text, a spreadsheet export,
+            screen captures, or the zip they arrived in. Drop it all at once
+            &mdash; it is one response, however many files. Nothing is uploaded
             anywhere.
           </p>
         </div>
