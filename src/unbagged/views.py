@@ -771,6 +771,16 @@ def price_history(
         # whose generator picks products with replacement.
         if len(points) < min_observations:
             continue
+
+        # The same refusal `product_index` makes, and it has to be made here
+        # too. Found by /qa: Products set a `CRV DEPOSIT` line aside while
+        # Prices went on charting its price over four visits, so one tab said
+        # it was not a product and the tab beside it tracked what it cost. A
+        # deposit is a charge the receipt made whichever view is looking at it.
+        label, raw = label_for(entry["descriptions"])
+        if not clean_label(raw) or is_non_product(label):
+            continue
+
         points.sort(key=lambda p: p["date"])
 
         shape = _price_shape([p["retail_amt"] for p in points])
@@ -800,7 +810,7 @@ def price_history(
                 # picking the commonest here: this view and Products sit one tab
                 # apart, and when each chose its own label they could show two
                 # different names for one product with nothing to explain it.
-                "description": label_for(entry["descriptions"])[0],
+                "description": label,
                 "purchases": len(points),
                 # "unit"     — amounts look like one item at a stable-ish price
                 # "multiple" — some amounts are near-exact integer multiples of

@@ -614,6 +614,31 @@ class TestWhatTheIndexCallsAProduct:
 
         assert indexed == priced == "OAT MILK"
 
+    def test_prices_refuses_a_deposit_line_the_index_already_refused(self, conn):
+        """Regression: ISSUE-001 — Prices charted a price series for a line
+        Products had set aside, so one tab said it was not a product while the
+        tab beside it tracked what it cost over four visits.
+        Found by /qa on 2026-09-18.
+        Report: .gstack/qa-reports/qa-report-localhost-8420-2026-09-18.md
+
+        The refusal was written into `product_index` only. `price_history` took
+        the shared label and never asked whether the thing it had labelled was
+        a product, which is the same split D3 closed for the label itself.
+        """
+        request_id = self._bought(
+            conn,
+            [
+                ("$0.05 CRV DEPOSIT", "00000001", 0.05),
+                ("$0.05 CRV DEPOSIT", "00000001", 0.05),
+                ("SOURDOUGH BOULE", None, 5.00),
+                ("SOURDOUGH BOULE", None, 5.50),
+            ],
+        )
+
+        priced = views.price_history(conn, request_id, min_observations=2)["products"]
+
+        assert [p["description"] for p in priced] == ["SOURDOUGH BOULE"]
+
     def test_the_headline_count_still_matches_the_page_after_a_line_is_set_aside(self, conn):
         """**Regression.** `stats` counted in SQL over the raw text while the
         page filtered in Python, so the figure stayed at the pre-label number
