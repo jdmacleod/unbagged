@@ -23,12 +23,12 @@ from a specific response. See `CONTRIBUTING.md`.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/
 
-## [Unreleased]
+## [0.17.0] - 2026-09-18
 
 **This changes what responses you have already loaded look like.** No migration
 runs and nothing needs re-reading, but the Products page will list fewer items
-than it did and the "Distinct products" figure on Compare moves with it. The
-lines that went are named on the page. Not a PATCH.
+than it did and the "Distinct products" figure on Compare moves with it. What
+went is named on the page. Not a PATCH.
 
 ### Changed
 
@@ -51,13 +51,19 @@ lines that went are named on the page. Not a PATCH.
   container deposit is a charge the receipt made, not a thing anybody chose. It
   is refused only where the whole name is that vocabulary, never where a name
   merely contains it — a drink whose name carries a redemption value beside its
-  size is a drink. **The page says how many lines it set aside**, because a
+  size is a drink. **The page says how many entries it set aside**, because a
   total that shrinks with nothing on screen to account for it is exactly what
   this tool exists not to do.
 
 - **Prices and Products call a product by the same name.** The rule for
   choosing among a retailer's spellings lived in two places, so the two tabs
   could disagree about one product with nothing to explain the difference.
+
+- **A product name in any script survives.** The rule that trimmed punctuation
+  off the front of a name kept only `A-Z` and digits, so a name written in
+  Hangul or Han was trimmed away to nothing and the row vanished from both
+  Products and Prices. On a Korean grocer's response that is most of the shelf.
+  Caught in review before release; it never shipped.
 
 - **Shorter, plainer copy across every view, in American English.** Four
   British idioms reached shipped text; the longest paragraph in the app lost a
