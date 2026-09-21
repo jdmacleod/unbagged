@@ -1,9 +1,11 @@
 @import "tailwindcss";
 
 /* Ink on paper. See DESIGN.md — this file is the direction made literal.
-   Serif and sans come from the system stack and ship no bytes. Only the data
-   face is vendored, because narrowness is what lets five numeric columns fit
-   without truncating, and no system monospace is narrow enough. */
+   All three faces come from the system stack and ship no bytes. Vendoring a
+   narrow data face was planned and not done: narrowness would let five numeric
+   columns fit without truncating, but shipping zero font files is what keeps
+   "no third-party request" true without an allowlist to maintain. See the
+   DESIGN.md decisions log, 2026-09-04. */
 @theme {
   --font-serif:
     ui-serif, Georgia, "Iowan Old Style", "Palatino Linotype", serif;

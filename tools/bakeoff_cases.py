@@ -2,7 +2,7 @@
 """The synthetic receipts a vision bake-off is scored against, and the scoring.
 
 **No real capture is an input here, and none may ever be.** Every page this
-module produces is drawn by `tests/receiptimage.py` from rows written in this
+module produces is drawn by `tools/receiptimage.py` from rows written in this
 file, which is what makes a measured answer publishable: the ground truth is
 the source code, so a score can be recorded, a rendered page can be looked at,
 and neither carries anything belonging to anybody. A capture's *filename* alone
@@ -42,12 +42,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
 sys.path.insert(0, str(REPO_ROOT))
 
-# `receiptimage` lives with the tests because the tests are its other caller.
-# Drawing a second copy here would be a second thing to keep faithful, and the
-# fixture being unfaithful is a failure this project has already had. Imported
-# as `tests.receiptimage` rather than off a path into the directory, so a test
+# `receiptimage` lives in tools/ because its callers span tests, this
+# bake-off, and the H Mart fixture generator, which sits inside the packaged
+# library and must not import from tests/. Imported by module path so a test
 # importing this module gets the same module object the tests already hold.
-from tests.receiptimage import build_receipt  # noqa: E402
+from tools.receiptimage import build_receipt  # noqa: E402
 
 from unbagged.adapters.hmart.receipt import _is_furniture  # noqa: E402
 

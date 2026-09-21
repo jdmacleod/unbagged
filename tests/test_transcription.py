@@ -6,7 +6,7 @@ an overlay drawn across the page is not read as one — because each of them was
 wrong once against the real corpus, in a way that produced a plausible page
 rather than an obviously broken one.
 
-The pages are drawn (`tests/receiptimage.py`) rather than committed. Real
+The pages are drawn (`tools/receiptimage.py`) rather than committed. Real
 captures cannot be committed, and the reader is what is under test, so what it
 needs is input with the shape of the real thing.
 """
@@ -14,8 +14,8 @@ needs is input with the shape of the real thing.
 from decimal import Decimal
 
 import pytest
+from tools.receiptimage import build_receipt
 
-from tests.receiptimage import build_receipt
 from unbagged import transcription as tr
 from unbagged.transcription import image as tr_image
 from unbagged.transcription import words as tr_words

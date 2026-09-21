@@ -622,3 +622,106 @@ class TestTheDocumentedVisionModelIsTheShippedOne:
         """
         text = (ROOT / path).read_text(encoding="utf-8")
         assert self._default() in text, f"{path} no longer names the shipped default"
+
+
+class TestTheWheelShipsOnlyTheApplication:
+    """Fixture directories are development-only and must stay out of the wheel.
+
+    Two properties, and the second is the one that bit. The generators are
+    written to be loaded BY PATH from `tools/make_fixtures.py`, which runs at
+    the repo root, so they import `faker` and `tools.receiptimage` freely —
+    neither of which a wheel carries. Shipping them made dev-only imports look
+    like runtime dependencies: `import unbagged.adapters.hmart.fixtures.generate`
+    raised `ModuleNotFoundError: No module named 'tools'` from an installed
+    wheel, and nothing caught it because
+    `TestToolsAreInvokedAsModules` covers `tools/*.py` and not
+    `src/unbagged/adapters/*/fixtures/generate.py`.
+
+    And they were most of the artifact: 31 of 73 entries and 1,371 KB of
+    synthetic reports and receipt captures, in a package a user installs.
+
+    `tools/make_fixtures.py` already says fixtures are "deliberately not a
+    package, so a generator can never be pulled in by application code at
+    runtime". This is that sentence enforced by the build rather than trusted.
+    """
+
+    def test_the_exclusion_is_declared(self):
+        """Read from pyproject rather than inferred, so deleting it fails here."""
+        import tomllib
+
+        config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+        excluded = config["tool"]["hatch"]["build"]["targets"]["wheel"]["exclude"]
+        assert "**/fixtures/**" in excluded, (
+            "the wheel no longer excludes fixture directories; a `*/fixtures/*` "
+            "pattern silently matches nothing here, so check the built artifact"
+        )
+
+    @pytest.mark.container
+    def test_a_built_wheel_carries_no_fixtures_and_every_module_imports(self, tmp_path):
+        """The property itself, against a real build.
+
+        Marked `container` because it builds a wheel and creates a venv, which
+        `make test` must stay fast enough not to do. The declaration test above
+        runs in the fast suite; this one proves the declaration works.
+        """
+        import subprocess
+        import sys
+        import zipfile
+
+        build = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "wheel",
+                "--no-deps",
+                "--no-cache-dir",
+                "-w",
+                str(tmp_path),
+                str(ROOT),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert build.returncode == 0, build.stderr[-2000:]
+        wheels = list(tmp_path.glob("*.whl"))
+        assert len(wheels) == 1, f"expected one wheel, got {wheels}"
+
+        with zipfile.ZipFile(wheels[0]) as archive:
+            names = archive.namelist()
+        assert not [n for n in names if "/fixtures/" in n], (
+            "the wheel carries fixture files; they are development-only"
+        )
+
+        venv = tmp_path / "venv"
+        subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True, capture_output=True)
+        python = venv / "bin" / "python"
+        install = subprocess.run(
+            [str(python), "-m", "pip", "install", "--quiet", str(wheels[0])],
+            capture_output=True,
+            text=True,
+        )
+        assert install.returncode == 0, install.stderr[-2000:]
+
+        # Package names, not `__init__` — importing a package's `__init__`
+        # under its own name runs the module twice and the adapter registry
+        # rejects the second registration. That is the test lying, not a defect.
+        modules = sorted(
+            {
+                name[: -len(".py")].replace("/", ".").removesuffix(".__init__")
+                for name in names
+                if name.endswith(".py") and not name.startswith("unbagged-")
+            }
+        )
+        assert modules, "no modules in the wheel"
+        for module in modules:
+            # cwd outside the repo so `src/` and `tools/` cannot be picked up.
+            result = subprocess.run(
+                [str(python), "-c", f"import {module}"],
+                capture_output=True,
+                text=True,
+                cwd=str(tmp_path),
+            )
+            assert result.returncode == 0, (
+                f"{module} does not import from an installed wheel:\n{result.stderr[-1500:]}"
+            )

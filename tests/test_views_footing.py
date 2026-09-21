@@ -1,8 +1,10 @@
 """The footing check: do a basket's lines add up to the retailer's own total?
 
-Built entirely from fabricated transactions. The synthetic report generator
-makes every basket foot exactly, which is the right default for a fixture but
-means it cannot exercise the case this check exists for.
+Built entirely from fabricated transactions, so each shape can be stated
+directly rather than drawn. The synthetic report generator now reproduces all
+three outcomes at the proportions one real response measured — it previously made
+every basket foot exactly, which left this check reachable only from here — and
+`tests/test_api.py` asserts the fixture still reaches each one.
 
 The sign convention is load-bearing. The Timeline row renders "over by" for a
 positive delta and "under by" for a negative one, and those describe opposite

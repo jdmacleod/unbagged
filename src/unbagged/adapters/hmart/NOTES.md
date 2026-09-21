@@ -252,9 +252,86 @@ and `tests/test_merged_cells.py` carries the displacement case instead. The
 style *bodies* — `ss:Font`, `ss:Border`, `ss:Interior`, `ss:NumberFormat` — are
 left out on purpose: nothing reads them and they cannot move a value.
 
-**Scale differs from the reference response deliberately** — 108 rows across a
-104-month window, against 67 across 79 months — so the fixture cannot be
-mistaken for a reproduction of a real response.
+**Scale differs from the reference response deliberately** — 111 rows across a
+104-month window, of which 84 carry a purchase, against 67 across 79 months with
+49 carrying one — so the fixture cannot be mistaken for a reproduction of a real
+response.
+
+### The captures
+
+`fixtures/Transaction_MMDDYY.png`, 27 of them, drawn by the same generator and
+compared by decoded pixels rather than by byte — see `tools/make_fixtures.py` for
+why. They are drawn **from the statement's own figures**, because the adapter
+stores a basket only where the receipt's lines sum to the `Amount` the statement
+already gave for that visit. Drawing the two independently would produce a
+fixture that exercises only the refusal path.
+
+They itemise 24 of the 111 visits, against 44 of 67 in the real reply. Deliberately
+a smaller share: totals-only is the normal case for this retailer and not a defect
+to generate away, and every capture costs an OCR pass at ingest, which the
+screenshot run and the container tier both pay.
+
+Each shape exists to reach a specific branch of the reader:
+
+| Shape | Count | What it reaches |
+|---|---|---|
+| Ordinary page that reconciles | 18 | The itemised path |
+| A freehand scrawl in pure blue | 4 | The mask, without which the page reads short |
+| One tall receipt in two overlapping halves | 1 visit, 2 files | `stitch`, and the seam it has to guess |
+| Two trips on one date | 2 visits, 2 files | The pair that is *not* a split receipt |
+| Clipped at the right edge | 1 | The refusal: nothing is stored, the visit keeps the statement's total |
+
+**Two captures beyond the clipped one do not reconcile, and the count is not
+fixed.** They are ordinary OCR misreads of the kind the engine makes on 10px
+type — a decimal point read as a semicolon, a 3 read as a 2 under a scrawl — and
+the adapter refuses the basket rather than storing a wrong one, which is the
+behaviour that makes reading these by machine defensible. Two things follow.
+The itemised count is a property of the installed tesseract and can move when it
+is upgraded, so **assert a range, never an exact count**. And the real reply did
+worse: 15 of its 43 visits could not be placed by their printed timestamp at all.
+
+**A basket never rests on one line.** The composer reserves what the basket
+still owes — one cheapest-product's worth per ordinary line still required, plus
+the weighed line's floor — before placing any line, and raises rather than
+emitting a basket it cannot compose. Guarding only against overshooting the
+total is not enough: it lets one product priced within a few cents of the whole
+visit consume it, after which nothing else fits. Brute force over 50 seeds and
+the real amount domain found 5 such baskets and 203 weighed lines above their
+own ceiling, worst $68.83 against a documented $28.00 — all of it surviving a
+regression test that sampled 200 draws under a single seed. The tests now sweep
+the amount domain rather than sampling it.
+
+**Amounts are composed, not divided.** Each line sits at its product's shelf
+price give or take a little drift, and one weighed line at the end takes the
+remainder so the basket still sums to the statement's figure exactly. The first
+version divided the total into random pieces and named them afterwards, which
+left price and product independent: measured through the shipped views a
+product's amount swung a **median 24x** across visits and a worst 101x, so
+Prices read 14 of 26 products as weight-priced and could draw a series for only
+7. Composed, the median spread is **1.1x** and 21 of 23 products classify as
+unit-priced. The products that still swing are the weighed ones, which is what a
+weighed line is.
+
+The same-day pair is in the **statement**, not only in the filenames. Two captures
+named for one date while each prints its own, different, stamp describes nothing
+that could have happened, and the adapter correctly reads that as one visit plus a
+stray — which is how the first attempt at this shape was caught.
+
+Two things the captures do **not** reproduce, both worth knowing before trusting
+them:
+
+- **The names are romanised, not Hangul.** The reader runs tesseract with an
+  English alphabet, so a Hangul name transcribes to noise, and a fixture built
+  that way would be asserting that the reader mangles names. The corpus is a
+  Korean grocer, so this is a real gap rather than a tidy simplification. The
+  non-Latin path is covered directly instead, in `tests/test_views_labels.py`.
+- **They are drawn larger than the tests draw.** At the test size the engine loses
+  the decimal point in an amount about once in thirty pages — `4.81` comes back as
+  `481`, which matches no amount pattern, so the line is dropped and the basket
+  misses by exactly it. Measured over 80 drawn pages: size 14 reconciled 79, 16
+  reconciled 79, 17 reconciled 80. The fixture draws at 17. That failure is a real
+  hazard and worth a test; it is not worth spending a visit's contents on in a
+  fixture whose job is to show the format.
 
 ### Two deliberate departures, and why
 

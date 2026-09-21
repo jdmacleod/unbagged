@@ -81,6 +81,22 @@ Homepage = "https://github.com/jdmacleod/unbagged"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/unbagged"]
+# Fixture directories are development-only and must not ship. Two reasons, and
+# the second is the one that bites.
+#
+# Size: they are the majority of the artifact. Before this exclusion the wheel
+# carried 31 of its 73 entries and 1,371 KB of synthetic reports and receipt
+# captures — test data, in a package a user installs.
+#
+# Imports: a generator is written to be loaded BY PATH from
+# `tools/make_fixtures.py`, which runs at the repo root, so it may freely import
+# `faker` or `tools.receiptimage` — neither of which a wheel carries. Shipping
+# the file made those dev-only imports look like runtime dependencies, and
+# `import unbagged.adapters.hmart.fixtures.generate` raised ModuleNotFoundError
+# from an installed wheel. `make_fixtures.py` already says fixtures are
+# "deliberately not a package, so a generator can never be pulled in by
+# application code at runtime"; this is that sentence enforced by the build.
+exclude = ["**/fixtures/**"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -136,6 +152,10 @@ select = ["E", "F", "I", "UP", "B", "SIM", "S"]
 # Runs git verify-tag with the signers file deliberately unset, to prove the
 # check does its own configuring rather than inheriting the developer's.
 "tests/test_check_signers.py" = ["S101", "S603", "S607"]
+# Builds the wheel and installs it into a throwaway venv, to prove every module
+# the artifact carries imports without the repo on the path. The commands are
+# `sys.executable` plus literals and tmp_path; there is no untrusted input.
+"tests/test_packaging.py" = ["S101", "S603"]
 # The safeguard tooling shells out to git by name, on argument lists it builds
 # itself from literals and repo-relative paths. Resolving an absolute git path
 # would only move the trust, and there is no untrusted input on these calls.

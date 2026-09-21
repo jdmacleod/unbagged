@@ -95,24 +95,40 @@ jobs:
           # one of these is a format a right-to-know response actually arrives as
           # AND a format tools/scan_pii.py cannot read, so a miss here is a miss
           # everywhere. Keep the two lists in step.
+          # Image suffixes carry an extra exemption the others do not: three
+          # directories ship images that are not responses. Everything else
+          # bearing these suffixes is as suspect as a stray PDF.
           stray=$(git ls-files \
             '*.csv' '*.tsv' '*.pdf' '*.zip' '*.7z' '*.rar' '*.tar' '*.tar.gz' '*.tgz' \
             '*.xls' '*.xlsx' '*.ods' '*.doc' '*.docx' '*.eml' '*.mbox' \
-            | grep -v '/fixtures/' || true)
+            '*.png' '*.jpg' '*.jpeg' \
+            | grep -v '/fixtures/' \
+            | grep -vE '^(resources|frontend/public|docs/screenshots)/' || true)
           if [ -n "$stray" ]; then
             echo "Report-shaped files outside fixtures/:"; echo "$stray"; exit 1
           fi
 
-      - name: Refuse a fixtures exemption that nothing verifies
+      - name: Refuse a re-inclusion that nothing verifies
         run: |
-          # .gitignore re-includes fixtures directories, and scan_pii.py stands
-          # address rules down inside them. Both are safe only because
-          # make_fixtures.py --check covers those directories. A re-inclusion it
-          # does not cover is an exemption with nothing behind it.
-          bad=$(grep -n '^!' .gitignore | grep -v 'src/\*\*/fixtures/\*\*' || true)
+          # .gitignore denies every format a response arrives as, then re-includes
+          # the few directories that legitimately hold one. Each re-inclusion is an
+          # exemption, and an exemption is only safe if some check proves what lands
+          # there was generated rather than collected. Keep this list and the
+          # covering checks in step:
+          #
+          #   src/**/fixtures/**  -> make fixtures-check  (reproduces from a seed,
+          #                          both directions, and fails on a stray file)
+          #   resources/**        -> make brand-check + make icons-check
+          #   frontend/public/**  -> make brand-check     (built from resources/)
+          #   docs/screenshots/** -> make screenshots     (a scratch container it
+          #                          builds itself, never ./data)
+          #
+          # Adding a line here without adding its check is the whole failure mode.
+          allowed='^!(src/\*\*/fixtures/\*\*|resources/\*\*|frontend/public/\*\*|docs/screenshots/\*\*)$'
+          bad=$(grep -n '^!' .gitignore | grep -vE "[0-9]+:${allowed#^}" || true)
           if [ -n "$bad" ]; then
             echo "Unverified .gitignore re-inclusion:"; echo "$bad"
-            echo "make_fixtures.py --check only covers src/**/fixtures/."
+            echo "Every re-inclusion needs a check that proves its contents are generated."
             exit 1
           fi
 

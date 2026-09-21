@@ -65,9 +65,18 @@ class TestTheFileIsWrongInSomeWay:
     def test_a_truncated_download_says_to_download_it_again(self, tmp_path):
         # Distinct from "this reader cannot handle it": a short file is the
         # uploader's to re-fetch, and telling them otherwise wastes their time.
+        #
+        # Cut inside a tag rather than at an arbitrary offset. The message is
+        # chosen by whether the text ends on a ">", so a cut that lands on one
+        # reads as a malformed file rather than a short one — and this previously
+        # truncated at half the fixture's length, which meant the test passed or
+        # failed on how long the fixture happened to be.
         whole = FIXTURE.read_text(encoding="utf-8")
+        half = whole[: len(whole) // 2]
+        truncated = half[: half.rindex("<") + 4]
+        assert not truncated.rstrip().endswith(">"), "the cut has to land inside a tag"
         with pytest.raises(ExtractionError, match="incomplete"):
-            extract(doc(tmp_path, whole[: len(whole) // 2]))
+            extract(doc(tmp_path, truncated))
 
     def test_a_document_type_declaration_is_refused(self, tmp_path):
         # Internal entity expansion is live on this Python; a retailer export

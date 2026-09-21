@@ -37,6 +37,17 @@
 *.tar.gz
 *.tgz
 
+# Screen captures of a receipt viewer are a response format too, as of the H Mart
+# second reply, and they are the worst case the list has: `tools/scan_pii.py`
+# skips image suffixes outright (SKIP_SUFFIXES), gitleaks matches no secret
+# pattern in them, and a capture is tens of KB so the large-file hook never
+# fires. A real one committed outside a fixtures directory would pass every gate
+# this repo has. The re-inclusions below are the three directories that hold
+# images the project actually ships.
+*.png
+*.jpg
+*.jpeg
+
 # The one re-inclusion, and the reason it is safe: `make fixtures-check` (CI)
 # regenerates every file in these directories from a fixed seed and fails on any
 # file it did not produce, so nothing lands here that a generator did not write.
@@ -45,6 +56,14 @@
 # accident this file exists to prevent. Do not re-add a re-inclusion without a
 # corresponding check in tools/make_fixtures.py.
 !src/**/fixtures/**
+
+# Images the project ships, none of which is a response. `resources/` holds the
+# brand sources, `frontend/public/` the built icons the app serves, and
+# `docs/screenshots/` the README captures — which `tools/make_screenshots.py`
+# takes from a scratch container it builds itself, never from ./data.
+!resources/**
+!frontend/public/**
+!docs/screenshots/**
 
 # The PII scanner's literal denylist is itself a PII file.
 tools/denylist.txt

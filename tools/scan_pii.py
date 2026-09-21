@@ -333,15 +333,32 @@ def is_generated_fixture(path: str) -> bool:
 def opaque_in_fixtures(path: str) -> bool:
     """True for a fixture file this scanner cannot read and cannot vouch for.
 
-    A binary that a person can look at — an icon, a screenshot — is fine. A PDF,
-    a zip or a spreadsheet is the shape a real report arrives in, and inside a
-    fixtures directory it is exempt from .gitignore's denials and from the rules
-    that would otherwise catch an address. Nothing reads it, so nothing clears it.
+    A PDF, a zip or a spreadsheet is the shape a real report arrives in, and
+    inside a fixtures directory it is exempt from .gitignore's denials and from
+    the rules that would otherwise catch an address. Nothing reads it, so nothing
+    clears it.
+
+    **An image is exempt only where a generator vouches for it.** The exemption
+    was written when the only images in a fixtures directory were icons and
+    screenshots — things a person can look at and immediately judge. A screen
+    capture of a receipt is not that: it is the shape a real report arrives in,
+    as of the H Mart second reply, and it carries a name, a card number and a
+    shopping history in pixels this scanner cannot read.
+
+    Unconditional, the exemption covered ANY path containing `fixtures`, while
+    `is_generated_fixture` right above it requires a generator to sit beside the
+    file. So a real capture force-added under some other `.../fixtures/...` path
+    was unreadable to the scanner, invisible to `make fixtures-check` (which
+    walks `src/unbagged/adapters/*/fixtures/` only), and exempt from the CI
+    stray-file check (whose path test is merely `/fixtures/`). Tying the two
+    functions to the same condition is what closes that.
     """
     p = Path(path)
     if "fixtures" not in p.parts:
         return False
-    return p.suffix.lower() not in FIXTURE_ASSET_SUFFIXES
+    if p.suffix.lower() in FIXTURE_ASSET_SUFFIXES:
+        return not is_generated_fixture(path)
+    return True
 
 
 def suppressed(line: str, preceding: str = "") -> bool:

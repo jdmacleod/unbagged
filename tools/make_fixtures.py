@@ -3,6 +3,8 @@
 
 Each adapter ships ``fixtures/generate.py`` exposing ``generate(seed) -> {filename:
 content}``. This script runs them all and writes the results next to the generator.
+``content`` is ``str`` for a text fixture and ``bytes`` for a binary one; H Mart's
+receipt captures are PNGs and everything else is text.
 
     make fixtures          regenerate and write
     make fixtures-check    regenerate and fail on any difference
@@ -15,9 +17,17 @@ precisely because this check covers them.
 
 That only holds if the check covers every committed file, not just the filenames
 the generator happens to name. It compares both directions: each produced file
-must match byte for byte, and each committed file must be one a generator
-produces. A file that reproduces from no seed is the exact shape of the accident
-this project exists to prevent.
+must match, and each committed file must be one a generator produces. A file that
+reproduces from no seed is the exact shape of the accident this project exists to
+prevent.
+
+**PNGs are compared by decoded pixels, not by byte**, reusing
+``tools/build_brand.equivalent`` for the reason that module already records: zlib
+output is a property of the Pillow wheel the contributor happens to have, so a
+byte comparison makes this check a function of their platform rather than of the
+fixture. The guarantee is unweakened — a real capture does not reproduce another
+generator's pixels either — but it does couple the check to how Pillow renders
+text, so a Pillow upgrade can require one ``make fixtures`` to re-settle it.
 """
 
 from __future__ import annotations
@@ -28,6 +38,8 @@ import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
+
+from tools.build_brand import equivalent
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ADAPTERS_DIR = REPO_ROOT / "src" / "unbagged" / "adapters"
@@ -111,15 +123,26 @@ def run(check: bool = False, seed: int | None = None) -> int:
         for filename, content in produced.items():
             target = generator_path.parent / filename
             rel = target.relative_to(REPO_ROOT)
+            binary = isinstance(content, bytes)
             if check:
-                existing = target.read_text(encoding="utf-8") if target.exists() else None
-                if existing != content:
+                if not target.exists():
                     drift.append(str(rel))
                     print(f"  DRIFT  {rel}", file=sys.stderr)
+                    continue
+                if binary:
+                    matches = equivalent(filename, content, target.read_bytes())
                 else:
+                    matches = target.read_text(encoding="utf-8") == content
+                if matches:
                     print(f"  ok     {rel}")
+                else:
+                    drift.append(str(rel))
+                    print(f"  DRIFT  {rel}", file=sys.stderr)
             else:
-                target.write_text(content, encoding="utf-8")
+                if binary:
+                    target.write_bytes(content)
+                else:
+                    target.write_text(content, encoding="utf-8")
                 written += 1
                 print(f"  wrote  {rel}  ({len(content):,} bytes, {retailer})")
 

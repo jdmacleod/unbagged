@@ -1,8 +1,16 @@
 """A receipt-shaped page, drawn rather than committed.
 
-The same reasoning as `minipdf.py`: committing real captures is not an option,
-and the thing under test is a reader, so what it needs is input with the
+The same reasoning as `tests/minipdf.py`: committing real captures is not an
+option, and the thing under test is a reader, so what it needs is input with the
 *shape* of the real thing rather than the real thing itself.
+
+Lives in `tools/` rather than beside the tests because it has three callers now,
+and one of them is `adapters/hmart/fixtures/generate.py` — which sits inside the
+packaged library (`packages = ["src/unbagged"]`) while `tests/` is neither
+shipped nor installed. A `src/` -> `tests/` import was the only one in the
+codebase and worked purely because `make fixtures` runs from the repo root.
+`tools/` is repo tooling, is equally unshipped, and is already imported this way
+by `tools/bakeoff_cases.py`.
 
 Deliberately not a copy of any real capture. What it reproduces is the
 geometry the reader depends on — a description column at a fixed left edge, a
@@ -14,6 +22,28 @@ corpus: an outsized glyph, and a freehand scrawl drawn across the page.
 from __future__ import annotations
 
 import io
+
+
+def luhn_ok(digits: str) -> bool:
+    """Does this digit run pass a Luhn check?
+
+    Here rather than in either generator because both need it and the answer
+    must not drift between them. Every fabricated 13-19 digit run in a fixture
+    has to FAIL this: `tools/scan_pii.py` stands a few address-shaped rules down
+    inside generated fixture directories, but it keeps its payment-card rule
+    armed, so a fabricated number that passes trips the scanner on every
+    regeneration.
+    """
+    total, parity = 0, len(digits) % 2
+    for index, char in enumerate(digits):
+        value = int(char)
+        if index % 2 == parity:
+            value *= 2
+            if value > 9:
+                value -= 9
+        total += value
+    return total % 10 == 0
+
 
 #: Matches the real captures closely enough that a tolerance tuned on one
 #: works on the other, and is not any of their widths.
@@ -31,7 +61,27 @@ BLACK = (0, 0, 0)
 SCRAWL = (0, 0, 255)
 
 
-def build_receipt(rows, *, width=PAGE_WIDTH, scrawl=False, clip_digits=0, cut_off=False) -> bytes:
+#: The size the tests draw at. The engine reads amounts exactly here and
+#: descriptions well enough to assert on, which is what the tests need.
+#:
+#: The committed fixture captures are drawn LARGER, and the reason is worth
+#: keeping: at 14 the decimal point in an amount is occasionally lost — `4.81`
+#: comes back as `481`, which matches no amount pattern, so the line is dropped
+#: and the basket misses by exactly that line. In a test that is a case being
+#: asserted; in the fixture it is a visit silently losing its contents for a
+#: reason that has nothing to do with the format being reproduced.
+FONT_SIZE = 14
+
+
+def build_receipt(
+    rows,
+    *,
+    width=PAGE_WIDTH,
+    scrawl=False,
+    clip_digits=0,
+    cut_off=False,
+    font_size=FONT_SIZE,
+) -> bytes:
     """A page of `(left, description, amount)` rows, as PNG bytes.
 
     `left` is the flag column — `WT`, `CL`, `***`, or a qualifier like
@@ -49,7 +99,7 @@ def build_receipt(rows, *, width=PAGE_WIDTH, scrawl=False, clip_digits=0, cut_of
     # the same on a contributor's machine and in CI. At the bitmap default size
     # the engine reads the amounts exactly and the descriptions barely at all,
     # which would make every test here a test of the amount column only.
-    font = ImageFont.load_default(size=14)
+    font = ImageFont.load_default(size=font_size)
 
     # `cut_off` ends the page flush against its last row, which is what the
     # screen does to a receipt too tall to fit: the capture stops mid-list with

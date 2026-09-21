@@ -8,6 +8,8 @@ from unbagged import extraction
 from unbagged.extraction import (
     ExtractedDocument,
     ExtractionError,
+    NotTextBearing,
+    classify,
     extract,
     extract_all,
     looks_like_pdf,
@@ -255,8 +257,20 @@ class TestProbeAgreesWithExtract:
     this is what proves it.
     """
 
+    #: Every committed fixture, of every type. Built once so the two tests below
+    #: partition the same list rather than each writing its own glob.
+    FIXTURES = tuple(
+        p
+        for p in sorted(
+            (Path(__file__).resolve().parent.parent / "src" / "unbagged" / "adapters").glob(
+                "*/fixtures/*"
+            )
+        )
+        if p.is_file() and p.suffix not in {".py", ".md"}
+    )
+
     def _facts(self, path: Path):
-        doc = SourceDocument(original_filename=path.name, sha256="a" * 64, path=str(path))
+        doc = document(path)
         return probe(doc), extract(doc)
 
     def test_they_agree_on_a_pdf(self, tmp_path):
@@ -275,20 +289,39 @@ class TestProbeAgreesWithExtract:
 
     def test_they_agree_on_every_committed_fixture(self):
         """The formats this project actually ships, rather than ones invented here."""
-        adapters = Path(__file__).resolve().parent.parent / "src" / "unbagged" / "adapters"
-        fixtures = [
-            p
-            for p in sorted(adapters.glob("*/fixtures/*"))
-            if p.is_file() and p.suffix not in {".py", ".md"}
-        ]
-        assert fixtures, "no committed fixtures found; this test would prove nothing"
-        for path in fixtures:
+        assert self.FIXTURES, "no committed fixtures found; this test would prove nothing"
+        text_bearing = [p for p in self.FIXTURES if classify(document(p), p) != "image"]
+        assert text_bearing, "no text-bearing fixtures found"
+        for path in text_bearing:
             facts, extracted = self._facts(path)
             assert facts is not None, f"probe could not read {path.name}"
             assert facts.media_type == extracted.media_type, path.name
             # A spreadsheet has no pages to count, and both say so their own way.
             expected = extracted.page_count or None
             assert facts.page_count == expected, path.name
+
+    def test_they_agree_that_a_committed_capture_is_an_image_the_other_tier_reads(self):
+        """The captures are fixtures too, and `extract()` is not what reads them.
+
+        An image has no text layer, so `extract()` refuses it by design and the
+        transcription tier takes it instead. That makes the agreement a different
+        one rather than no agreement: `probe()` still has to place the file, and
+        `extract()` still has to decline it for the documented reason rather than
+        by crashing. Asserted because the loop above once covered every committed
+        fixture, and the day captures were committed it started calling
+        `extract()` on a PNG.
+        """
+        captures = [p for p in self.FIXTURES if classify(document(p), p) == "image"]
+        assert captures, "no committed captures found; this test would prove nothing"
+        for path in captures:
+            facts = probe(document(path))
+            assert facts is not None, f"probe could not place {path.name}"
+            assert facts.media_type == "image/png", path.name
+            # One picture is one page, and saying 1 is what stops a citation
+            # claiming "page 2 of 3" of a thing that has no pages.
+            assert facts.page_count == 1, path.name
+            with pytest.raises(NotTextBearing):
+                extract(document(path))
 
     def test_a_file_it_cannot_place_is_metadata_missing_not_an_error(self, tmp_path):
         """Never raises: this is metadata, and the payload has its own error path."""

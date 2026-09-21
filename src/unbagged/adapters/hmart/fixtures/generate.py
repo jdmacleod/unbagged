@@ -70,6 +70,11 @@ from __future__ import annotations
 
 import random
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+
+# Shared with the Kroger generator so the two cannot drift. `build_receipt` is
+# imported lazily inside `_captures()` because it pulls Pillow.
+from tools.receiptimage import luhn_ok
 
 DEFAULT_SEED = 20260101
 FILENAME = "synthetic_history.xls"
@@ -105,18 +110,6 @@ BRANCH_WEIGHTS = (0.80, 0.15, 0.05)
 # PAYMENT_CARD stays armed inside a generated fixtures directory while
 # LOYALTY_NUMBER stands down. Free insurance against a future edit.
 SMARTCARD = "40100200300"  # pii-scan: allow fabricated card, fails Luhn by construction
-
-
-def _luhn_ok(digits: str) -> bool:
-    total, parity = 0, len(digits) % 2
-    for index, char in enumerate(digits):
-        value = int(char)
-        if index % 2 == parity:
-            value *= 2
-            if value > 9:
-                value -= 9
-        total += value
-    return total % 10 == 0
 
 
 def _escape(value: str) -> str:
@@ -163,8 +156,381 @@ def _amount(rng: random.Random) -> tuple[str, int]:
     return text, points
 
 
-def build(seed: int = DEFAULT_SEED) -> str:
+# ---------------------------------------------------------------------------
+# The second half of the response: screen captures of the receipt viewer
+# ---------------------------------------------------------------------------
+#
+# The statement says what a visit cost. The captures say what was in it, and the
+# adapter stores a basket only where the two agree — `sum(lines)` against the
+# statement's `Amount`, and `sum(lines) + TAX` against the receipt's own printed
+# BALANCE. So these are drawn FROM the visits above rather than beside them.
+#
+# Far fewer than the statement has rows, and that is deliberate twice over. The
+# real reply carried 46 captures against 67 statement rows, so totals-only visits
+# are the normal case and not a defect to be generated away. And every capture
+# costs an OCR pass at ingest: at one per visit the fixture would take minutes to
+# read, which would make it useless for the screenshot run and for the container
+# tier both.
+
+#: Invented product names. Romanised rather than in Hangul, which is a known gap
+#: and is recorded as one in NOTES.md: the shipped reader runs tesseract with an
+#: English alphabet, so a Hangul name would transcribe to noise and the fixture
+#: would be asserting that the reader mangles names. The label cleaner's
+#: non-Latin path is covered directly instead, in `tests/test_views_labels.py`.
+#:
+#: Chosen to survive OCR at the size these pages are drawn: no size token welded
+#: to a digit. `14OZ` reads back as `140Z` and `5LB` as `SLB`, which is faithful
+#: to what the engine does and would put two spellings of one product in the
+#: index for a reason that has nothing to do with the retailer.
+CAPTURE_PRODUCTS = (
+    ("GREEN ONION BUNCH", "2.49"),
+    ("FIRM TOFU", "3.29"),
+    ("NAPA KIMCHI", "8.99"),
+    ("TOASTED SESAME OIL", "11.49"),
+    ("SHORT GRAIN RICE", "22.99"),
+    ("SWEET POTATO NOODLE", "6.79"),
+    ("GOCHUJANG PASTE", "9.49"),
+    ("DOENJANG PASTE", "8.29"),
+    ("FRESH GARLIC", "3.99"),
+    ("KOREAN PEAR", "5.49"),
+    ("ENOKI MUSHROOM", "1.79"),
+    ("PERILLA LEAF", "2.29"),
+    ("DRIED ANCHOVY", "12.99"),
+    ("ROASTED SEAWEED", "6.49"),
+    ("RICE CAKE STICK", "4.99"),
+    ("SOFT TOFU TUBE", "2.19"),
+    ("MUNG BEAN SPROUT", "1.99"),
+    ("DAIKON RADISH", "3.49"),
+    ("FISH CAKE SHEET", "5.99"),
+    ("BLACK BEAN SAUCE", "7.29"),
+    ("INSTANT RAMEN PACK", "13.99"),
+    ("BARLEY TEA BAG", "4.49"),
+    ("CITRON TEA JAR", "9.99"),
+    ("FROZEN MANDU", "10.49"),
+    ("PORK BELLY SLICE", "15.99"),
+    ("BEEF BRISKET SLICE", "19.99"),
+    ("SQUID WHOLE", "13.49"),
+    ("MACKEREL FILLET", "11.99"),
+    ("QUAIL EGG TIN", "3.79"),
+    ("CORN SILK TEA", "5.29"),
+)
+
+#: The line that absorbs the arithmetic. Every other line on a receipt sits at
+#: its shelf price, so the basket almost never lands exactly on the statement's
+#: figure -- and it has to, to the cent, or the adapter refuses it. A weighed
+#: line is where a real receipt puts an amount that is not a shelf price, so it
+#: is where this one puts the remainder.
+WEIGHED_PRODUCTS = (
+    ("PORK BELLY SLICE", "9.99"),
+    ("BEEF BRISKET SLICE", "12.99"),
+    ("SQUID WHOLE", "8.99"),
+    ("MACKEREL FILLET", "10.49"),
+    ("KOREAN PEAR", "2.99"),
+)
+
+#: What a weighed line may come to. Wide enough that the composer almost always
+#: finds a basket that fits, narrow enough that the line stays a plausible
+#: weight of meat or fruit rather than a plug number.
+WEIGHED_MIN = Decimal("1.50")
+WEIGHED_MAX = Decimal("28.00")
+
+#: A ceiling, not a target. Baskets size themselves from what they cost; this
+#: only stops a very large total drawing a receipt taller than the page.
+#:
+#: Measured, not guessed: at 11 the cap itself was the binding constraint on the
+#: dearest baskets and 455 of every 10,000 could not be composed. The failure
+#: rate plateaus from 14 upward, so the cap stops binding there and anything
+#: higher only changes how tall a rare receipt is allowed to be.
+MAX_BASKET_LINES = 16
+
+#: Ordinary lines before the weighed one, even on a small basket. Not cosmetic:
+#: a receipt whose whole total sits on ONE line has no redundancy, so a single
+#: misread digit takes the basket with it and the adapter refuses the lot. Two
+#: scrawled captures were lost that way -- a 3 read as a 2 under the scrawl, on
+#: a page with nothing else to contradict it.
+MIN_ORDINARY_LINES = 3
+
+#: The contract, as opposed to the target above. What actually matters is that a
+#: basket never rests its whole total on ONE line, because then a single misread
+#: digit takes the basket with it and nothing on the page contradicts it. Two
+#: priced lines is redundancy; three ordinary lines was a target mistaken for a
+#: requirement, and enforcing it failed 56 of every 10,000 baskets at the small
+#: end -- where 2 ordinary lines plus a weighed one is already three priced
+#: lines and perfectly good.
+MIN_PRICED_LINES = 2
+
+
+#: How far a shelf price moves between visits. Prices drift; they do not swing.
+#: The Prices view classifies a product by the shape of its own amounts, so a
+#: product whose amount is redrawn at random every visit reads as weight-priced
+#: and the view can draw no series for it.
+PRICE_DRIFT = (Decimal("0.94"), Decimal("1.07"))
+#: The cheapest line the catalogue can produce, used to reserve room for the
+#: ordinary lines a basket still owes. Derived, never hand-written, so adding a
+#: cheaper product cannot silently invalidate the reserve arithmetic.
+CHEAPEST_LINE = min(Decimal(shelf) for _name, shelf in CAPTURE_PRODUCTS) * PRICE_DRIFT[0]
+
+#: The flag column, which the viewer prints beside some lines and not others.
+#: `WT` on a weighed line, `CL` where the card took a price off.
+CAPTURE_FLAGS = ("", "", "", "", "WT", "CL")
+
+#: How many captures to draw, and how the corpus divides. The counts are small
+#: and absolute rather than shares, because each one exists to reach a specific
+#: branch of the reader and one is enough to reach it.
+ORDINARY_CAPTURES = 18
+#: Captures carrying a freehand scrawl in pure blue, which is masked to white
+#: before the engine sees the page. A dozen of the real 46 carry one.
+SCRAWLED_CAPTURES = 4
+#: One receipt too tall for the screen, captured in two overlapping halves that
+#: have to be stitched back into one basket.
+SPLIT_CAPTURES = 1
+#: The data row that opens a pair of visits sharing one calendar date. Two trips
+#: to the shop in one day, at different times and for different amounts, which the
+#: real statement contains and which the capture filenames cannot distinguish from
+#: the two halves of one tall receipt above. It has to exist in the STATEMENT for
+#: the captures to have anything to pair with: naming two captures for one date
+#: while each prints its own, different, stamp describes nothing that could have
+#: happened, and the adapter correctly reads it as one visit and a stray.
+SAME_DAY_FIRST_ROW = 61
+#: One capture clipped at the source, where the amount column runs into the right
+#: edge and every amount loses its last digit. Nothing is stored from it: the gate
+#: needs a figure the reader had no hand in and the clip took the only one. The
+#: visit keeps the total the statement gave it.
+CLIPPED_CAPTURES = 1
+
+#: Larger than the size the tests draw at, and measured rather than chosen. At
+#: `tools.receiptimage.FONT_SIZE` the engine loses the decimal point in an amount about
+#: once in thirty pages: `4.81` comes back as `481`, which matches no amount
+#: pattern, so the line is dropped and the basket misses by exactly it. Over 80
+#: drawn pages: 14 reconciled 79 times, 16 reconciled 79, 17 reconciled 80. 17 is
+#: the size used here — the failures it removes are the reader meeting a glyph it
+#: cannot resolve, which is a real hazard worth a test and not worth spending a
+#: whole visit's contents on in a fixture whose job is to show the format.
+CAPTURE_FONT_SIZE = 17
+
+
+def _compose_basket(
+    rng: random.Random, total: Decimal, soft_target: int
+) -> list[tuple[str, str, Decimal | None]]:
+    """Products and amounts that sum to `total` exactly, at plausible prices.
+
+    Exactly, not nearly: the adapter compares the summed lines against the
+    statement's figure for the same visit and refuses the basket on any
+    difference at all.
+
+    The first version divided the total into random pieces and then named them,
+    which made price and product independent. Measured through the shipped
+    views, a product's amount swung a median 24x across visits and a worst 101x
+    -- sesame oil at 34 cents on one trip and $34.35 on another. Prices
+    classifies a product by the shape of its own amounts, so 14 of 26 products
+    read as weight-priced and only 7 could be given a series. That is a shape no
+    receipt produces, and this project has traced three separate bugs to a
+    fixture modelling one.
+
+    So the basket is composed rather than divided: every line sits at its shelf
+    price give or take a little drift, and one weighed line at the end takes
+    whatever is left. How many lines a basket has therefore follows from what it
+    cost, which is the way round a shop works -- `soft_target` only biases the
+    draw toward cheaper or dearer products, it does not cap the basket.
+
+    Returns `(flag, description, amount)` rows; a row with no description and no
+    amount is a full-width weight qualifier, which is how the viewer prints one.
+    """
+    remaining = total
+    rows: list[tuple[str, str, Decimal | None]] = []
+    low, high = PRICE_DRIFT
+    catalogue = list(CAPTURE_PRODUCTS)
+    rng.shuffle(catalogue)
+    # Bias toward products that will land the basket near the asked-for size.
+    # A PREFERENCE, not a restriction: the preferred products go first and the
+    # rest stay available behind them. Truncating the catalogue here instead
+    # made the bias a hard cut, and a large total whose preferred band ran out
+    # could not be composed at all -- 30 of every 10,000 baskets raised for that
+    # reason alone, independently of the line cap.
+    if soft_target:
+        ideal = total / soft_target
+        catalogue.sort(key=lambda entry: abs(Decimal(entry[1]) - ideal))
+        head = max(8, soft_target * 3)
+        preferred = catalogue[:head]
+        rng.shuffle(preferred)
+        catalogue = preferred + catalogue[head:]
+
+    index = 0
+    while (remaining > WEIGHED_MAX or len(rows) < MIN_ORDINARY_LINES) and len(
+        rows
+    ) < MAX_BASKET_LINES:
+        name, shelf = catalogue[index % len(catalogue)]
+        index += 1
+        if index > len(catalogue) * 3:
+            break
+        if any(name == row[1] for row in rows):
+            continue
+        drift = low + (high - low) * Decimal(str(rng.random()))
+        amount = (Decimal(shelf) * drift).quantize(Decimal("0.01"))
+        # Reserve what the basket still owes: one cheapest-product's worth for
+        # each ordinary line still required, plus the weighed line's floor.
+        #
+        # Guarding only against `amount > remaining` is not enough, and the gap
+        # is not theoretical. It lets ONE product take almost the whole total --
+        # a $11.49 sesame oil against an $11.37 visit -- after which every other
+        # product overshoots, the loop runs out of catalogue, and the basket
+        # ships resting its entire total on a single line. That is the exact
+        # shape this function was rewritten to remove, and it survived the
+        # rewrite: brute force over 50 seeds and the real amount domain found 5
+        # such baskets and 203 weighed lines above their own ceiling, worst
+        # $68.83 against a documented $28.00.
+        still_required = max(0, MIN_ORDINARY_LINES - len(rows) - 1)
+        if amount > remaining - (CHEAPEST_LINE * still_required + WEIGHED_MIN):
+            continue
+        rows.append((rng.choice(CAPTURE_FLAGS), name, amount))
+        remaining -= amount
+
+    if remaining > WEIGHED_MAX:
+        raise ValueError(
+            f"could not compose a basket of {total} from the catalogue: "
+            f"{len(rows)} ordinary line(s) leave {remaining}, above the "
+            f"{WEIGHED_MAX} a weighed line may carry"
+        )
+
+    if remaining >= WEIGHED_MIN:
+        name, per_unit = rng.choice(WEIGHED_PRODUCTS)
+        pounds = (remaining / Decimal(per_unit)).quantize(Decimal("0.01"))
+        # The qualifier is its OWN full-width row, which is how the viewer prints
+        # it. Put on the product's row it runs from the flag column into the
+        # description column and the engine reads the two as one word:
+        # "2.06 lb @ 1OMACWEREL FILLET" was a real transcription of that.
+        rows.append((f"{pounds} lb @ {per_unit} / lb", "", None))
+        rows.append(("WT", name, remaining))
+    elif remaining > 0:
+        # A residue too small to print as a weighed line. It goes on the last
+        # line rather than onto a basket of its own.
+        flag, name, amount = rows[-1]
+        rows[-1] = (flag, name, amount + remaining)
+
+    # The contract, checked on what the caller actually receives. Raising is the
+    # point: a generator that quietly emits a basket it knows is wrong is how
+    # the single-line captures got committed in the first place, and the only
+    # thing that reads these fixtures afterwards is an OCR pass that cannot tell
+    # a bad shape from a good one.
+    priced = [row for row in rows if row[2] is not None]
+    if len(priced) < MIN_PRICED_LINES:
+        raise ValueError(
+            f"composed a basket of {total} resting on {len(priced)} priced "
+            f"line(s); a basket needs {MIN_PRICED_LINES} so a misread digit "
+            "has something to contradict it"
+        )
+
+    return rows
+
+
+def _receipt_rows(rng: random.Random, visit: dict, lines: list[tuple]) -> list[tuple]:
+    """The page, in the order the viewer prints it.
+
+    Customer ID, the purchase lines, TAX, the balance, the tender echoing it, the
+    stamp, then the card block. The two equal amounts at the foot are what tells
+    the reader which line is the total, and the card block is there because the
+    reader has to stop before it -- nothing from it is ever transcribed.
+    """
+    subtotal = sum(amount for _flag, _name, amount in lines if amount is not None)
+    # A tax line the statement's figure excludes, which is what makes the
+    # statement a pre-tax subtotal and the receipt's balance the amount paid.
+    tax = (subtotal * Decimal("0.0875")).quantize(Decimal("0.01"))
+    balance = subtotal + tax
+    rows: list[tuple] = [("", f"Customer ID: {SMARTCARD}", None)]
+    for flag, name, amount in lines:
+        rows.append((flag, name, None if amount is None else f"{amount:.2f}"))
+    rows += [
+        ("", "TAX", f"{tax:.2f}"),
+        ("***", "BALANCE", f"{balance:.2f}"),
+        ("", rng.choice(("CREDIT", "DEBIT", "CASH")), f"{balance:.2f}"),
+        ("", visit["when"].strftime("%Y-%m-%d %H:%M:%S") + "  2  118  0042", None),
+        ("", "Card Number : *********0000", None),
+    ]
+    return rows
+
+
+def _capture_name(when, part: int | None = None) -> str:
+    """`Transaction_MMDDYY.png`, and `_NN` for one receipt captured in halves.
+
+    Two digits of year, which is what the viewer writes and what
+    `receipt.capture_date` reads back.
+    """
+    stem = "Transaction_" + when.strftime("%m%d%y")
+    return f"{stem}_{part:02d}.png" if part is not None else f"{stem}.png"
+
+
+def _captures(seed: int, visits: list[dict]) -> dict[str, bytes]:
+    """The captures, drawn from the visits the statement already states.
+
+    Its own rng stream, seeded apart from the spreadsheet's, so that changing how
+    many captures are drawn cannot move a single figure in the statement. The two
+    halves of a response are written by different systems and a change to one
+    should not rewrite the other.
+    """
+    from tools.receiptimage import build_receipt
+
+    rng = random.Random(seed + 1)
+    # Only visits that state a branch, spread across the window rather than taken
+    # from its head: a capture run that all lands in one month cannot show what a
+    # partly-itemised history looks like.
+    eligible = [visit for visit in visits if visit["branch"] and not visit.get("same_day")]
+    wanted = ORDINARY_CAPTURES + SCRAWLED_CAPTURES + SPLIT_CAPTURES + CLIPPED_CAPTURES
+    step = max(1, len(eligible) // wanted)
+    chosen = eligible[::step][:wanted]
+
+    drawn: dict[str, bytes] = {}
+    for index, visit in enumerate(chosen):
+        lines = _compose_basket(rng, Decimal(visit["amount"]), rng.randint(4, 9))
+        rows = _receipt_rows(rng, visit, lines)
+        name = _capture_name(visit["when"])
+
+        if index < CLIPPED_CAPTURES:
+            # Clipped at the source. Drawn narrow as well, because the real
+            # clipped page is the narrowest in its corpus and the two together
+            # are what `_clipped` measures.
+            drawn[name] = build_receipt(rows, width=505, clip_digits=1, font_size=CAPTURE_FONT_SIZE)
+        elif index < CLIPPED_CAPTURES + SPLIT_CAPTURES and len(lines) >= 5:
+            # One receipt, two captures. The first half is cut off flush against
+            # its last line, which is the only thing distinguishing it from a
+            # whole receipt, and the halves overlap by one line — which is either
+            # the seam or the same product scanned twice, and the reader decides
+            # which by whether the result reconciles.
+            head = rows[: 1 + 3]
+            tail = rows[3:]
+            drawn[_capture_name(visit["when"], 0)] = build_receipt(
+                head, cut_off=True, font_size=CAPTURE_FONT_SIZE
+            )
+            drawn[_capture_name(visit["when"], 1)] = build_receipt(
+                tail, font_size=CAPTURE_FONT_SIZE
+            )
+        elif index < CLIPPED_CAPTURES + SPLIT_CAPTURES + SCRAWLED_CAPTURES:
+            drawn[name] = build_receipt(rows, scrawl=True, font_size=CAPTURE_FONT_SIZE)
+        else:
+            drawn[name] = build_receipt(rows, font_size=CAPTURE_FONT_SIZE)
+
+    # The two trips that share a date. Both captures are named for that date and
+    # carry a `_NN` part, which is byte for byte the naming the split receipt
+    # above uses — so the reader cannot tell from the names whether it is holding
+    # one tall receipt or two separate baskets, and has to decide by reading them.
+    for part, visit in enumerate(visit for visit in visits if visit.get("same_day")):
+        lines = _compose_basket(rng, Decimal(visit["amount"]), rng.randint(3, 6))
+        rows = _receipt_rows(rng, visit, lines)
+        drawn[_capture_name(visit["when"], part)] = build_receipt(rows, font_size=CAPTURE_FONT_SIZE)
+
+    return drawn
+
+
+def build(seed: int = DEFAULT_SEED) -> tuple[str, list[dict]]:
+    """The spreadsheet, and the visits it states.
+
+    Returns both because the captures have to reconcile against these exact
+    figures: a receipt whose lines do not sum to the statement's `Amount` for the
+    same visit is refused by the adapter, which is the whole point of the gate.
+    Drawing the two independently would produce a fixture that exercises only the
+    refusal path.
+    """
     rng = random.Random(seed)
+    visits: list[dict] = []
 
     # A window wider than the reference file's, with whole months missing.
     start = datetime(2018, 1, 1, tzinfo=UTC)
@@ -189,7 +555,18 @@ def build(seed: int = DEFAULT_SEED) -> str:
     while data_rows < 200:
         # Between 4 and 52 days on, so some months carry several visits and
         # some carry none at all.
-        when += timedelta(days=rng.randint(4, 52), minutes=rng.randint(0, 1439))
+        if data_rows == SAME_DAY_FIRST_ROW - 1:
+            # The first of the same-day pair, pinned to a morning so the second
+            # has somewhere later in the day to sit.
+            when += timedelta(days=rng.randint(4, 52))
+            when = when.replace(hour=rng.randint(8, 11), minute=rng.randint(0, 59))
+        elif data_rows == SAME_DAY_FIRST_ROW:
+            # The second trip, same date, a later hour. Not a repeated
+            # (timestamp, branch) pair — the real statement has none of those —
+            # just a repeated date.
+            when = when.replace(hour=rng.randint(16, 20), minute=rng.randint(0, 59))
+        else:
+            when += timedelta(days=rng.randint(4, 52), minutes=rng.randint(0, 1439))
         when = when.replace(second=0, microsecond=0)
         if when > end:
             break
@@ -226,10 +603,23 @@ def build(seed: int = DEFAULT_SEED) -> str:
 
         at = f' ss:Index="{declared}"' if declared else ""
         rows.append(f"    <ss:Row{at}>\n" + "\n".join(cells) + "\n    </ss:Row>")
+        # A sparse row states no branch, so it is not a candidate for a capture:
+        # the pairing is on timestamp and amount, but a visit with no branch is
+        # already exercising a different shape and stacking the two would make a
+        # failure ambiguous.
+        visits.append(
+            {
+                "when": when,
+                "branch": None if data_rows in sparse_at else branch,
+                "amount": amount,
+                "points": points,
+                "same_day": data_rows in (SAME_DAY_FIRST_ROW, SAME_DAY_FIRST_ROW + 1),
+            }
+        )
         row_number += 1
 
     body = "\n".join(rows)
-    return (
+    document = (
         '<?xml version="1.0" encoding="utf-8"?>\n'
         f'<ss:Workbook xmlns:ss="{SS}"'
         ' xmlns:x="urn:schemas-microsoft-com:office:excel"'
@@ -278,13 +668,20 @@ def build(seed: int = DEFAULT_SEED) -> str:
         "  </ss:Worksheet>\n"
         "</ss:Workbook>\n"
     )
+    return document, visits
 
 
-def generate(seed: int = DEFAULT_SEED) -> dict[str, str]:
-    """Entry point for tools/make_fixtures.py: filename -> content."""
-    if _luhn_ok(SMARTCARD):
+def generate(seed: int = DEFAULT_SEED) -> dict[str, str | bytes]:
+    """Entry point for tools/make_fixtures.py: filename -> content.
+
+    The statement is text and the captures are PNG bytes, which is why
+    `make_fixtures` accepts both. The captures are compared by decoded pixels
+    rather than by byte for the reason recorded there.
+    """
+    if luhn_ok(SMARTCARD):
         raise ValueError(
             "the fabricated smartcard passes a Luhn check, which makes it "
             "indistinguishable in shape from a payment card"
         )
-    return {FILENAME: build(seed)}
+    document, visits = build(seed)
+    return {FILENAME: document, **_captures(seed, visits)}
