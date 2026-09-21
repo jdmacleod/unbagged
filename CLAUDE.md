@@ -73,7 +73,8 @@ The rules most often broken by accident:
   meanings are the ones to count.
 - No cards. Containers are hairline rules and whitespace, never a border on all
   four sides, never a shadow.
-- Every numeral in an aligned column is set in the vendored mono.
+- Every numeral in an aligned column is set in the mono stack (`.num`). No font
+  file ships; all three faces are system stacks.
 
 Do not deviate without saying so and adding a row to the decisions log. In QA
 or review mode, flag code that contradicts `DESIGN.md`.

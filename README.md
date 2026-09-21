@@ -36,40 +36,48 @@ docker compose up --build
 ```
 
 Then open <http://localhost:8420> and drag the retailer's response onto the upload
-area. The zip it arrived in can be dropped as it is: each file inside becomes its
-own document with its own citation, so nothing has to be unpacked by hand. An
-archive is refused rather than half-read when it will not open, when it holds
-another archive, when it names a path outside itself, or when it carries more
-files or unpacks to more bytes than a response plausibly contains. Each refusal
-says which. A member that cannot be read — most often because the archive is
-password-protected — says that too, rather than being skipped in silence.
+area. Drop the zip it arrived in as it is: each file inside becomes its own
+document with its own citation, so nothing has to be unpacked by hand. An archive
+is refused rather than half-read if it will not open, holds another archive, names
+a path outside itself, or carries more files or bytes than a response plausibly
+contains — and the refusal says which. A member that cannot be read, usually
+because the archive is password-protected, says so rather than being skipped in
+silence.
 
-A spreadsheet or a word-processor file is itself a zip, and is left alone: those
-arrive as one document, not as the XML parts inside them.
+A spreadsheet or a word-processor file is itself a zip, and is left alone: one
+document, not the XML parts inside it.
 
 The first run builds the app: two base images, the OCR engine, the UI, and the
 Python dependencies. Budget a couple of minutes on a clean machine. There is no
-prebuilt image to download, deliberately: you run what you can read. Later
-starts re-check the build and take about two seconds when nothing has changed.
-Keep `--build` on the command: without it Docker serves whatever it built last,
-so a pull can leave you running the previous version.
+prebuilt image to download, deliberately — you run what you can read. Later starts
+re-check the build in about two seconds when nothing has changed. Keep `--build`
+on the command: without it Docker serves whatever it built last, so a pull can
+leave you running the previous version.
 
-Reading a long report takes 10 to 30 seconds.
+A text or PDF response reads in about a second. A response that arrived as
+screen captures takes longer, because every image goes through OCR.
 
 Your database and uploads live in `./data`, on your disk. Back it up by copying
 that directory.
 
-**No response yet?** A request takes weeks to come back, so the repo ships a
-synthetic one you can drop in now to see what the views do:
+**No response yet?** A request takes weeks to come back, so the repo ships two
+synthetic ones you can drop in now to see what the views do:
 
 ```
 src/unbagged/adapters/kroger/fixtures/synthetic_report.txt
+src/unbagged/adapters/hmart/fixtures/          # the statement and its captures
 ```
 
-It is generated, not anyone's shopping. `make fixtures` rebuilds it, and CI fails
-if the committed file is not exactly what the generator produces. It reproduces
-the quirks of the real Kroger format on purpose, including the ones that look like
-bugs. Every screenshot in this README comes from it.
+Drop the H Mart directory's files in together: the statement says what each visit
+cost and the captures say what was in it, and the app stores a basket only where
+the two agree.
+
+They are generated, not anyone's shopping. `make fixtures` rebuilds them and CI
+fails if a committed file is not what the generator produces. They reproduce the
+quirks of the real formats on purpose, including the ones that look like bugs — a
+basket whose lines do not add up to the total the retailer stated for it, and a
+receipt capture clipped so badly that nothing from it can be trusted. Every
+screenshot in this README comes from them.
 
 ### Running it
 
@@ -80,6 +88,11 @@ bugs. Every screenshot in this README comes from it.
 | `make logs` | Follow the logs |
 | `make reset CONFIRM=yes` | Move `./data` aside to `data.bak-<timestamp>` and start empty. Nothing is deleted; remove the backup yourself when you are sure. |
 
+Uploaded the wrong file? Remove that one response rather than resetting
+everything: the control is at the foot of the page, under the uploader, and asks
+twice — the second step names the retailer. It removes the reading, not the file
+you uploaded, which stays in `data/`.
+
 To use a different port, copy `.env.example` to `.env` and set `UNBAGGED_PORT`.
 The app is only ever published on `127.0.0.1`; that part is not configurable, and
 it is what keeps your report off your local network.
@@ -87,42 +100,48 @@ it is what keeps your report off your local network.
 ## What you get
 
 **Timeline** — every visit over the coverage window, with the header numbers above
-it. Click a basket to expand its line items, showing the shelf price and the price
-you actually paid side by side. `customerloyamt` is what the line cost, not a
-discount to subtract, so the saving is the difference between the two; both stay on
-screen so the subtraction is checkable. Each basket is checked against the total the
-retailer states for it and says so when they disagree.
+it. Click a basket to expand its line items. The shelf price and the price you paid
+sit side by side rather than as a single saving, so the subtraction is checkable.
+Each basket is checked against the total the retailer stated for it, and the ones
+that disagree are marked "over by" or "under by" — a real response has plenty, and
+the difference is usually in the document as supplied rather than in how it was
+read, so there is nothing to correct.
 
 **Profile** — the identifiers the retailer holds, and the attributes it has inferred,
-split by origin. Scores modelled from your own baskets sit in one column; attributes
-obtained somewhere the report does not name sit in the other. Anything describing your
+split by origin: scores modelled from your own baskets in one column, attributes
+obtained somewhere the report does not name in the other. Anything describing your
 *household* rather than you is called out, because those describe people who never
 signed up for anything.
 
 ![The profile view](docs/screenshots/profile.png)
 
 **Compliance** — the eight CCPA/CPRA categories per retailer, with the answer quoted
-where there is one and a blank rule where there is not. A "draft a follow-up" action
-writes a supplemental request naming what went unanswered; you read it and send it
-yourself. Where the eight categories come from, and why each is graded the way it is,
-is set out in [`docs/legal-basis.md`](docs/legal-basis.md) — with the citation for
-each one.
+where there is one and a blank rule where there is not. "Draft a follow-up" writes a
+supplemental request naming what went unanswered; you read it and send it yourself.
+Where the eight categories come from and why each is graded as it is, with the
+citation for each, is [`docs/legal-basis.md`](docs/legal-basis.md).
 
 ![The compliance view](docs/screenshots/compliance.png)
 
-**Compare** and **Prices** — two retailers side by side once a second response
-arrives, and a per-product price series. A line carries an amount and nothing else,
+**Compare** — two retailers side by side once a second response arrives. An em dash
+means the retailer did not disclose that, and is never shown as a zero.
+
+![The compare view](docs/screenshots/compare.png)
+
+**Prices** — a per-product price series. A line carries an amount and nothing else,
 no quantity and no weight, so Prices classifies each product by the shape of its own
 amounts and draws a series only for those that behave like a unit price. The rest are
 listed with what their amounts look like, and no price change is claimed for them.
 
 ![The prices view](docs/screenshots/prices.png)
 
-**Products** — the products you bought, set as a typographic index:
-alphabetical, sized by purchase count, with an A-Z rail. Clicking one opens the visits
-that contained it. Under the index is a control that saves what you are looking at
-as an SVG — text, not a rasterised screenshot, so it stays selectable and searchable
-and scales to a wall print. It exports what is on screen, filters included.
+**Products** — the products you bought, set as a typographic index: alphabetical,
+sized by purchase count, with an A-Z rail. Clicking one opens the visits that
+contained it. Deposits, taxes and other receipt furniture are not products and are
+not listed; the page says how many entries it set aside rather than quietly
+shrinking the count. Under the index, a control saves the page as an SVG — text,
+not a rasterised screenshot, so it stays selectable and scales to a wall print. It
+exports what is on screen, filters included.
 
 ![The products index](docs/screenshots/products.png)
 
@@ -135,10 +154,10 @@ and scales to a wall print. It exports what is on screen, filters included.
 | H Mart | Full adapter — a spreadsheet export of basket totals, plus screen captures of its receipt viewer where those were supplied, which carry the line items the spreadsheet does not |
 | Anything else | Fallback: read as text, disclosures recorded, no data extracted |
 
-Kroger and H Mart are the two full adapters, because they are the two formats anyone
-has had a real response for. A retailer with no adapter still works: the fallback reads
-the response as text and records what it did and did not address, since a letter with no
-data in it is itself the finding.
+Kroger and H Mart are the two full adapters because they are the two formats anyone
+has had a real response for. A retailer with no adapter still works: the fallback
+reads the response as text and records what it did and did not address, since a
+letter with no data in it is itself the finding.
 
 Adding a retailer should not require touching code outside its own package. See
 `docs/writing-an-adapter.md`.
@@ -164,11 +183,10 @@ the API proxied at `/api`. The backend's own port is deliberately not published 
 dev: it would serve the bundle frozen into the image at build time, with no way to
 tell from a browser.
 
-`make test-container` builds and runs a real container and checks what only a running
-one can show: how it starts, what it may touch on disk, and what the app actually
-does in a browser between dropping a file and reading the report. It is slow and it
-is where anything involving a real DOM belongs; `CONTRIBUTING.md` explains which tier
-a given test goes in and why.
+`make test-container` checks what only a running container can show: how it starts,
+what it may touch on disk, and what the app does in a browser between dropping a
+file and reading the report. Anything involving a real DOM belongs there;
+`CONTRIBUTING.md` explains which tier a given test goes in and why.
 
 `make help` lists the rest. `CONTRIBUTING.md` covers the PII safeguards, which you
 should read before putting a real report anywhere near this repository.
@@ -181,8 +199,9 @@ should read before putting a real report anywhere near this repository.
   `127.0.0.1`-scoped too. Without that prefix Docker publishes on every interface
   and goes straight through the host firewall. LAN access is an explicit opt-in,
   and `unbagged serve` warns on stderr if you ask for it.
-- Fonts and JS are vendored, so the app works offline and makes no third-party
-  requests. `tests/test_frontend_build.py` asserts this against the built output.
+- Every byte the page loads is served from the app itself. No CDN, no web font,
+  no third-party request: the type is the system stack and ships no font file at
+  all. `tests/test_frontend_build.py` asserts that against the built output.
 - Your reports live in `data/`: gitignored wholesale, kept out of the Docker build
   context, and guarded by a pre-commit hook, a scanner and a CI gate. If you plan to
   contribute, read `CONTRIBUTING.md` before you put anything there.
@@ -192,11 +211,11 @@ Security issues go through GitHub's private vulnerability reporting; see
 
 ## Responses that arrive as pictures
 
-One store could only supply screen captures of its receipt viewer, one or two
-per visit. Those are read, and they are read carefully:
+One store could only supply screen captures of its receipt viewer, one or two per
+visit. Those are read, and read carefully:
 
-- Drop the images in alongside the rest of the response — or drop the zip they
-  arrived in, which is expanded here. They belong to one upload, not one each.
+- Drop the images in alongside the rest of the response, or drop the zip they
+  arrived in. They belong to one upload, not one each.
 - **Nothing is stored unless the basket adds up.** A receipt prints its own
   total, so a transcription can be checked against something that did not come
   out of the same reader. One that does not reconcile is named in a warning and
@@ -208,17 +227,17 @@ per visit. Those are read, and they are read carefully:
   Adding up is not evidence there.
 - Nothing from the card block at the foot of a receipt is transcribed or stored.
 
-Reading is done by tesseract, which ships in the image. A local vision model can
-be asked about the pages tesseract could not read, and is **off unless you turn
-it on** — see `.env.example`. Its answer is kept only if it makes the receipt
-add up, the same gate everything else passes.
+Reading is done by tesseract, which ships in the image. A local vision model can be
+asked about the pages tesseract could not read, and is **off unless you turn it on**
+— see `.env.example`. Its answer is kept only if it makes the receipt add up, the
+same gate everything else passes.
 
-The model it asks for, `minicpm-v4.5:8b`, is the one that came out of a bake-off
-of twelve; nothing measured read more of a page, and of those that read as much
-it was the fastest. Running it wants a machine with roughly 8GB of GPU or
-unified memory free, and answers a page in about eight seconds there. It can run
-on a CPU and will take minutes. `.env.example` has the rest of what the host
-needs; `src/unbagged/adapters/hmart/NOTES.md` has the measurements.
+The model it asks for, `minicpm-v4.5:8b`, came out of a bake-off of twelve: nothing
+measured read more of a page, and of the three that read as much it was the fastest.
+It wants a host with roughly 8GB of GPU or unified memory free, where it answers a
+page in about eight seconds; on a CPU it takes minutes. `.env.example` has the rest
+of what the host needs, and `src/unbagged/adapters/hmart/NOTES.md` has the
+measurements.
 
 ## What this is not
 
