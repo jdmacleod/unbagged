@@ -5,7 +5,7 @@ numbers, and itemized purchase histories belonging to real people. Follow these 
 without exception.
 
 - NEVER read, open, cat, grep, or otherwise access files under `data/`. If you need
-  sample input, use `src/unbagged/adapters/*/fixtures/` or `tests/fixtures/`.
+  sample input, use `src/unbagged/adapters/*/fixtures/`.
 - NEVER add files under `data/` to git, even temporarily. Not in a branch. Not with
   `git add -f`. Git history is forever without `git filter-repo`.
 - NEVER paste report content into commit messages, PR descriptions, code comments,
