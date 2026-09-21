@@ -70,6 +70,7 @@ from __future__ import annotations
 
 import random
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 DEFAULT_SEED = 20260101
 FILENAME = "synthetic_history.xls"
@@ -163,8 +164,237 @@ def _amount(rng: random.Random) -> tuple[str, int]:
     return text, points
 
 
-def build(seed: int = DEFAULT_SEED) -> str:
+# ---------------------------------------------------------------------------
+# The second half of the response: screen captures of the receipt viewer
+# ---------------------------------------------------------------------------
+#
+# The statement says what a visit cost. The captures say what was in it, and the
+# adapter stores a basket only where the two agree — `sum(lines)` against the
+# statement's `Amount`, and `sum(lines) + TAX` against the receipt's own printed
+# BALANCE. So these are drawn FROM the visits above rather than beside them.
+#
+# Far fewer than the statement has rows, and that is deliberate twice over. The
+# real reply carried 46 captures against 67 statement rows, so totals-only visits
+# are the normal case and not a defect to be generated away. And every capture
+# costs an OCR pass at ingest: at one per visit the fixture would take minutes to
+# read, which would make it useless for the screenshot run and for the container
+# tier both.
+
+#: Invented product names. Romanised rather than in Hangul, which is a known gap
+#: and is recorded as one in NOTES.md: the shipped reader runs tesseract with an
+#: English alphabet, so a Hangul name would transcribe to noise and the fixture
+#: would be asserting that the reader mangles names. The label cleaner's
+#: non-Latin path is covered directly instead, in `tests/test_views_labels.py`.
+#:
+#: Chosen to survive OCR at the size these pages are drawn: no size token welded
+#: to a digit. `14OZ` reads back as `140Z` and `5LB` as `SLB`, which is faithful
+#: to what the engine does and would put two spellings of one product in the
+#: index for a reason that has nothing to do with the retailer.
+CAPTURE_PRODUCTS = (
+    "GREEN ONION BUNCH",
+    "FIRM TOFU",
+    "NAPA KIMCHI",
+    "TOASTED SESAME OIL",
+    "SHORT GRAIN RICE",
+    "SWEET POTATO NOODLE",
+    "GOCHUJANG PASTE",
+    "DOENJANG PASTE",
+    "FRESH GARLIC",
+    "KOREAN PEAR",
+    "ENOKI MUSHROOM",
+    "PERILLA LEAF",
+    "DRIED ANCHOVY",
+    "ROASTED SEAWEED",
+    "RICE CAKE STICK",
+    "SOFT TOFU TUBE",
+    "MUNG BEAN SPROUT",
+    "DAIKON RADISH",
+    "FISH CAKE SHEET",
+    "BLACK BEAN SAUCE",
+    "INSTANT RAMEN PACK",
+    "BARLEY TEA BAG",
+    "CITRON TEA JAR",
+    "FROZEN MANDU",
+    "PORK BELLY SLICE",
+    "BEEF BRISKET SLICE",
+    "SQUID WHOLE",
+    "MACKEREL FILLET",
+    "QUAIL EGG TIN",
+    "CORN SILK TEA",
+)
+
+#: The flag column, which the viewer prints beside some lines and not others.
+#: `WT` on a weighed line, `CL` where the card took a price off.
+CAPTURE_FLAGS = ("", "", "", "", "WT", "CL")
+
+#: How many captures to draw, and how the corpus divides. The counts are small
+#: and absolute rather than shares, because each one exists to reach a specific
+#: branch of the reader and one is enough to reach it.
+ORDINARY_CAPTURES = 18
+#: Captures carrying a freehand scrawl in pure blue, which is masked to white
+#: before the engine sees the page. A dozen of the real 46 carry one.
+SCRAWLED_CAPTURES = 4
+#: One receipt too tall for the screen, captured in two overlapping halves that
+#: have to be stitched back into one basket.
+SPLIT_CAPTURES = 1
+#: The data row that opens a pair of visits sharing one calendar date. Two trips
+#: to the shop in one day, at different times and for different amounts, which the
+#: real statement contains and which the capture filenames cannot distinguish from
+#: the two halves of one tall receipt above. It has to exist in the STATEMENT for
+#: the captures to have anything to pair with: naming two captures for one date
+#: while each prints its own, different, stamp describes nothing that could have
+#: happened, and the adapter correctly reads it as one visit and a stray.
+SAME_DAY_FIRST_ROW = 61
+#: One capture clipped at the source, where the amount column runs into the right
+#: edge and every amount loses its last digit. Nothing is stored from it: the gate
+#: needs a figure the reader had no hand in and the clip took the only one. The
+#: visit keeps the total the statement gave it.
+CLIPPED_CAPTURES = 1
+
+#: Larger than the size the tests draw at, and measured rather than chosen. At
+#: `receiptimage.FONT_SIZE` the engine loses the decimal point in an amount about
+#: once in thirty pages: `4.81` comes back as `481`, which matches no amount
+#: pattern, so the line is dropped and the basket misses by exactly it. Over 80
+#: drawn pages: 14 reconciled 79 times, 16 reconciled 79, 17 reconciled 80. 17 is
+#: the size used here — the failures it removes are the reader meeting a glyph it
+#: cannot resolve, which is a real hazard worth a test and not worth spending a
+#: whole visit's contents on in a fixture whose job is to show the format.
+CAPTURE_FONT_SIZE = 17
+
+
+def _split_amount(rng: random.Random, total: Decimal, parts: int) -> list[Decimal]:
+    """`total` divided into `parts` line amounts that sum to it exactly.
+
+    Exactly, not nearly. The adapter compares the summed lines against the
+    statement's figure and refuses the basket on any difference at all, so a
+    rounding residue here would generate a fixture that reaches only the refusal
+    path. The remainder lands on the last line rather than being spread, which is
+    what keeps the sum exact.
+    """
+    cents = int(total * 100)
+    # Every line needs at least 25 cents, so a basket cannot be divided into more
+    # parts than it has money for.
+    parts = max(1, min(parts, cents // 25))
+    if parts == 1:
+        return [total]
+    cuts = sorted(rng.sample(range(25, cents - 25 * (parts - 1)), parts - 1))
+    amounts, previous = [], 0
+    for index, cut in enumerate(cuts):
+        amounts.append(Decimal(cut + 25 * index - previous) / 100)
+        previous = cut + 25 * index
+    amounts.append(Decimal(cents - previous) / 100)
+    return amounts
+
+
+def _receipt_rows(rng: random.Random, visit: dict, amounts: list[Decimal]) -> list[tuple]:
+    """The page, in the order the viewer prints it.
+
+    Customer ID, the purchase lines, TAX, the balance, the tender echoing it, the
+    stamp, then the card block. The two equal amounts at the foot are what tells
+    the reader which line is the total, and the card block is there because the
+    reader has to stop before it — nothing from it is ever transcribed.
+    """
+    subtotal = sum(amounts)
+    # A tax line the statement's figure excludes, which is what makes the
+    # statement a pre-tax subtotal and the receipt's balance the amount paid.
+    tax = (subtotal * Decimal("0.0875")).quantize(Decimal("0.01"))
+    balance = subtotal + tax
+    names = rng.sample(CAPTURE_PRODUCTS, k=len(amounts))
+    rows: list[tuple] = [("", f"Customer ID: {SMARTCARD}", None)]
+    for name, amount in zip(names, amounts, strict=True):
+        rows.append((rng.choice(CAPTURE_FLAGS), name, f"{amount:.2f}"))
+    rows += [
+        ("", "TAX", f"{tax:.2f}"),
+        ("***", "BALANCE", f"{balance:.2f}"),
+        ("", rng.choice(("CREDIT", "DEBIT", "CASH")), f"{balance:.2f}"),
+        ("", visit["when"].strftime("%Y-%m-%d %H:%M:%S") + "  2  118  0042", None),
+        ("", "Card Number : *********0000", None),
+    ]
+    return rows
+
+
+def _capture_name(when, part: int | None = None) -> str:
+    """`Transaction_MMDDYY.png`, and `_NN` for one receipt captured in halves.
+
+    Two digits of year, which is what the viewer writes and what
+    `receipt.capture_date` reads back.
+    """
+    stem = "Transaction_" + when.strftime("%m%d%y")
+    return f"{stem}_{part:02d}.png" if part is not None else f"{stem}.png"
+
+
+def _captures(seed: int, visits: list[dict]) -> dict[str, bytes]:
+    """The captures, drawn from the visits the statement already states.
+
+    Its own rng stream, seeded apart from the spreadsheet's, so that changing how
+    many captures are drawn cannot move a single figure in the statement. The two
+    halves of a response are written by different systems and a change to one
+    should not rewrite the other.
+    """
+    from tests.receiptimage import build_receipt
+
+    rng = random.Random(seed + 1)
+    # Only visits that state a branch, spread across the window rather than taken
+    # from its head: a capture run that all lands in one month cannot show what a
+    # partly-itemised history looks like.
+    eligible = [visit for visit in visits if visit["branch"] and not visit.get("same_day")]
+    wanted = ORDINARY_CAPTURES + SCRAWLED_CAPTURES + SPLIT_CAPTURES + CLIPPED_CAPTURES
+    step = max(1, len(eligible) // wanted)
+    chosen = eligible[::step][:wanted]
+
+    drawn: dict[str, bytes] = {}
+    for index, visit in enumerate(chosen):
+        amounts = _split_amount(rng, Decimal(visit["amount"]), rng.randint(3, 9))
+        rows = _receipt_rows(rng, visit, amounts)
+        name = _capture_name(visit["when"])
+
+        if index < CLIPPED_CAPTURES:
+            # Clipped at the source. Drawn narrow as well, because the real
+            # clipped page is the narrowest in its corpus and the two together
+            # are what `_clipped` measures.
+            drawn[name] = build_receipt(rows, width=505, clip_digits=1, font_size=CAPTURE_FONT_SIZE)
+        elif index < CLIPPED_CAPTURES + SPLIT_CAPTURES and len(amounts) >= 5:
+            # One receipt, two captures. The first half is cut off flush against
+            # its last line, which is the only thing distinguishing it from a
+            # whole receipt, and the halves overlap by one line — which is either
+            # the seam or the same product scanned twice, and the reader decides
+            # which by whether the result reconciles.
+            head = rows[: 1 + 3]
+            tail = rows[3:]
+            drawn[_capture_name(visit["when"], 0)] = build_receipt(
+                head, cut_off=True, font_size=CAPTURE_FONT_SIZE
+            )
+            drawn[_capture_name(visit["when"], 1)] = build_receipt(
+                tail, font_size=CAPTURE_FONT_SIZE
+            )
+        elif index < CLIPPED_CAPTURES + SPLIT_CAPTURES + SCRAWLED_CAPTURES:
+            drawn[name] = build_receipt(rows, scrawl=True, font_size=CAPTURE_FONT_SIZE)
+        else:
+            drawn[name] = build_receipt(rows, font_size=CAPTURE_FONT_SIZE)
+
+    # The two trips that share a date. Both captures are named for that date and
+    # carry a `_NN` part, which is byte for byte the naming the split receipt
+    # above uses — so the reader cannot tell from the names whether it is holding
+    # one tall receipt or two separate baskets, and has to decide by reading them.
+    for part, visit in enumerate(visit for visit in visits if visit.get("same_day")):
+        amounts = _split_amount(rng, Decimal(visit["amount"]), rng.randint(3, 6))
+        rows = _receipt_rows(rng, visit, amounts)
+        drawn[_capture_name(visit["when"], part)] = build_receipt(rows, font_size=CAPTURE_FONT_SIZE)
+
+    return drawn
+
+
+def build(seed: int = DEFAULT_SEED) -> tuple[str, list[dict]]:
+    """The spreadsheet, and the visits it states.
+
+    Returns both because the captures have to reconcile against these exact
+    figures: a receipt whose lines do not sum to the statement's `Amount` for the
+    same visit is refused by the adapter, which is the whole point of the gate.
+    Drawing the two independently would produce a fixture that exercises only the
+    refusal path.
+    """
     rng = random.Random(seed)
+    visits: list[dict] = []
 
     # A window wider than the reference file's, with whole months missing.
     start = datetime(2018, 1, 1, tzinfo=UTC)
@@ -189,7 +419,18 @@ def build(seed: int = DEFAULT_SEED) -> str:
     while data_rows < 200:
         # Between 4 and 52 days on, so some months carry several visits and
         # some carry none at all.
-        when += timedelta(days=rng.randint(4, 52), minutes=rng.randint(0, 1439))
+        if data_rows == SAME_DAY_FIRST_ROW - 1:
+            # The first of the same-day pair, pinned to a morning so the second
+            # has somewhere later in the day to sit.
+            when += timedelta(days=rng.randint(4, 52))
+            when = when.replace(hour=rng.randint(8, 11), minute=rng.randint(0, 59))
+        elif data_rows == SAME_DAY_FIRST_ROW:
+            # The second trip, same date, a later hour. Not a repeated
+            # (timestamp, branch) pair — the real statement has none of those —
+            # just a repeated date.
+            when = when.replace(hour=rng.randint(16, 20), minute=rng.randint(0, 59))
+        else:
+            when += timedelta(days=rng.randint(4, 52), minutes=rng.randint(0, 1439))
         when = when.replace(second=0, microsecond=0)
         if when > end:
             break
@@ -226,10 +467,23 @@ def build(seed: int = DEFAULT_SEED) -> str:
 
         at = f' ss:Index="{declared}"' if declared else ""
         rows.append(f"    <ss:Row{at}>\n" + "\n".join(cells) + "\n    </ss:Row>")
+        # A sparse row states no branch, so it is not a candidate for a capture:
+        # the pairing is on timestamp and amount, but a visit with no branch is
+        # already exercising a different shape and stacking the two would make a
+        # failure ambiguous.
+        visits.append(
+            {
+                "when": when,
+                "branch": None if data_rows in sparse_at else branch,
+                "amount": amount,
+                "points": points,
+                "same_day": data_rows in (SAME_DAY_FIRST_ROW, SAME_DAY_FIRST_ROW + 1),
+            }
+        )
         row_number += 1
 
     body = "\n".join(rows)
-    return (
+    document = (
         '<?xml version="1.0" encoding="utf-8"?>\n'
         f'<ss:Workbook xmlns:ss="{SS}"'
         ' xmlns:x="urn:schemas-microsoft-com:office:excel"'
@@ -278,13 +532,20 @@ def build(seed: int = DEFAULT_SEED) -> str:
         "  </ss:Worksheet>\n"
         "</ss:Workbook>\n"
     )
+    return document, visits
 
 
-def generate(seed: int = DEFAULT_SEED) -> dict[str, str]:
-    """Entry point for tools/make_fixtures.py: filename -> content."""
+def generate(seed: int = DEFAULT_SEED) -> dict[str, str | bytes]:
+    """Entry point for tools/make_fixtures.py: filename -> content.
+
+    The statement is text and the captures are PNG bytes, which is why
+    `make_fixtures` accepts both. The captures are compared by decoded pixels
+    rather than by byte for the reason recorded there.
+    """
     if _luhn_ok(SMARTCARD):
         raise ValueError(
             "the fabricated smartcard passes a Luhn check, which makes it "
             "indistinguishable in shape from a payment card"
         )
-    return {FILENAME: build(seed)}
+    document, visits = build(seed)
+    return {FILENAME: document, **_captures(seed, visits)}

@@ -20,6 +20,22 @@ HMART_FIXTURES = (
 )
 REPORT = KROGER_FIXTURES / "synthetic_report.txt"
 
+
+def _produced() -> dict[Path, set[str]]:
+    """What every generator says it produces, keyed by fixtures directory.
+
+    Asked of the generators rather than written out here. The capture filenames
+    carry the dates the H Mart generator draws, so a literal list would need
+    rewriting on every reseed — and a check against a hand-maintained list of
+    what the directory holds is no check at all.
+    """
+    produced: dict[Path, set[str]] = {}
+    for path in make_fixtures.find_generators():
+        module = make_fixtures.load(path)
+        produced.setdefault(path.parent, set()).update(module.generate())
+    return produced
+
+
 # The strip documented in the adapter notes and in docs/handoff.md section 4.
 PAGE_NUMBER_LINE = re.compile(r"\n\s*\d{1,3}\r?\n")
 JSON_BLOB = re.compile(r"^\{$.*?^\}$", re.M | re.S)
@@ -252,18 +268,28 @@ class TestStrayFixtureFiles:
         # Every generated directory has to be credited, not just the first one:
         # passing a subset is what a second adapter looks like on the day it
         # lands, and the check correctly calls its fixture unexplained.
-        stray = make_fixtures.unexplained_files(
-            {
-                KROGER_FIXTURES: {"synthetic_report.txt"},
-                HMART_FIXTURES: {"synthetic_history.xls"},
-            }
-        )
+        # Credited from the generators themselves rather than from a literal
+        # list. The captures are named for the dates the generator draws, so a
+        # literal here would have to be rewritten on every reseed — and the one
+        # thing this check must never become is a list somebody updates by
+        # pasting in whatever the directory currently holds.
+        stray = make_fixtures.unexplained_files(_produced())
         assert stray == []
 
         # Credit one directory and not the other: the uncredited fixture is now
         # unexplained, which is exactly what a dropped-in report would be.
         stray = make_fixtures.unexplained_files({KROGER_FIXTURES: {"synthetic_report.txt"}})
         assert "synthetic_history.xls" in " ".join(stray)
+
+        # Credit the statement but not the captures. A committed PNG that no
+        # generator produces is the binary form of the accident this guards:
+        # the scanner reads no text out of it, so this check is the only thing
+        # standing between a real screen capture of a receipt and a commit.
+        produced = _produced()
+        produced[HMART_FIXTURES] = {"synthetic_history.xls"}
+        stray = make_fixtures.unexplained_files(produced)
+        assert stray, "a committed capture no generator produces must be reported"
+        assert all(name.endswith(".png") for name in stray), stray
 
         # Same directory, but the generator is not credited with the fixture: the
         # committed file is now unexplained, which is what a dropped-in report is.

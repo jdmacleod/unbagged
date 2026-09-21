@@ -31,7 +31,27 @@ BLACK = (0, 0, 0)
 SCRAWL = (0, 0, 255)
 
 
-def build_receipt(rows, *, width=PAGE_WIDTH, scrawl=False, clip_digits=0, cut_off=False) -> bytes:
+#: The size the tests draw at. The engine reads amounts exactly here and
+#: descriptions well enough to assert on, which is what the tests need.
+#:
+#: The committed fixture captures are drawn LARGER, and the reason is worth
+#: keeping: at 14 the decimal point in an amount is occasionally lost — `4.81`
+#: comes back as `481`, which matches no amount pattern, so the line is dropped
+#: and the basket misses by exactly that line. In a test that is a case being
+#: asserted; in the fixture it is a visit silently losing its contents for a
+#: reason that has nothing to do with the format being reproduced.
+FONT_SIZE = 14
+
+
+def build_receipt(
+    rows,
+    *,
+    width=PAGE_WIDTH,
+    scrawl=False,
+    clip_digits=0,
+    cut_off=False,
+    font_size=FONT_SIZE,
+) -> bytes:
     """A page of `(left, description, amount)` rows, as PNG bytes.
 
     `left` is the flag column — `WT`, `CL`, `***`, or a qualifier like
@@ -49,7 +69,7 @@ def build_receipt(rows, *, width=PAGE_WIDTH, scrawl=False, clip_digits=0, cut_of
     # the same on a contributor's machine and in CI. At the bitmap default size
     # the engine reads the amounts exactly and the descriptions barely at all,
     # which would make every test here a test of the amount column only.
-    font = ImageFont.load_default(size=14)
+    font = ImageFont.load_default(size=font_size)
 
     # `cut_off` ends the page flush against its last row, which is what the
     # screen does to a receipt too tall to fit: the capture stops mid-list with

@@ -39,6 +39,46 @@ LINES_PER_PAGE = 46
 PLACEHOLDER_DESCRIPTION = "UNKNOWN"
 PLACEHOLDER_UPC = "00010000080000"  # pii-scan: allow placeholder UPC, not an identifier
 
+#: The itemised statutory fee that the stated basket total leaves out. Its own
+#: UPC so it cannot collide with a product draw, and a name of its own so the
+#: Products index shows what it is rather than burying it — it is a charge the
+#: receipt made, and a reader should be able to see the fee that stopped the
+#: basket adding up.
+BAG_FEE_DESCRIPTION = "CARRYOUT BAG FEE"
+#: 14 digits, which is the same width as `cardNumberWithCD` and therefore
+#: indistinguishable in shape from a payment card. Chosen to FAIL a Luhn check,
+#: for the reason NOTES.md gives for the card number: `tools/scan_pii.py` keeps
+#: its payment-card rule armed inside generated fixture directories, and a UPC
+#: that happens to pass Luhn trips it on every regeneration. The first value
+#: tried here did exactly that, and `generate()` now asserts it rather than
+#: leaving the next editor to rediscover it from a red CI run.
+BAG_FEE_UPC = "00099000010002"  # pii-scan: allow fee UPC, not an identifier
+
+#: How baskets divide on whether their lines add up to the retailer's own total.
+#: Measured across one real response: 34 of 54 exact, 2 with lines exceeding the
+#: stated total, 18 falling short of it. Expressed as shares so the fixture's
+#: larger basket count lands on the same proportions.
+OVER_SHARE = 2 / 54
+UNDER_SHARE = 18 / 54
+
+#: Discount depths and their weights, drawn to reproduce 66% of lines sitting at
+#: the shelf amount and a summed loyalty figure near 88% of the summed shelf
+#: figure. The depths themselves are invented; the ratio they land on is measured.
+#: two figures at once — the share of lines left at the shelf amount, and the
+#: depth of the ones that are not, which together have to land the summed loyalty
+#: figure near 88% of the summed shelf figure. Either alone can be right while
+#: the pair is wrong: mostly-full-price with shallow discounts reports a card
+#: worth 4%, and the ratio is what a reader actually reads off the Timeline.
+PROMOTIONS = (0.0, 0.10, 0.20, 0.30, 0.45)
+PROMOTION_WEIGHTS = (69, 8, 9, 8, 6)
+
+#: Lines at exactly zero against a positive shelf amount: 35 of 788 priced lines
+#: in the real response. The shape that distinguishes a price field from a
+#: discount field, and therefore the one worth generating. Set below the measured
+#: share because the draw runs over every priced line including the weighed and
+#: multi-buy ones, which the real count is not broken down by.
+ZERO_LOYALTY_SHARE = 35 / 950
+
 # Street names that do not exist anywhere, so a fabricated address cannot
 # accidentally name a real household.
 FICTIONAL_STREETS = (
@@ -663,8 +703,21 @@ def _basket(rng: random.Random, when: datetime, index: int, origin: datetime) ->
         # discount instead, which made the fixture disagree with the format it
         # exists to reproduce and hid a bug that only real data exposed: read as
         # a discount, a full-price line is 100% off and "you paid" renders
-        # $0.00. In one real response two thirds of lines were full price.
-        loyalty = round(retail * (1 - rng.choice((0.0, 0.0, 0.0, 0.05, 0.1, 0.2))), 2)
+        # $0.00.
+        #
+        # Weighted to the measured distribution rather than to a round number.
+        # In one real response: 517 lines at the shelf amount, 271 below it, 0
+        # above it, and 35 at exactly zero with a positive shelf amount. That is
+        # 66% full price, and the summed loyalty amount came to 88% of the summed
+        # shelf amount — a card worth about 12%, which is what a supermarket card
+        # is worth. A fixture sitting at 50/50 reports a saving twice that.
+        if rng.random() < ZERO_LOYALTY_SHARE:
+            # Zero against a positive shelf amount: the shape that tells a price
+            # field from a discount field, and the one a reader inverting the two
+            # cannot distinguish from a 100% discount. 35 of 823 priced lines.
+            loyalty = 0.0
+        else:
+            loyalty = round(retail * (1 - rng.choices(PROMOTIONS, weights=PROMOTION_WEIGHTS)[0]), 2)
         total += retail
         items.append(
             {
@@ -708,6 +761,44 @@ def _basket(rng: random.Random, when: datetime, index: int, origin: datetime) ->
             }
         )
 
+    # What the retailer says the basket came to, which is not always what its
+    # own lines come to. Measured across one real response: 34 of 54 baskets
+    # reconciled to the cent, 2 had lines exceeding the stated total, and 18 fell
+    # short of it by a median 3%. Spot-checked by hand — the lines are read
+    # correctly and the stated totals are read correctly, and the two disagree in
+    # the document as supplied.
+    #
+    # The fixture used to make every basket foot exactly. That is a defensible
+    # default and it had a cost: the footing check, the Timeline's "over by" /
+    # "under by" marker and the copy describing them were all unreachable from
+    # the fixture, so no screenshot, QA pass or design review ever saw the state
+    # they exist for. `tests/test_views_footing.py` had to fabricate baskets by
+    # hand to test the check at all.
+    stated = total
+    shape = rng.random()
+    if shape < OVER_SHARE:
+        # Lines exceed the stated total. In the real response this appeared only
+        # on baskets carrying an itemised statutory fee that the stated total
+        # then left out, and the gap equalled the fee to the cent. Reproduced the
+        # same way round: the fee is a real line, and `stated` never sees it.
+        fee = round(rng.uniform(0.10, 1.20), 2)
+        items.append(
+            {
+                "purchasedescription": BAG_FEE_DESCRIPTION,
+                "productupc": BAG_FEE_UPC,
+                "retailamt": f"{fee:.2f}",
+                # A statutory fee is not discountable, so it is never promoted.
+                "customerloyamt": f"{fee:.2f}",
+            }
+        )
+        total += fee
+    elif shape < OVER_SHARE + UNDER_SHARE:
+        # Lines fall short. No itemised line accounts for the difference; tax is
+        # the obvious guess and the response gives no way to confirm it, so the
+        # generator adds no line for it either — inventing one would answer a
+        # question the response leaves open.
+        stated = round(total * (1 + rng.uniform(0.005, 0.065)), 2)
+
     rng.shuffle(items)
     return {
         # A US-format date with a zeroed time welded on, and the real clock in a
@@ -719,7 +810,10 @@ def _basket(rng: random.Random, when: datetime, index: int, origin: datetime) ->
         "store": rng.choice(STORES),
         "orderno": str(index),
         # Amounts arrive as strings, not numbers.
-        "total_amount_prior_to_discounts": f"{total:.2f}",
+        "total_amount_prior_to_discounts": f"{stated:.2f}",
+        # The tender is what was actually put through the till, so it follows the
+        # lines rather than the stated total. Where the two disagree the receipt
+        # disagrees with itself, which is the point.
         "tenders": [{"tendertype": rng.choice(TENDERS), "amount": f"{total:.2f}"}],
         "items": items,
     }
@@ -806,6 +900,28 @@ def build(seed: int = DEFAULT_SEED, *, months: int = 24) -> str:
     return _interleave_page_numbers("\n".join(sections))
 
 
+def _luhn_ok(digits: str) -> bool:
+    total, parity = 0, len(digits) % 2
+    for index, char in enumerate(digits):
+        value = int(char)
+        if index % 2 == parity:
+            value *= 2
+            if value > 9:
+                value -= 9
+        total += value
+    return total % 10 == 0
+
+
 def generate(seed: int = DEFAULT_SEED) -> dict[str, str]:
     """Entry point for tools/make_fixtures.py: filename -> content."""
+    # Both fabricated 14-digit runs must fail a Luhn check, so `scan_pii` keeps
+    # its payment-card rule armed inside this directory instead of standing it
+    # down. Asserted rather than commented: the fee UPC was first written as a
+    # value that passed, and the only thing that said so was a failing scan.
+    for name, digits in (("BAG_FEE_UPC", BAG_FEE_UPC), ("PLACEHOLDER_UPC", PLACEHOLDER_UPC)):
+        if _luhn_ok(digits):
+            raise ValueError(
+                f"{name} passes a Luhn check, which makes it indistinguishable "
+                "in shape from a payment card and trips tools/scan_pii.py"
+            )
     return {FILENAME: build(seed)}

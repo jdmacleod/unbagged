@@ -477,17 +477,60 @@ class TestTransactionDetail:
         shelf = sum(b["shelf_total"] for b in priced)
         assert 0 < saved / shelf < 0.35, "a loyalty saving, not most of the basket"
 
-    def test_summed_lines_match_the_total_the_retailer_stated(self, client, uploaded):
+    def test_summed_lines_are_checked_against_the_total_the_retailer_stated(self, client, uploaded):
         """The retailer's own arithmetic, used as a check on ours.
 
-        Every basket states `total_amount_prior_to_discounts`. It was parsed and
-        never compared to anything. A non-zero delta means the parse dropped a
-        line, which would make every total in the app quietly short.
+        This asserted an exact match on every basket, which held only because the
+        generator made every basket foot. The real response does not: 34 of 54
+        baskets reconciled to the cent, 2 had lines exceeding the stated total by
+        an itemised fee the total left out, and 18 fell short by a median 3%. The
+        fixture now reproduces all three, so an exact match everywhere would mean
+        the fixture had stopped resembling the format.
+
+        What the check is still for is a parse that drops lines, and that is what
+        the bounds below express: a dropped product line is several dollars on a
+        basket of tens, so it cannot hide inside a percentage-point shortfall or
+        behind a majority that still foots exactly.
         """
         timeline = client.get(f"/api/requests/{uploaded['request_id']}/timeline").json()
-        deltas = [b["stated_pre_discount_delta"] for b in timeline["baskets"]]
+        baskets = [b for b in timeline["baskets"] if b["shelf_total"] > 0]
+        deltas = [b["stated_pre_discount_delta"] for b in baskets]
         assert all(d is not None for d in deltas), "the fixture states a total per basket"
-        assert all(abs(d) < 0.01 for d in deltas)
+
+        exact = [d for d in deltas if abs(d) < 0.01]
+        assert len(exact) / len(deltas) > 0.55, (
+            f"only {len(exact)}/{len(deltas)} baskets foot exactly; a parse dropping "
+            "lines shows up here first"
+        )
+
+        # Where lines exceed the stated total it is a fee the total omitted, so
+        # the excess is small in absolute terms — not a missing line's worth.
+        for basket, delta in zip(baskets, deltas, strict=True):
+            if delta > 0.01:
+                assert delta < 2.00, f"excess of {delta} is too large to be an itemised fee"
+            elif delta < -0.01:
+                # A shortfall is a percentage of the basket, never a whole line.
+                assert abs(delta) / basket["shelf_total"] < 0.12, (
+                    f"shortfall of {delta} on a {basket['shelf_total']} basket looks "
+                    "like a dropped line rather than the response disagreeing with itself"
+                )
+
+    def test_the_fixture_exercises_all_three_footing_outcomes(self, client, uploaded):
+        """The fixture must be able to reach the state the Timeline marker renders.
+
+        `tests/test_views_footing.py` builds baskets by hand to test the check,
+        which proves the function works and says nothing about whether the
+        fixture can produce its inputs. Every screenshot, QA pass and design
+        review runs on the fixture, so a marker the fixture cannot reach is a
+        marker nobody looks at.
+        """
+        timeline = client.get(f"/api/requests/{uploaded['request_id']}/timeline").json()
+        deltas = [
+            b["stated_pre_discount_delta"] for b in timeline["baskets"] if b["shelf_total"] > 0
+        ]
+        assert any(abs(d) < 0.01 for d in deltas), "no basket foots exactly"
+        assert any(d > 0.01 for d in deltas), "no basket has lines exceeding the stated total"
+        assert any(d < -0.01 for d in deltas), "no basket falls short of the stated total"
 
     def test_an_unknown_transaction_is_a_404(self, client, uploaded):
         assert client.get("/api/transactions/999999").status_code == 404
