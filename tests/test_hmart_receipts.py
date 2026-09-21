@@ -14,9 +14,9 @@ rows, a product named after the flag beside it, a visit split in two.
 from decimal import Decimal
 
 import pytest
+from tools import receiptimage
+from tools.receiptimage import build_receipt
 
-from tests import receiptimage
-from tests.receiptimage import build_receipt
 from unbagged import transcription as tr
 from unbagged.adapters.hmart import receipt as rc
 from unbagged.transcription import words as tr_words

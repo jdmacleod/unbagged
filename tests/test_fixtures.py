@@ -273,7 +273,8 @@ class TestStrayFixtureFiles:
         # literal here would have to be rewritten on every reseed — and the one
         # thing this check must never become is a list somebody updates by
         # pasting in whatever the directory currently holds.
-        stray = make_fixtures.unexplained_files(_produced())
+        produced = _produced()
+        stray = make_fixtures.unexplained_files(produced)
         assert stray == []
 
         # Credit one directory and not the other: the uncredited fixture is now
@@ -285,9 +286,8 @@ class TestStrayFixtureFiles:
         # generator produces is the binary form of the accident this guards:
         # the scanner reads no text out of it, so this check is the only thing
         # standing between a real screen capture of a receipt and a commit.
-        produced = _produced()
-        produced[HMART_FIXTURES] = {"synthetic_history.xls"}
-        stray = make_fixtures.unexplained_files(produced)
+        partial = {**produced, HMART_FIXTURES: {"synthetic_history.xls"}}
+        stray = make_fixtures.unexplained_files(partial)
         assert stray, "a committed capture no generator produces must be reported"
         assert all(name.endswith(".png") for name in stray), stray
 
@@ -303,3 +303,84 @@ class TestStrayFixtureFiles:
     def test_every_committed_fixture_is_accounted_for(self):
         """The live assertion, over the real repository."""
         assert make_fixtures.run(check=True) == 0
+
+
+class TestTheFabricatedNumbersStayUncatchable:
+    """The scanner's payment-card rule must stay armed inside fixtures/.
+
+    `tools/scan_pii.py` stands a few address-shaped rules down inside generated
+    fixture directories, because byte-identical regeneration replaces them. It
+    does NOT stand down the payment-card rule, so every fabricated 13-19 digit
+    run in a fixture has to fail a Luhn check or it trips the scanner on every
+    regeneration. Both generators assert that about their own constants.
+
+    The guards were untested. That matters here more than it usually would: the
+    kroger fee UPC was first written as a value that DID pass, and the only
+    thing that said so was a red scan.
+    """
+
+    #: A 14-digit UPC-shaped run that DOES pass Luhn. Not a card number and not
+    #: drawn from anything: it is the exact value the kroger fee UPC was first
+    #: written as, which is what made the scanner red and started this guard.
+    #: The 13-digit Visa test number does not pass, which is worth knowing before
+    #: reaching for one here.
+    LUHN_PASSING = "00099000010001"  # pii-scan: allow fabricated UPC, not a card number
+
+    def _generator(self, retailer: str):
+        return make_fixtures.load(Path(f"src/unbagged/adapters/{retailer}/fixtures/generate.py"))
+
+    def test_the_kroger_guard_fires_on_a_luhn_passing_fee_upc(self, monkeypatch):
+        module = self._generator("kroger")
+        monkeypatch.setattr(module, "BAG_FEE_UPC", self.LUHN_PASSING)
+        with pytest.raises(ValueError, match="Luhn"):
+            module.generate()
+
+    def test_the_kroger_guard_fires_on_a_luhn_passing_placeholder_upc(self, monkeypatch):
+        module = self._generator("kroger")
+        monkeypatch.setattr(module, "PLACEHOLDER_UPC", self.LUHN_PASSING)
+        with pytest.raises(ValueError, match="Luhn"):
+            module.generate()
+
+    def test_the_hmart_guard_fires_on_a_luhn_passing_smartcard(self, monkeypatch):
+        module = self._generator("hmart")
+        monkeypatch.setattr(module, "SMARTCARD", self.LUHN_PASSING)
+        with pytest.raises(ValueError, match="Luhn"):
+            module.generate()
+
+    def test_the_committed_constants_all_fail_luhn(self):
+        """The guards pass today, stated directly rather than only as a side effect."""
+        from tools.receiptimage import luhn_ok
+
+        kroger = self._generator("kroger")
+        hmart = self._generator("hmart")
+        for value in (kroger.BAG_FEE_UPC, kroger.PLACEHOLDER_UPC, hmart.SMARTCARD):
+            assert not luhn_ok(value), f"{value} passes a Luhn check"
+
+
+class TestTheKrogerFixtureCarriesAZeroLoyaltyLine:
+    """A line at zero against a positive shelf amount.
+
+    The shape that tells a price field from a discount field. Read the wrong way
+    round it is a 100% discount, which is silent: "you paid" renders $0.00 and
+    the basket total collapses. The generator draws it at `ZERO_LOYALTY_SHARE`
+    and nothing asserted it actually reaches the committed fixture.
+    """
+
+    def test_the_fixture_contains_lines_paid_at_zero(self):
+        from unbagged.adapters.kroger import reader
+
+        text = REPORT.read_text(encoding="utf-8")
+        clean, _pages = reader.strip_page_markers(text)
+        blob = reader.blob_with_keys(reader.find_blobs(clean), "customer")
+        assert blob is not None, "no purchase blob in the fixture"
+
+        zeroed = [
+            item
+            for basket in blob.data["customer"][0]["basket"]
+            for item in basket["items"]
+            if float(item["retailamt"]) > 0 and float(item["customerloyamt"]) == 0
+        ]
+        assert zeroed, "no line paid at zero against a positive shelf amount"
+        # Measured at 35 of 788 priced lines in the real response. Wide bounds:
+        # this catches the shape vanishing, not an exact draw.
+        assert 10 <= len(zeroed) <= 120, f"{len(zeroed)} zero-loyalty lines"

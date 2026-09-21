@@ -266,7 +266,7 @@ stores a basket only where the receipt's lines sum to the `Amount` the statement
 already gave for that visit. Drawing the two independently would produce a
 fixture that exercises only the refusal path.
 
-They itemise 23 of the 111 visits, against 44 of 67 in the real reply. Deliberately
+They itemise 24 of the 111 visits, against 44 of 67 in the real reply. Deliberately
 a smaller share: totals-only is the normal case for this retailer and not a defect
 to generate away, and every capture costs an OCR pass at ingest, which the
 screenshot run and the container tier both pay.
@@ -289,6 +289,17 @@ behaviour that makes reading these by machine defensible. Two things follow.
 The itemised count is a property of the installed tesseract and can move when it
 is upgraded, so **assert a range, never an exact count**. And the real reply did
 worse: 15 of its 43 visits could not be placed by their printed timestamp at all.
+
+**A basket never rests on one line.** The composer reserves what the basket
+still owes — one cheapest-product's worth per ordinary line still required, plus
+the weighed line's floor — before placing any line, and raises rather than
+emitting a basket it cannot compose. Guarding only against overshooting the
+total is not enough: it lets one product priced within a few cents of the whole
+visit consume it, after which nothing else fits. Brute force over 50 seeds and
+the real amount domain found 5 such baskets and 203 weighed lines above their
+own ceiling, worst $68.83 against a documented $28.00 — all of it surviving a
+regression test that sampled 200 draws under a single seed. The tests now sweep
+the amount domain rather than sampling it.
 
 **Amounts are composed, not divided.** Each line sits at its product's shelf
 price give or take a little drift, and one weighed line at the end takes the

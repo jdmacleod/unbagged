@@ -20,6 +20,7 @@ Needs Docker and Chromium (`make setup-browser`).
 from __future__ import annotations
 
 import argparse
+import mimetypes
 import shutil
 import subprocess
 import sys
@@ -75,11 +76,8 @@ def wait_for_health(timeout: float = 90.0) -> None:
 
 
 def _content_type(path: Path) -> bytes:
-    if path.suffix == ".png":
-        return b"image/png"
-    if path.suffix == ".xls":
-        return b"application/vnd.ms-excel"
-    return b"text/plain"
+    """The part's declared type. stdlib knows every suffix this sends."""
+    return (mimetypes.guess_type(path.name)[0] or "text/plain").encode()
 
 
 def upload_fixture(retailer: str, paths: tuple[Path, ...]) -> None:
@@ -188,6 +186,14 @@ def main() -> int:
         for path in paths:
             if not path.is_file():
                 raise SystemExit(f"make_screenshots: no fixture at {path}")
+    # The H Mart captures are found by glob, so "none committed" produces a
+    # SHORTER tuple rather than a missing path, and the loop above cannot see it.
+    # Without this the run would quietly screenshot a totals-only H Mart and look
+    # like it worked.
+    if not any(path.suffix == ".png" for _r, paths in UPLOADS for path in paths):
+        raise SystemExit(
+            f"make_screenshots: no receipt captures in {HMART_DIR}. Run `make fixtures`."
+        )
     if shutil.which("docker") is None:
         raise SystemExit("make_screenshots: needs Docker")
 

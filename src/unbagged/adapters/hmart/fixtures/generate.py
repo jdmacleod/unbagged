@@ -72,6 +72,10 @@ import random
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+# Shared with the Kroger generator so the two cannot drift. `build_receipt` is
+# imported lazily inside `_captures()` because it pulls Pillow.
+from tools.receiptimage import luhn_ok
+
 DEFAULT_SEED = 20260101
 FILENAME = "synthetic_history.xls"
 
@@ -106,18 +110,6 @@ BRANCH_WEIGHTS = (0.80, 0.15, 0.05)
 # PAYMENT_CARD stays armed inside a generated fixtures directory while
 # LOYALTY_NUMBER stands down. Free insurance against a future edit.
 SMARTCARD = "40100200300"  # pii-scan: allow fabricated card, fails Luhn by construction
-
-
-def _luhn_ok(digits: str) -> bool:
-    total, parity = 0, len(digits) % 2
-    for index, char in enumerate(digits):
-        value = int(char)
-        if index % 2 == parity:
-            value *= 2
-            if value > 9:
-                value -= 9
-        total += value
-    return total % 10 == 0
 
 
 def _escape(value: str) -> str:
@@ -244,7 +236,12 @@ WEIGHED_MAX = Decimal("28.00")
 
 #: A ceiling, not a target. Baskets size themselves from what they cost; this
 #: only stops a very large total drawing a receipt taller than the page.
-MAX_BASKET_LINES = 11
+#:
+#: Measured, not guessed: at 11 the cap itself was the binding constraint on the
+#: dearest baskets and 455 of every 10,000 could not be composed. The failure
+#: rate plateaus from 14 upward, so the cap stops binding there and anything
+#: higher only changes how tall a rare receipt is allowed to be.
+MAX_BASKET_LINES = 16
 
 #: Ordinary lines before the weighed one, even on a small basket. Not cosmetic:
 #: a receipt whose whole total sits on ONE line has no redundancy, so a single
@@ -253,11 +250,25 @@ MAX_BASKET_LINES = 11
 #: a page with nothing else to contradict it.
 MIN_ORDINARY_LINES = 3
 
+#: The contract, as opposed to the target above. What actually matters is that a
+#: basket never rests its whole total on ONE line, because then a single misread
+#: digit takes the basket with it and nothing on the page contradicts it. Two
+#: priced lines is redundancy; three ordinary lines was a target mistaken for a
+#: requirement, and enforcing it failed 56 of every 10,000 baskets at the small
+#: end -- where 2 ordinary lines plus a weighed one is already three priced
+#: lines and perfectly good.
+MIN_PRICED_LINES = 2
+
+
 #: How far a shelf price moves between visits. Prices drift; they do not swing.
 #: The Prices view classifies a product by the shape of its own amounts, so a
 #: product whose amount is redrawn at random every visit reads as weight-priced
 #: and the view can draw no series for it.
 PRICE_DRIFT = (Decimal("0.94"), Decimal("1.07"))
+#: The cheapest line the catalogue can produce, used to reserve room for the
+#: ordinary lines a basket still owes. Derived, never hand-written, so adding a
+#: cheaper product cannot silently invalidate the reserve arithmetic.
+CHEAPEST_LINE = min(Decimal(shelf) for _name, shelf in CAPTURE_PRODUCTS) * PRICE_DRIFT[0]
 
 #: The flag column, which the viewer prints beside some lines and not others.
 #: `WT` on a weighed line, `CL` where the card took a price off.
@@ -288,7 +299,7 @@ SAME_DAY_FIRST_ROW = 61
 CLIPPED_CAPTURES = 1
 
 #: Larger than the size the tests draw at, and measured rather than chosen. At
-#: `receiptimage.FONT_SIZE` the engine loses the decimal point in an amount about
+#: `tools.receiptimage.FONT_SIZE` the engine loses the decimal point in an amount about
 #: once in thirty pages: `4.81` comes back as `481`, which matches no amount
 #: pattern, so the line is dropped and the basket misses by exactly it. Over 80
 #: drawn pages: 14 reconciled 79 times, 16 reconciled 79, 17 reconciled 80. 17 is
@@ -331,11 +342,18 @@ def _compose_basket(
     catalogue = list(CAPTURE_PRODUCTS)
     rng.shuffle(catalogue)
     # Bias toward products that will land the basket near the asked-for size.
+    # A PREFERENCE, not a restriction: the preferred products go first and the
+    # rest stay available behind them. Truncating the catalogue here instead
+    # made the bias a hard cut, and a large total whose preferred band ran out
+    # could not be composed at all -- 30 of every 10,000 baskets raised for that
+    # reason alone, independently of the line cap.
     if soft_target:
         ideal = total / soft_target
         catalogue.sort(key=lambda entry: abs(Decimal(entry[1]) - ideal))
-        catalogue = catalogue[: max(8, soft_target * 3)]
-        rng.shuffle(catalogue)
+        head = max(8, soft_target * 3)
+        preferred = catalogue[:head]
+        rng.shuffle(preferred)
+        catalogue = preferred + catalogue[head:]
 
     index = 0
     while (remaining > WEIGHED_MAX or len(rows) < MIN_ORDINARY_LINES) and len(
@@ -349,17 +367,30 @@ def _compose_basket(
             continue
         drift = low + (high - low) * Decimal(str(rng.random()))
         amount = (Decimal(shelf) * drift).quantize(Decimal("0.01"))
-        # Never overshoot: a line the basket cannot afford would make the total
-        # wrong, and the adapter refuses the basket on any difference at all.
-        if amount > remaining:
+        # Reserve what the basket still owes: one cheapest-product's worth for
+        # each ordinary line still required, plus the weighed line's floor.
+        #
+        # Guarding only against `amount > remaining` is not enough, and the gap
+        # is not theoretical. It lets ONE product take almost the whole total --
+        # a $11.49 sesame oil against an $11.37 visit -- after which every other
+        # product overshoots, the loop runs out of catalogue, and the basket
+        # ships resting its entire total on a single line. That is the exact
+        # shape this function was rewritten to remove, and it survived the
+        # rewrite: brute force over 50 seeds and the real amount domain found 5
+        # such baskets and 203 weighed lines above their own ceiling, worst
+        # $68.83 against a documented $28.00.
+        still_required = max(0, MIN_ORDINARY_LINES - len(rows) - 1)
+        if amount > remaining - (CHEAPEST_LINE * still_required + WEIGHED_MIN):
             continue
         rows.append((rng.choice(CAPTURE_FLAGS), name, amount))
         remaining -= amount
 
-    if not rows:
-        # Nothing fit at all. Only reachable if the catalogue is ever priced
-        # above the statement's smallest visit.
-        return [("", rng.choice(CAPTURE_PRODUCTS)[0], total)]
+    if remaining > WEIGHED_MAX:
+        raise ValueError(
+            f"could not compose a basket of {total} from the catalogue: "
+            f"{len(rows)} ordinary line(s) leave {remaining}, above the "
+            f"{WEIGHED_MAX} a weighed line may carry"
+        )
 
     if remaining >= WEIGHED_MIN:
         name, per_unit = rng.choice(WEIGHED_PRODUCTS)
@@ -373,14 +404,21 @@ def _compose_basket(
     elif remaining > 0:
         # A residue too small to print as a weighed line. It goes on the last
         # line rather than onto a basket of its own.
-        #
-        # This branch replaces a fallback that returned the WHOLE total on one
-        # arbitrary product, which reintroduced the very bug being fixed from a
-        # second direction: FIRM TOFU, a $3.29 product, was being printed at
-        # $140 about three times in a hundred baskets, and swung 41.8x across
-        # the fixture. Caught by the regression test, not by the eye.
         flag, name, amount = rows[-1]
         rows[-1] = (flag, name, amount + remaining)
+
+    # The contract, checked on what the caller actually receives. Raising is the
+    # point: a generator that quietly emits a basket it knows is wrong is how
+    # the single-line captures got committed in the first place, and the only
+    # thing that reads these fixtures afterwards is an OCR pass that cannot tell
+    # a bad shape from a good one.
+    priced = [row for row in rows if row[2] is not None]
+    if len(priced) < MIN_PRICED_LINES:
+        raise ValueError(
+            f"composed a basket of {total} resting on {len(priced)} priced "
+            f"line(s); a basket needs {MIN_PRICED_LINES} so a misread digit "
+            "has something to contradict it"
+        )
 
     return rows
 
@@ -429,7 +467,7 @@ def _captures(seed: int, visits: list[dict]) -> dict[str, bytes]:
     halves of a response are written by different systems and a change to one
     should not rewrite the other.
     """
-    from tests.receiptimage import build_receipt
+    from tools.receiptimage import build_receipt
 
     rng = random.Random(seed + 1)
     # Only visits that state a branch, spread across the window rather than taken
@@ -640,7 +678,7 @@ def generate(seed: int = DEFAULT_SEED) -> dict[str, str | bytes]:
     `make_fixtures` accepts both. The captures are compared by decoded pixels
     rather than by byte for the reason recorded there.
     """
-    if _luhn_ok(SMARTCARD):
+    if luhn_ok(SMARTCARD):
         raise ValueError(
             "the fabricated smartcard passes a Luhn check, which makes it "
             "indistinguishable in shape from a payment card"

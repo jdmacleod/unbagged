@@ -408,7 +408,7 @@ class TestWhenTheCapturesArrive:
         `lines` and `balance` are separate so a receipt that does NOT add up can
         be built. They default to agreeing with each other and with the visit.
         """
-        from tests.receiptimage import build_receipt
+        from tools.receiptimage import build_receipt
 
         amounts = lines if lines is not None else [visit["amount"]]
         total = balance if balance is not None else sum(amounts)
@@ -543,7 +543,7 @@ class TestCapturesWithNoStatementBesideThem:
     STAMP = "2019-03-04 11:07:00"
 
     def capture(self, tmp_path, *, name, stamp=None, lines=None, balance=None):
-        from tests.receiptimage import build_receipt
+        from tools.receiptimage import build_receipt
 
         amounts = lines if lines is not None else [Decimal("6.99")]
         total = balance if balance is not None else sum(amounts)
@@ -632,7 +632,7 @@ class TestCapturesWithNoStatementBesideThem:
         A visit at 00:00 reads as a fact about when someone shopped. The
         spreadsheet path skips a row with no readable date for the same reason.
         """
-        from tests.receiptimage import build_receipt
+        from tools.receiptimage import build_receipt
 
         path = tmp_path / "Transaction_030419.png"
         path.write_bytes(
@@ -848,7 +848,7 @@ class TestWhenAModelIsAskedAboutACapture:
 
     def unreadable_capture(self, tmp_path, stamp="2019-03-04 11:07:00"):
         """A page whose amounts are clipped, so the engine cannot reconcile it."""
-        from tests.receiptimage import build_receipt
+        from tools.receiptimage import build_receipt
 
         path = tmp_path / "Transaction_030419.png"
         path.write_bytes(
@@ -933,7 +933,7 @@ class TestHowAnImageOnlyBundleFindsThisAdapter:
     """
 
     def capture(self, tmp_path, name="Transaction_030419.png"):
-        from tests.receiptimage import build_receipt
+        from tools.receiptimage import build_receipt
 
         path = tmp_path / name
         path.write_bytes(
@@ -985,7 +985,8 @@ class TestWhenTheEngineIsNotInstalled:
     def test_one_message_for_the_whole_upload_and_the_statement_survives(
         self, tmp_path, source, monkeypatch
     ):
-        from tests.receiptimage import build_receipt
+        from tools.receiptimage import build_receipt
+
         from unbagged.transcription import OcrUnavailable
 
         def refuse(_data):
@@ -1290,7 +1291,7 @@ class TestWhenTheModelsAnswerIsAccepted:
         amount AND the printed total, so the engine reads no balance off it and
         there is nothing on the page left to check a second reader against.
         """
-        from tests.receiptimage import build_receipt
+        from tools.receiptimage import build_receipt
 
         path = tmp_path / visit["name"]
         path.write_bytes(

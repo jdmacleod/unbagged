@@ -26,6 +26,11 @@ from datetime import UTC, datetime, timedelta
 
 from faker import Faker
 
+# Shared with the H Mart generator so the two cannot drift. `tools/` is repo
+# tooling, not shipped code, and this module is only ever loaded by
+# `tools/make_fixtures.py` from the repo root.
+from tools.receiptimage import luhn_ok
+
 DEFAULT_SEED = 20260101
 FILENAME = "synthetic_report.txt"
 
@@ -61,23 +66,25 @@ BAG_FEE_UPC = "00099000010002"  # pii-scan: allow fee UPC, not an identifier
 OVER_SHARE = 2 / 54
 UNDER_SHARE = 18 / 54
 
-#: Discount depths and their weights, drawn to reproduce 66% of lines sitting at
-#: the shelf amount and a summed loyalty figure near 88% of the summed shelf
-#: figure. The depths themselves are invented; the ratio they land on is measured.
-#: two figures at once — the share of lines left at the shelf amount, and the
-#: depth of the ones that are not, which together have to land the summed loyalty
-#: figure near 88% of the summed shelf figure. Either alone can be right while
-#: the pair is wrong: mostly-full-price with shallow discounts reports a card
-#: worth 4%, and the ratio is what a reader actually reads off the Timeline.
+#: Discount depths and their weights. The depths are invented; the two figures
+#: they have to land are measured — 66% of lines sitting at the shelf amount, and
+#: a summed loyalty figure near 88% of the summed shelf figure. Either can be
+#: right while the pair is wrong: mostly-full-price with shallow discounts
+#: reports a card worth 4%, and that ratio is what a reader reads off the
+#: Timeline.
 PROMOTIONS = (0.0, 0.10, 0.20, 0.30, 0.45)
 PROMOTION_WEIGHTS = (69, 8, 9, 8, 6)
 
-#: Lines at exactly zero against a positive shelf amount: 35 of 788 priced lines
-#: in the real response. The shape that distinguishes a price field from a
-#: discount field, and therefore the one worth generating. Set below the measured
-#: share because the draw runs over every priced line including the weighed and
-#: multi-buy ones, which the real count is not broken down by.
-ZERO_LOYALTY_SHARE = 35 / 950
+#: Lines at exactly zero against a positive shelf amount. The shape that
+#: distinguishes a price field from a discount field, and therefore the one worth
+#: generating.
+#:
+#: Measured: 35 of 788 priced lines, or 4.4%. The draw here is deliberately
+#: LOWER, because it runs over every priced line including the weighed and
+#: multi-buy ones, which the real count is not broken down by; at the measured
+#: rate the fixture overshoots to 5.2%. A tuned number, not a measured one, so it
+#: is written as one rather than as a fraction that looks like a measurement.
+ZERO_LOYALTY_SHARE = 0.037
 
 # Street names that do not exist anywhere, so a fabricated address cannot
 # accidentally name a real household.
@@ -427,18 +434,6 @@ def _loyalty_number(rng: random.Random) -> str:
     return f"6{rng.randrange(10**11, 10**12):012d}"
 
 
-def _luhn_ok(digits: str) -> bool:
-    total, parity = 0, len(digits) % 2
-    for i, ch in enumerate(digits):
-        d = int(ch)
-        if i % 2 == parity:
-            d *= 2
-            if d > 9:
-                d -= 9
-        total += d
-    return total % 10 == 0
-
-
 def _card_number_with_cd(rng: random.Random, loyalty: str) -> str:
     """Loyalty number plus a trailing check digit, chosen so the result fails Luhn.
 
@@ -450,7 +445,7 @@ def _card_number_with_cd(rng: random.Random, loyalty: str) -> str:
     """
     for candidate in rng.sample(range(10), 10):
         value = f"{loyalty}{candidate}"
-        if not _luhn_ok(value):
+        if not luhn_ok(value):
             return value
     raise AssertionError("unreachable: at most one check digit satisfies Luhn")
 
@@ -714,7 +709,7 @@ def _basket(rng: random.Random, when: datetime, index: int, origin: datetime) ->
         if rng.random() < ZERO_LOYALTY_SHARE:
             # Zero against a positive shelf amount: the shape that tells a price
             # field from a discount field, and the one a reader inverting the two
-            # cannot distinguish from a 100% discount. 35 of 823 priced lines.
+            # cannot distinguish from a 100% discount. 35 of 788 priced lines.
             loyalty = 0.0
         else:
             loyalty = round(retail * (1 - rng.choices(PROMOTIONS, weights=PROMOTION_WEIGHTS)[0]), 2)
@@ -900,18 +895,6 @@ def build(seed: int = DEFAULT_SEED, *, months: int = 24) -> str:
     return _interleave_page_numbers("\n".join(sections))
 
 
-def _luhn_ok(digits: str) -> bool:
-    total, parity = 0, len(digits) % 2
-    for index, char in enumerate(digits):
-        value = int(char)
-        if index % 2 == parity:
-            value *= 2
-            if value > 9:
-                value -= 9
-        total += value
-    return total % 10 == 0
-
-
 def generate(seed: int = DEFAULT_SEED) -> dict[str, str]:
     """Entry point for tools/make_fixtures.py: filename -> content."""
     # Both fabricated 14-digit runs must fail a Luhn check, so `scan_pii` keeps
@@ -919,7 +902,7 @@ def generate(seed: int = DEFAULT_SEED) -> dict[str, str]:
     # down. Asserted rather than commented: the fee UPC was first written as a
     # value that passed, and the only thing that said so was a failing scan.
     for name, digits in (("BAG_FEE_UPC", BAG_FEE_UPC), ("PLACEHOLDER_UPC", PLACEHOLDER_UPC)):
-        if _luhn_ok(digits):
+        if luhn_ok(digits):
             raise ValueError(
                 f"{name} passes a Luhn check, which makes it indistinguishable "
                 "in shape from a payment card and trips tools/scan_pii.py"

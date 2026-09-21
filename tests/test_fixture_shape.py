@@ -279,7 +279,33 @@ class TestHMartBasketsAreComposedNotDivided:
             "shows a name that never appears at a shelf price"
         )
 
-    def test_every_basket_still_sums_to_the_total_it_was_asked_for(self, composer):
+    #: The window the statement's own amounts fall in, from `_amount()`.
+    AMOUNT_DOMAIN = range(1000, 14001, 29)
+
+    def _swept(self, composer):
+        """Every basket the composer produces across the real amount domain.
+
+        A sweep, not a sample. The first version of these tests drew 200 random
+        baskets under one seed and passed while the composer was still emitting
+        single-line baskets and weighed lines at twice their own ceiling —
+        brute force over 50 seeds and this domain found 5 and 203 of them. A
+        fixed seed tests the draw it happens to make, not the function.
+        """
+        import random
+        from decimal import Decimal
+
+        for seed in range(12):
+            rng = random.Random(seed)
+            for cents in self.AMOUNT_DOMAIN:
+                total = Decimal(cents) / 100
+                try:
+                    rows = composer._compose_basket(rng, total, rng.randint(4, 9))
+                except ValueError:
+                    # The documented safety valve. Exercised directly below.
+                    continue
+                yield total, rows
+
+    def test_every_basket_sums_to_the_total_it_was_asked_for(self, composer):
         """The constraint the composer must never trade away.
 
         The adapter compares the summed lines against the statement's figure for
@@ -287,13 +313,7 @@ class TestHMartBasketsAreComposedNotDivided:
         composer that produced plausible prices and a rounding residue would
         generate a fixture that reaches only the refusal path.
         """
-        import random
-        from decimal import Decimal
-
-        rng = random.Random(99)
-        for _ in range(200):
-            total = Decimal(str(round(rng.uniform(10.0, 140.0), 2)))
-            rows = composer._compose_basket(rng, total, rng.randint(3, 9))
+        for total, rows in self._swept(composer):
             summed = sum(amount for _flag, _name, amount in rows if amount is not None)
             assert summed == total, f"{summed} != {total}"
 
@@ -301,17 +321,46 @@ class TestHMartBasketsAreComposedNotDivided:
         """Redundancy, which is what lets a misread digit be caught.
 
         A single-line receipt has nothing to contradict a bad reading, so one
-        smeared glyph takes the basket with it — two scrawled captures were lost
-        that way while this was being fixed.
+        smeared glyph takes the basket with it. Two scrawled captures were lost
+        that way, and the fix for it did not hold: a lone product priced within
+        a few cents of the whole visit still consumed it.
+        """
+        for total, rows in self._swept(composer):
+            priced = [row for row in rows if row[2] is not None]
+            assert len(priced) >= composer.MIN_PRICED_LINES, (
+                f"basket of {total} rests on {len(priced)} priced line(s): {rows}"
+            )
+
+    def test_a_weighed_line_stays_within_its_own_ceiling(self, composer):
+        """A weighed line may vary; it may not become a plug number.
+
+        `WEIGHED_MAX` exists so the line stays a plausible weight of meat or
+        fruit. When the composer ran out of catalogue it wrote the entire
+        remainder onto that line regardless — 7.6 lb of squid, $68.83 against a
+        $28.00 ceiling, which is the same implausible amount-for-product
+        mismatch the spread test above exists to prevent, reached by another
+        route.
+        """
+        weighed = {name for name, _price in composer.WEIGHED_PRODUCTS}
+        for total, rows in self._swept(composer):
+            for _flag, name, amount in rows:
+                if name in weighed and amount is not None:
+                    assert amount <= composer.WEIGHED_MAX, (
+                        f"weighed line of {amount} in a basket of {total}, "
+                        f"above the {composer.WEIGHED_MAX} ceiling"
+                    )
+
+    def test_it_raises_rather_than_emitting_a_basket_it_cannot_compose(self, composer):
+        """The safety valve, asserted so it cannot be quietly removed.
+
+        A generator that emits a basket it knows is wrong is how the single-line
+        captures were committed: the only thing that reads these fixtures
+        afterwards is an OCR pass, which cannot tell a bad shape from a good one.
         """
         import random
         from decimal import Decimal
 
-        rng = random.Random(7)
-        singles = 0
-        for _ in range(200):
-            total = Decimal(str(round(rng.uniform(10.0, 140.0), 2)))
-            rows = [r for r in composer._compose_basket(rng, total, rng.randint(3, 9)) if r[2]]
-            if len(rows) < 2:
-                singles += 1
-        assert singles == 0, f"{singles} of 200 baskets put their whole total on one line"
+        # More than the whole catalogue can carry, so no composition exists.
+        impossible = sum(Decimal(shelf) for _name, shelf in composer.CAPTURE_PRODUCTS) * 2
+        with pytest.raises(ValueError, match="could not compose"):
+            composer._compose_basket(random.Random(0), impossible, 9)

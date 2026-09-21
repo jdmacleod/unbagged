@@ -95,10 +95,15 @@ jobs:
           # one of these is a format a right-to-know response actually arrives as
           # AND a format tools/scan_pii.py cannot read, so a miss here is a miss
           # everywhere. Keep the two lists in step.
+          # Image suffixes carry an extra exemption the others do not: three
+          # directories ship images that are not responses. Everything else
+          # bearing these suffixes is as suspect as a stray PDF.
           stray=$(git ls-files \
             '*.csv' '*.tsv' '*.pdf' '*.zip' '*.7z' '*.rar' '*.tar' '*.tar.gz' '*.tgz' \
             '*.xls' '*.xlsx' '*.ods' '*.doc' '*.docx' '*.eml' '*.mbox' \
-            | grep -v '/fixtures/' || true)
+            '*.png' '*.jpg' '*.jpeg' \
+            | grep -v '/fixtures/' \
+            | grep -vE '^(resources|frontend/public|docs/screenshots)/' || true)
           if [ -n "$stray" ]; then
             echo "Report-shaped files outside fixtures/:"; echo "$stray"; exit 1
           fi
