@@ -349,25 +349,39 @@ def _compose_basket(
             continue
         drift = low + (high - low) * Decimal(str(rng.random()))
         amount = (Decimal(shelf) * drift).quantize(Decimal("0.01"))
-        # Keep enough back that the weighed line can still be a weighed line.
-        if remaining - amount < WEIGHED_MIN:
+        # Never overshoot: a line the basket cannot afford would make the total
+        # wrong, and the adapter refuses the basket on any difference at all.
+        if amount > remaining:
             continue
         rows.append((rng.choice(CAPTURE_FLAGS), name, amount))
         remaining -= amount
 
-    if not (WEIGHED_MIN <= remaining <= WEIGHED_MAX):
-        # Nothing composed to fit. A one-line basket is a shape the real corpus
-        # also contains, and is honest about being one.
+    if not rows:
+        # Nothing fit at all. Only reachable if the catalogue is ever priced
+        # above the statement's smallest visit.
         return [("", rng.choice(CAPTURE_PRODUCTS)[0], total)]
 
-    name, per_unit = rng.choice(WEIGHED_PRODUCTS)
-    pounds = (remaining / Decimal(per_unit)).quantize(Decimal("0.01"))
-    # The qualifier is its OWN full-width row, which is how the viewer prints it.
-    # Put on the product's row it runs from the flag column into the description
-    # column, and the engine reads the two as one word: "2.06 lb @ 1OMACWEREL
-    # FILLET" was a real transcription of the first attempt.
-    rows.append((f"{pounds} lb @ {per_unit} / lb", "", None))
-    rows.append(("WT", name, remaining))
+    if remaining >= WEIGHED_MIN:
+        name, per_unit = rng.choice(WEIGHED_PRODUCTS)
+        pounds = (remaining / Decimal(per_unit)).quantize(Decimal("0.01"))
+        # The qualifier is its OWN full-width row, which is how the viewer prints
+        # it. Put on the product's row it runs from the flag column into the
+        # description column and the engine reads the two as one word:
+        # "2.06 lb @ 1OMACWEREL FILLET" was a real transcription of that.
+        rows.append((f"{pounds} lb @ {per_unit} / lb", "", None))
+        rows.append(("WT", name, remaining))
+    elif remaining > 0:
+        # A residue too small to print as a weighed line. It goes on the last
+        # line rather than onto a basket of its own.
+        #
+        # This branch replaces a fallback that returned the WHOLE total on one
+        # arbitrary product, which reintroduced the very bug being fixed from a
+        # second direction: FIRM TOFU, a $3.29 product, was being printed at
+        # $140 about three times in a hundred baskets, and swung 41.8x across
+        # the fixture. Caught by the regression test, not by the eye.
+        flag, name, amount = rows[-1]
+        rows[-1] = (flag, name, amount + remaining)
+
     return rows
 
 
