@@ -191,37 +191,73 @@ def _amount(rng: random.Random) -> tuple[str, int]:
 #: to what the engine does and would put two spellings of one product in the
 #: index for a reason that has nothing to do with the retailer.
 CAPTURE_PRODUCTS = (
-    "GREEN ONION BUNCH",
-    "FIRM TOFU",
-    "NAPA KIMCHI",
-    "TOASTED SESAME OIL",
-    "SHORT GRAIN RICE",
-    "SWEET POTATO NOODLE",
-    "GOCHUJANG PASTE",
-    "DOENJANG PASTE",
-    "FRESH GARLIC",
-    "KOREAN PEAR",
-    "ENOKI MUSHROOM",
-    "PERILLA LEAF",
-    "DRIED ANCHOVY",
-    "ROASTED SEAWEED",
-    "RICE CAKE STICK",
-    "SOFT TOFU TUBE",
-    "MUNG BEAN SPROUT",
-    "DAIKON RADISH",
-    "FISH CAKE SHEET",
-    "BLACK BEAN SAUCE",
-    "INSTANT RAMEN PACK",
-    "BARLEY TEA BAG",
-    "CITRON TEA JAR",
-    "FROZEN MANDU",
-    "PORK BELLY SLICE",
-    "BEEF BRISKET SLICE",
-    "SQUID WHOLE",
-    "MACKEREL FILLET",
-    "QUAIL EGG TIN",
-    "CORN SILK TEA",
+    ("GREEN ONION BUNCH", "2.49"),
+    ("FIRM TOFU", "3.29"),
+    ("NAPA KIMCHI", "8.99"),
+    ("TOASTED SESAME OIL", "11.49"),
+    ("SHORT GRAIN RICE", "22.99"),
+    ("SWEET POTATO NOODLE", "6.79"),
+    ("GOCHUJANG PASTE", "9.49"),
+    ("DOENJANG PASTE", "8.29"),
+    ("FRESH GARLIC", "3.99"),
+    ("KOREAN PEAR", "5.49"),
+    ("ENOKI MUSHROOM", "1.79"),
+    ("PERILLA LEAF", "2.29"),
+    ("DRIED ANCHOVY", "12.99"),
+    ("ROASTED SEAWEED", "6.49"),
+    ("RICE CAKE STICK", "4.99"),
+    ("SOFT TOFU TUBE", "2.19"),
+    ("MUNG BEAN SPROUT", "1.99"),
+    ("DAIKON RADISH", "3.49"),
+    ("FISH CAKE SHEET", "5.99"),
+    ("BLACK BEAN SAUCE", "7.29"),
+    ("INSTANT RAMEN PACK", "13.99"),
+    ("BARLEY TEA BAG", "4.49"),
+    ("CITRON TEA JAR", "9.99"),
+    ("FROZEN MANDU", "10.49"),
+    ("PORK BELLY SLICE", "15.99"),
+    ("BEEF BRISKET SLICE", "19.99"),
+    ("SQUID WHOLE", "13.49"),
+    ("MACKEREL FILLET", "11.99"),
+    ("QUAIL EGG TIN", "3.79"),
+    ("CORN SILK TEA", "5.29"),
 )
+
+#: The line that absorbs the arithmetic. Every other line on a receipt sits at
+#: its shelf price, so the basket almost never lands exactly on the statement's
+#: figure -- and it has to, to the cent, or the adapter refuses it. A weighed
+#: line is where a real receipt puts an amount that is not a shelf price, so it
+#: is where this one puts the remainder.
+WEIGHED_PRODUCTS = (
+    ("PORK BELLY SLICE", "9.99"),
+    ("BEEF BRISKET SLICE", "12.99"),
+    ("SQUID WHOLE", "8.99"),
+    ("MACKEREL FILLET", "10.49"),
+    ("KOREAN PEAR", "2.99"),
+)
+
+#: What a weighed line may come to. Wide enough that the composer almost always
+#: finds a basket that fits, narrow enough that the line stays a plausible
+#: weight of meat or fruit rather than a plug number.
+WEIGHED_MIN = Decimal("1.50")
+WEIGHED_MAX = Decimal("28.00")
+
+#: A ceiling, not a target. Baskets size themselves from what they cost; this
+#: only stops a very large total drawing a receipt taller than the page.
+MAX_BASKET_LINES = 11
+
+#: Ordinary lines before the weighed one, even on a small basket. Not cosmetic:
+#: a receipt whose whole total sits on ONE line has no redundancy, so a single
+#: misread digit takes the basket with it and the adapter refuses the lot. Two
+#: scrawled captures were lost that way -- a 3 read as a 2 under the scrawl, on
+#: a page with nothing else to contradict it.
+MIN_ORDINARY_LINES = 3
+
+#: How far a shelf price moves between visits. Prices drift; they do not swing.
+#: The Prices view classifies a product by the shape of its own amounts, so a
+#: product whose amount is redrawn at random every visit reads as weight-priced
+#: and the view can draw no series for it.
+PRICE_DRIFT = (Decimal("0.94"), Decimal("1.07"))
 
 #: The flag column, which the viewer prints beside some lines and not others.
 #: `WT` on a weighed line, `CL` where the card took a price off.
@@ -262,47 +298,95 @@ CLIPPED_CAPTURES = 1
 CAPTURE_FONT_SIZE = 17
 
 
-def _split_amount(rng: random.Random, total: Decimal, parts: int) -> list[Decimal]:
-    """`total` divided into `parts` line amounts that sum to it exactly.
+def _compose_basket(
+    rng: random.Random, total: Decimal, soft_target: int
+) -> list[tuple[str, str, Decimal | None]]:
+    """Products and amounts that sum to `total` exactly, at plausible prices.
 
-    Exactly, not nearly. The adapter compares the summed lines against the
-    statement's figure and refuses the basket on any difference at all, so a
-    rounding residue here would generate a fixture that reaches only the refusal
-    path. The remainder lands on the last line rather than being spread, which is
-    what keeps the sum exact.
+    Exactly, not nearly: the adapter compares the summed lines against the
+    statement's figure for the same visit and refuses the basket on any
+    difference at all.
+
+    The first version divided the total into random pieces and then named them,
+    which made price and product independent. Measured through the shipped
+    views, a product's amount swung a median 24x across visits and a worst 101x
+    -- sesame oil at 34 cents on one trip and $34.35 on another. Prices
+    classifies a product by the shape of its own amounts, so 14 of 26 products
+    read as weight-priced and only 7 could be given a series. That is a shape no
+    receipt produces, and this project has traced three separate bugs to a
+    fixture modelling one.
+
+    So the basket is composed rather than divided: every line sits at its shelf
+    price give or take a little drift, and one weighed line at the end takes
+    whatever is left. How many lines a basket has therefore follows from what it
+    cost, which is the way round a shop works -- `soft_target` only biases the
+    draw toward cheaper or dearer products, it does not cap the basket.
+
+    Returns `(flag, description, amount)` rows; a row with no description and no
+    amount is a full-width weight qualifier, which is how the viewer prints one.
     """
-    cents = int(total * 100)
-    # Every line needs at least 25 cents, so a basket cannot be divided into more
-    # parts than it has money for.
-    parts = max(1, min(parts, cents // 25))
-    if parts == 1:
-        return [total]
-    cuts = sorted(rng.sample(range(25, cents - 25 * (parts - 1)), parts - 1))
-    amounts, previous = [], 0
-    for index, cut in enumerate(cuts):
-        amounts.append(Decimal(cut + 25 * index - previous) / 100)
-        previous = cut + 25 * index
-    amounts.append(Decimal(cents - previous) / 100)
-    return amounts
+    remaining = total
+    rows: list[tuple[str, str, Decimal | None]] = []
+    low, high = PRICE_DRIFT
+    catalogue = list(CAPTURE_PRODUCTS)
+    rng.shuffle(catalogue)
+    # Bias toward products that will land the basket near the asked-for size.
+    if soft_target:
+        ideal = total / soft_target
+        catalogue.sort(key=lambda entry: abs(Decimal(entry[1]) - ideal))
+        catalogue = catalogue[: max(8, soft_target * 3)]
+        rng.shuffle(catalogue)
+
+    index = 0
+    while (remaining > WEIGHED_MAX or len(rows) < MIN_ORDINARY_LINES) and len(
+        rows
+    ) < MAX_BASKET_LINES:
+        name, shelf = catalogue[index % len(catalogue)]
+        index += 1
+        if index > len(catalogue) * 3:
+            break
+        if any(name == row[1] for row in rows):
+            continue
+        drift = low + (high - low) * Decimal(str(rng.random()))
+        amount = (Decimal(shelf) * drift).quantize(Decimal("0.01"))
+        # Keep enough back that the weighed line can still be a weighed line.
+        if remaining - amount < WEIGHED_MIN:
+            continue
+        rows.append((rng.choice(CAPTURE_FLAGS), name, amount))
+        remaining -= amount
+
+    if not (WEIGHED_MIN <= remaining <= WEIGHED_MAX):
+        # Nothing composed to fit. A one-line basket is a shape the real corpus
+        # also contains, and is honest about being one.
+        return [("", rng.choice(CAPTURE_PRODUCTS)[0], total)]
+
+    name, per_unit = rng.choice(WEIGHED_PRODUCTS)
+    pounds = (remaining / Decimal(per_unit)).quantize(Decimal("0.01"))
+    # The qualifier is its OWN full-width row, which is how the viewer prints it.
+    # Put on the product's row it runs from the flag column into the description
+    # column, and the engine reads the two as one word: "2.06 lb @ 1OMACWEREL
+    # FILLET" was a real transcription of the first attempt.
+    rows.append((f"{pounds} lb @ {per_unit} / lb", "", None))
+    rows.append(("WT", name, remaining))
+    return rows
 
 
-def _receipt_rows(rng: random.Random, visit: dict, amounts: list[Decimal]) -> list[tuple]:
+def _receipt_rows(rng: random.Random, visit: dict, lines: list[tuple]) -> list[tuple]:
     """The page, in the order the viewer prints it.
 
     Customer ID, the purchase lines, TAX, the balance, the tender echoing it, the
     stamp, then the card block. The two equal amounts at the foot are what tells
     the reader which line is the total, and the card block is there because the
-    reader has to stop before it — nothing from it is ever transcribed.
+    reader has to stop before it -- nothing from it is ever transcribed.
     """
-    subtotal = sum(amounts)
+    subtotal = sum(amount for _flag, _name, amount in lines if amount is not None)
     # A tax line the statement's figure excludes, which is what makes the
     # statement a pre-tax subtotal and the receipt's balance the amount paid.
     tax = (subtotal * Decimal("0.0875")).quantize(Decimal("0.01"))
     balance = subtotal + tax
-    names = rng.sample(CAPTURE_PRODUCTS, k=len(amounts))
     rows: list[tuple] = [("", f"Customer ID: {SMARTCARD}", None)]
-    for name, amount in zip(names, amounts, strict=True):
-        rows.append((rng.choice(CAPTURE_FLAGS), name, f"{amount:.2f}"))
+    for flag, name, amount in lines:
+        rows.append((flag, name, None if amount is None else f"{amount:.2f}"))
     rows += [
         ("", "TAX", f"{tax:.2f}"),
         ("***", "BALANCE", f"{balance:.2f}"),
@@ -344,8 +428,8 @@ def _captures(seed: int, visits: list[dict]) -> dict[str, bytes]:
 
     drawn: dict[str, bytes] = {}
     for index, visit in enumerate(chosen):
-        amounts = _split_amount(rng, Decimal(visit["amount"]), rng.randint(3, 9))
-        rows = _receipt_rows(rng, visit, amounts)
+        lines = _compose_basket(rng, Decimal(visit["amount"]), rng.randint(4, 9))
+        rows = _receipt_rows(rng, visit, lines)
         name = _capture_name(visit["when"])
 
         if index < CLIPPED_CAPTURES:
@@ -353,7 +437,7 @@ def _captures(seed: int, visits: list[dict]) -> dict[str, bytes]:
             # clipped page is the narrowest in its corpus and the two together
             # are what `_clipped` measures.
             drawn[name] = build_receipt(rows, width=505, clip_digits=1, font_size=CAPTURE_FONT_SIZE)
-        elif index < CLIPPED_CAPTURES + SPLIT_CAPTURES and len(amounts) >= 5:
+        elif index < CLIPPED_CAPTURES + SPLIT_CAPTURES and len(lines) >= 5:
             # One receipt, two captures. The first half is cut off flush against
             # its last line, which is the only thing distinguishing it from a
             # whole receipt, and the halves overlap by one line — which is either
@@ -377,8 +461,8 @@ def _captures(seed: int, visits: list[dict]) -> dict[str, bytes]:
     # above uses — so the reader cannot tell from the names whether it is holding
     # one tall receipt or two separate baskets, and has to decide by reading them.
     for part, visit in enumerate(visit for visit in visits if visit.get("same_day")):
-        amounts = _split_amount(rng, Decimal(visit["amount"]), rng.randint(3, 6))
-        rows = _receipt_rows(rng, visit, amounts)
+        lines = _compose_basket(rng, Decimal(visit["amount"]), rng.randint(3, 6))
+        rows = _receipt_rows(rng, visit, lines)
         drawn[_capture_name(visit["when"], part)] = build_receipt(rows, font_size=CAPTURE_FONT_SIZE)
 
     return drawn

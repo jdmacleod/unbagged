@@ -266,7 +266,7 @@ stores a basket only where the receipt's lines sum to the `Amount` the statement
 already gave for that visit. Drawing the two independently would produce a
 fixture that exercises only the refusal path.
 
-They cover 25 of the 111 visits, against 44 of 67 in the real reply. Deliberately
+They itemise 23 of the 111 visits, against 44 of 67 in the real reply. Deliberately
 a smaller share: totals-only is the normal case for this retailer and not a defect
 to generate away, and every capture costs an OCR pass at ingest, which the
 screenshot run and the container tier both pay.
@@ -280,6 +280,26 @@ Each shape exists to reach a specific branch of the reader:
 | One tall receipt in two overlapping halves | 1 visit, 2 files | `stitch`, and the seam it has to guess |
 | Two trips on one date | 2 visits, 2 files | The pair that is *not* a split receipt |
 | Clipped at the right edge | 1 | The refusal: nothing is stored, the visit keeps the statement's total |
+
+**Two captures beyond the clipped one do not reconcile, and the count is not
+fixed.** They are ordinary OCR misreads of the kind the engine makes on 10px
+type — a decimal point read as a semicolon, a 3 read as a 2 under a scrawl — and
+the adapter refuses the basket rather than storing a wrong one, which is the
+behaviour that makes reading these by machine defensible. Two things follow.
+The itemised count is a property of the installed tesseract and can move when it
+is upgraded, so **assert a range, never an exact count**. And the real reply did
+worse: 15 of its 43 visits could not be placed by their printed timestamp at all.
+
+**Amounts are composed, not divided.** Each line sits at its product's shelf
+price give or take a little drift, and one weighed line at the end takes the
+remainder so the basket still sums to the statement's figure exactly. The first
+version divided the total into random pieces and named them afterwards, which
+left price and product independent: measured through the shipped views a
+product's amount swung a **median 24x** across visits and a worst 101x, so
+Prices read 14 of 26 products as weight-priced and could draw a series for only
+7. Composed, the median spread is **1.1x** and 21 of 23 products classify as
+unit-priced. The products that still swing are the weighed ones, which is what a
+weighed line is.
 
 The same-day pair is in the **statement**, not only in the filenames. Two captures
 named for one date while each prints its own, different, stamp describes nothing
