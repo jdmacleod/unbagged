@@ -70,6 +70,64 @@ there is no version behind this yet.
   replay now refuses a file carrying no measurements instead of rendering an
   empty table over it and exiting cleanly.
 
+- **The synthetic responses reproduce the shapes the real ones have**, rather
+  than only their formats. Both generators were structurally faithful and
+  distributionally wrong, which left documented behaviour unreachable from the
+  fixtures: every Kroger basket footed exactly, so the footing check and the
+  Timeline's "over by" / "under by" markers could not be reached at all, and the
+  tests that cover them had to build baskets by hand. The fixtures now carry the
+  measured proportions — 81 of 120 baskets footing exactly, 2 with lines
+  exceeding the stated total on an itemised fee, 37 falling short, and two
+  thirds of lines at the shelf amount against a summed loyalty figure near 88%.
+
+- **The H Mart fixture gained the receipt captures it never had.** 27 of them,
+  drawn from the statement's own figures because the adapter stores a basket
+  only where the two agree, covering 24 of 111 visits. Each shape reaches a
+  branch of the reader: a scrawl that must be masked, one tall receipt in two
+  halves that must be stitched, two trips on one date that must not be, and a
+  clipped page that correctly stores nothing.
+
+- **Screenshots are taken from both retailers.** Compare reads across responses
+  and had nothing to show with one fixture loaded, which is why the README had
+  no picture of it.
+
+- **Committed binary fixtures are compared by decoded pixels**, not by byte,
+  because zlib output is a property of the local Pillow wheel. Image suffixes
+  also join the deny-by-default list that every other response format is already
+  on: `tools/scan_pii.py` cannot read a PNG, so a stray capture outside a
+  fixtures directory previously passed every gate the repo has.
+
+### Fixed
+
+- **A product in the H Mart fixture costs about the same each time it is
+  bought.** Amounts were drawn independently of the products they were printed
+  against, so one item swung a median 24 times across visits and a worst 101 —
+  sesame oil at 34 cents on one trip and $34.35 on another. Prices classifies a
+  product by the shape of its own amounts, so that read as weight-pricing almost
+  everywhere and the view could draw a series for 7 of 26 products. Baskets are
+  now composed from shelf prices with one weighed line taking the remainder:
+  median spread 1.1, and 22 of 24 products priceable.
+
+- **A fixture basket can no longer rest its whole total on one line.** The H
+  Mart composer reserved nothing for the lines a basket still owed, so a single
+  product priced within a few cents of the visit consumed it — 5 such baskets
+  across 50 seeds, alongside 203 weighed lines above their own ceiling. A
+  receipt with one line has nothing to contradict a misread digit, which is how
+  two captures were lost. The composer now raises rather than emitting a basket
+  it cannot compose, and the tests sweep the amount domain instead of sampling
+  one seed.
+
+### Documentation
+
+- **The README describes the app that ships.** It claimed fonts and JS were
+  vendored while citing, as proof, the test that asserts no font file ships at
+  all; `DESIGN.md` had recorded that correction and three derived copies never
+  followed. It also put a long report's reading time at 10 to 30 seconds, where
+  a 404 KB response measures 0.15s and a 400-page PDF 1.17s — tens of seconds is
+  the OCR path. The per-response remove control is documented, where previously
+  the only stated remedy for a bad upload was moving the whole data directory
+  aside.
+
 ## [0.17.0] - 2026-09-18
 
 **This changes what responses you have already loaded look like.** No migration

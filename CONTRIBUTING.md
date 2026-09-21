@@ -69,16 +69,16 @@ it will not catch a date you happened to shop on, so this one is on you.
 
 | Layer | What it does |
 |---|---|
-| `.gitignore` | Denies `/data/`, `/output/`, `data.bak-*/`, and sixteen report formats wholesale. Exactly one re-inclusion: `src/**/fixtures/**`. |
+| `.gitignore` | Denies `/data/`, `/output/`, `data.bak-*/`, and nineteen report formats wholesale — images among them, since a screen capture of a receipt is a response format too. Four re-inclusions, each with a check behind it: `src/**/fixtures/**` (`make fixtures-check`), `resources/**` and `frontend/public/**` (`make brand-check`), `docs/screenshots/**` (`make screenshots`). CI refuses a fifth. |
 | `.dockerignore` | Same bytes, different route: keeps real data out of the build context, not just out of an image layer. Every wildcard is `**/`-prefixed — see below. |
 | `tools/no_data_dir.py` | Pre-commit hook that hard-fails any staged path under `data/` or `output/`. |
-| `tools/scan_pii.py` | Scans for emails, phone numbers, addresses, ZIPs, Luhn-valid card numbers, SSNs, loyalty-length digit runs, and UUIDs. Also fails on any committed file in a `fixtures/` directory it cannot read. |
+| `tools/scan_pii.py` | Scans for emails, phone numbers, addresses, ZIPs, Luhn-valid card numbers, SSNs, loyalty-length digit runs, and UUIDs. Also fails on any committed file in a `fixtures/` directory it cannot read — including an image, unless a generator sits beside it and therefore `make fixtures-check` reproduces it. |
 | `tools/make_fixtures.py --check` | Regenerates every fixture from a fixed seed and fails on any difference **and on any committed file no generator produces**. |
 | `tools/build_brand.py --check` | Rebuilds the served brand assets from `resources/` in memory and compares, writing nothing. Fails on drift, a missing or stray file, a symlink beneath `frontend/public/`, and on bytes that carry anything but pixels — a C2PA manifest, an ICC profile, or a served SVG holding a `<script>` or an off-origin `href`. The odd one out here: it guards provenance metadata and the shape of a served document, not anything about a person's shopping. |
 | `tools/check_icon_sync.py` | Refuses a pull request that edits a source SVG in `resources/` and leaves the icons generated from it behind, matched per source: touching a raster belonging to the *other* SVG does not count. Proves they moved together, not that they are correct — nothing re-runs `build_icons.py`, so a wrong regeneration passes. An edit that renders identically leaves nothing to commit; say `icons-unchanged: <source.svg> <reason>` in a commit message. The name and the reason are both required, and the name scopes it to that one file. |
 | `docker/requirements.txt` | The shipped image's runtime lock: every package pinned and hashed, installed with `--require-hashes`. `tools/check_lock.py` fails when it stops covering what `pyproject.toml` declares. |
 | `gitleaks` | Credentials, which are a different problem with the same blast radius. |
-| `tools/make_screenshots.py` | Published screenshots come from a throwaway container seeded only with the synthetic fixture. The scanner cannot read a PNG; this is what stands in for it. |
+| `tools/make_screenshots.py` | Published screenshots come from a throwaway container seeded only with the synthetic fixtures. The scanner cannot read a PNG; this is what stands in for it. |
 | `check-added-large-files` | A 5 MB PDF appearing in a diff is a red flag. |
 | CI | Runs all of the above against the checkout *and* against the PR's commits, so an amended-away mistake is still caught. Actions are pinned to commit SHAs. |
 
