@@ -6,10 +6,13 @@
 The screenshots in this repository are published. The data in them must therefore
 be data nobody owns, and the only way to guarantee that is to never point this at
 a database that could hold a real response. So it does not take a URL: it starts
-its own container on a scratch data directory, ingests
-`src/unbagged/adapters/kroger/fixtures/synthetic_report.txt`, captures, and
-deletes the directory. A developer's own instance on :8420 is bind-mounted to
-./data and is exactly what must not be photographed.
+its own container on a scratch data directory, ingests every adapter's synthetic
+fixture, captures, and deletes the directory. A developer's own instance on :8420
+is bind-mounted to ./data and is exactly what must not be photographed.
+
+Both retailers are ingested, not just Kroger. Compare has nothing to show until a
+second response exists, so with one fixture loaded its screenshot was of an empty
+state — which is why the README had none.
 
 Needs Docker and Chromium (`make setup-browser`).
 """
@@ -26,7 +29,18 @@ import urllib.request
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-FIXTURE = REPO_ROOT / "src/unbagged/adapters/kroger/fixtures/synthetic_report.txt"
+KROGER_FIXTURE = REPO_ROOT / "src/unbagged/adapters/kroger/fixtures/synthetic_report.txt"
+HMART_DIR = REPO_ROOT / "src/unbagged/adapters/hmart/fixtures"
+HMART_FIXTURE = HMART_DIR / "synthetic_history.xls"
+
+#: One upload per retailer, in the order the requests are numbered. The H Mart
+#: upload carries its receipt captures alongside the statement, because they
+#: belong to one response: the captures say what was in a visit and the statement
+#: says what it cost, and the adapter stores a basket only where they agree.
+UPLOADS = (
+    ("kroger", (KROGER_FIXTURE,)),
+    ("hmart", (HMART_FIXTURE, *sorted(HMART_DIR.glob("Transaction_*.png")))),
+)
 OUT_DIR = REPO_ROOT / "docs" / "screenshots"
 SCRATCH = REPO_ROOT / ".screenshot-data"
 
@@ -36,7 +50,10 @@ BASE = f"http://127.0.0.1:{PORT}"
 
 # One capture per view, at a width that shows the layout the README describes.
 VIEWPORT = {"width": 1280, "height": 900}
-VIEWS = ("timeline", "profile", "compliance", "prices", "products")
+#: `compare` reads across retailers rather than within one, so it is captured
+#: against no particular request. The rest are captured against request 1.
+VIEWS = ("timeline", "profile", "compliance", "prices", "products", "compare")
+CROSS_RETAILER_VIEWS = frozenset({"compare"})
 
 
 def docker(*args: str, check: bool = True, timeout: int = 900):
@@ -57,17 +74,30 @@ def wait_for_health(timeout: float = 90.0) -> None:
     raise SystemExit("make_screenshots: the container never became healthy")
 
 
-def upload_fixture() -> None:
+def _content_type(path: Path) -> bytes:
+    if path.suffix == ".png":
+        return b"image/png"
+    if path.suffix == ".xls":
+        return b"application/vnd.ms-excel"
+    return b"text/plain"
+
+
+def upload_fixture(retailer: str, paths: tuple[Path, ...]) -> None:
+    """One response, as one upload. Several files where the response had several."""
     boundary = "----unbagged-screenshots"
-    body = b"".join(
-        [
+    parts = []
+    for path in paths:
+        parts += [
             f"--{boundary}\r\n".encode(),
-            b'Content-Disposition: form-data; name="files"; filename="synthetic_report.txt"\r\n',
-            b"Content-Type: text/plain\r\n\r\n",
-            FIXTURE.read_bytes(),
-            f"\r\n--{boundary}--\r\n".encode(),
+            b'Content-Disposition: form-data; name="files"; filename="'
+            + path.name.encode()
+            + b'"\r\n',
+            b"Content-Type: " + _content_type(path) + b"\r\n\r\n",
+            path.read_bytes(),
+            b"\r\n",
         ]
-    )
+    parts.append(f"--{boundary}--\r\n".encode())
+    body = b"".join(parts)
     # noqa: S310 on both lines — BASE is a 127.0.0.1 literal built above, not input.
     request = urllib.request.Request(  # noqa: S310
         f"{BASE}/api/requests",
@@ -75,9 +105,11 @@ def upload_fixture() -> None:
         method="POST",
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
     )
-    with urllib.request.urlopen(request, timeout=180) as response:  # noqa: S310
+    # Longer than the text path needs. The H Mart upload runs an OCR pass per
+    # capture, so this one genuinely takes tens of seconds.
+    with urllib.request.urlopen(request, timeout=600) as response:  # noqa: S310
         if response.status != 201:
-            raise SystemExit(f"make_screenshots: ingest returned {response.status}")
+            raise SystemExit(f"make_screenshots: ingesting {retailer} returned {response.status}")
 
 
 def remove_scratch() -> None:
@@ -113,7 +145,8 @@ def capture() -> list[Path]:
         browser = p.chromium.launch()
         page = browser.new_page(viewport=VIEWPORT, device_scale_factor=2)
         for view in VIEWS:
-            page.goto(f"{BASE}/?tab={view}&r=1", wait_until="networkidle")
+            query = f"tab={view}" if view in CROSS_RETAILER_VIEWS else f"tab={view}&r=1"
+            page.goto(f"{BASE}/?{query}", wait_until="networkidle")
             page.wait_for_timeout(400)  # let the unfurl animation settle
             target = OUT_DIR / f"{view}.png"
             page.screenshot(path=str(target), full_page=False)
@@ -151,8 +184,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.parse_args()
 
-    if not FIXTURE.is_file():
-        raise SystemExit(f"make_screenshots: no fixture at {FIXTURE}")
+    for _retailer, paths in UPLOADS:
+        for path in paths:
+            if not path.is_file():
+                raise SystemExit(f"make_screenshots: no fixture at {path}")
     if shutil.which("docker") is None:
         raise SystemExit("make_screenshots: needs Docker")
 
@@ -169,8 +204,9 @@ def main() -> int:
     )
     try:
         wait_for_health()
-        print("make_screenshots: ingesting the synthetic fixture")
-        upload_fixture()
+        for retailer, paths in UPLOADS:
+            print(f"make_screenshots: ingesting {retailer} ({len(paths)} file(s))")
+            upload_fixture(retailer, paths)
         written = capture()
     finally:
         docker("rm", "-f", name, check=False)
