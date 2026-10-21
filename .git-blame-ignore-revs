@@ -14,3 +14,8 @@
 # Anything a human had to decide was settled in the commit before this one,
 # precisely so that this one could be listed here.
 a3664731f75104fc20405e28f54127bd233096f0
+
+# style: format the UI with Prettier.
+# Formatting only, from `npm run format`; the tooling it uses was set up in the
+# commit before it, so nothing a human decided is in this one.
+2ef973db562660269c9430f41bc98103ebc255a5
