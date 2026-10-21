@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { currentMonthKey, doesNotFoot, fillMonths, monthIndex } from "./views/Timeline";
-import { countOf, scale, tip } from "./views/PriceHistory";
-import { gaugeWidth, scopeNote } from "./views/Profile";
-import { draftRows } from "./views/Compliance";
-import { rowsFor } from "./views/Compare";
-import { nothingWasItemised } from "./views/ProductIndex";
 import { announceUpload, isSameEntry, productQuery, resolveCurrent } from "./App";
 import type { View } from "./App";
 import type { Basket, CompareRow, Identity, Inference, PricePoint, UploadResult } from "./types";
+import { rowsFor } from "./views/Compare";
+import { draftRows } from "./views/Compliance";
+import { countOf, scale, tip } from "./views/PriceHistory";
+import { nothingWasItemised } from "./views/ProductIndex";
+import { gaugeWidth, scopeNote } from "./views/Profile";
+import { currentMonthKey, doesNotFoot, fillMonths, monthIndex } from "./views/Timeline";
 
 const basket = (delta: number | null): Basket => ({ stated_pre_discount_delta: delta }) as Basket;
 
@@ -32,18 +32,17 @@ describe("doesNotFoot", () => {
   });
 });
 
-const point = (date: string, retail: number, paid = retail): PricePoint =>
-  ({
-    date,
-    retail_amt: retail,
-    paid_amt: paid,
-    saved_amt: 0,
-    quantity: null,
-    count: null,
-    unit_retail: retail,
-    unit_paid: paid,
-    multiple_of: null,
-  }) as PricePoint;
+const point = (date: string, retail: number, paid = retail): PricePoint => ({
+  date,
+  retail_amt: retail,
+  paid_amt: paid,
+  saved_amt: 0,
+  quantity: null,
+  count: null,
+  unit_retail: retail,
+  unit_paid: paid,
+  multiple_of: null,
+});
 
 describe("countOf and tip", () => {
   // The quantity a line was for, where the response says. A weight is not a
@@ -106,13 +105,12 @@ describe("scale", () => {
   it("does not read a missing shelf price as zero", () => {
     // Albertsons discloses only what was paid. A null in the range would pull
     // the axis floor down to $0 and flatten the line against the top.
-    const paidOnly = (date: string, paid: number): PricePoint =>
-      ({
-        ...point(date, paid),
-        retail_amt: null,
-        unit_retail: null,
-        saved_amt: null,
-      }) as PricePoint;
+    const paidOnly = (date: string, paid: number): PricePoint => ({
+      ...point(date, paid),
+      retail_amt: null,
+      unit_retail: null,
+      saved_amt: null,
+    });
     const s = scale([paidOnly("2024-01-01", 3.5), paidOnly("2024-06-01", 4.25)]);
     expect(s.lo).toBe(3.5);
     expect(s.hi).toBe(4.25);
@@ -496,17 +494,16 @@ describe("isSameEntry", () => {
   });
 });
 
-const uploaded = (over: Partial<UploadResult> = {}): UploadResult =>
-  ({
-    request_id: 1,
-    retailer_id: "kroger",
-    display_name: "Kroger",
-    confident: true,
-    confidence: 0.98,
-    warnings: [],
-    summary: { transactions: 54, items: 1203, identities: 7, inferences: 12 },
-    ...over,
-  }) as UploadResult;
+const uploaded = (over: Partial<UploadResult> = {}): UploadResult => ({
+  request_id: 1,
+  retailer_id: "kroger",
+  display_name: "Kroger",
+  confident: true,
+  confidence: 0.98,
+  warnings: [],
+  summary: { transactions: 54, items: 1203, identities: 7, inferences: 12 },
+  ...over,
+});
 
 describe("announceUpload", () => {
   it("says what was read and how much of it", () => {

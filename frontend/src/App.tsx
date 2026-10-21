@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
-import { useAsync } from "./components/useAsync";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { RemoveRequest } from "./components/RemoveRequest";
 import { StaleReading } from "./components/StaleReading";
-import { ErrorBoundary } from "./components/ErrorBoundary";
-import { Upload } from "./components/Upload";
-import type { IndexEntry, UploadResult } from "./types";
 import { Caveat, ErrorBox, Spine, Spinner } from "./components/ui";
+import { Upload } from "./components/Upload";
+import { useAsync } from "./components/useAsync";
+import type { IndexEntry, UploadResult } from "./types";
 import { Compare } from "./views/Compare";
 import { Compliance } from "./views/Compliance";
 import { PriceHistory } from "./views/PriceHistory";
@@ -50,12 +50,12 @@ type TabId = (typeof TABS)[number]["id"];
 const TAB_IDS = TABS.map((t) => t.id) as readonly string[];
 
 /** Everything the URL carries. */
-export type View = {
+export interface View {
   tab: TabId;
   request: number | null;
   query: string | null;
   label: string | null;
-};
+}
 
 /** Which view the URL is asking for. Falls back to the default on anything
  *  unrecognised, so a hand-edited or stale link still lands somewhere sane. */

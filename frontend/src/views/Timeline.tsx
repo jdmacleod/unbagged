@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
-import { useAsync } from "../components/useAsync";
-import { Aside, Cite, Empty, ErrorBox, Spine, Spinner } from "../components/ui";
 import { useShowMore } from "../components/ShowMore";
+import { Aside, Cite, Empty, ErrorBox, Spine, Spinner } from "../components/ui";
+import { useAsync } from "../components/useAsync";
 import {
   assignStoreHues,
   barAxisLabel,
@@ -77,7 +77,7 @@ export function Timeline({
   );
 }
 
-type Controls = {
+interface Controls {
   store: string;
   setStore: (v: string) => void;
   from: string;
@@ -86,7 +86,7 @@ type Controls = {
   setTo: (v: string) => void;
   q: string;
   setQ: (v: string) => void;
-};
+}
 
 /** One cent. Below that a difference is float noise from summing currency. */
 const FOOTING_TOLERANCE = 0.01;
@@ -386,7 +386,7 @@ function monthLabel(iso: string) {
   return `${MONTHS[Number(m) - 1]} ${y.slice(2)}`;
 }
 
-export type MonthEntry = {
+export interface MonthEntry {
   /** `YYYY-MM`, and the anchor id is `month-${key}`. */
   key: string;
   label: string;
@@ -403,7 +403,7 @@ export type MonthEntry = {
    *  The rail reveals through this before scrolling, because the roll renders
    *  25 rows at a time and an anchor that is not mounted scrolls nowhere. */
   firstIndex: number;
-};
+}
 
 /**
  * The roll's months, in order, with what each cost and where each begins.

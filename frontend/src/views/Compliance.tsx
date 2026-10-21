@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import { useAsync } from "../components/useAsync";
 import { Aside, Empty, ErrorBox, Spine, Spinner } from "../components/ui";
+import { useAsync } from "../components/useAsync";
 import { humanise } from "../format";
 import type { ComplianceRow, DisclosureCell } from "../types";
 

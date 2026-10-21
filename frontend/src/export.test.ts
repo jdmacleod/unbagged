@@ -89,7 +89,7 @@ describe("indexSvg", () => {
     expect(svg).toContain("M&amp;M'S 5&quot; &lt;BIG&gt;");
     // The raw forms must not survive, or the document is malformed.
     expect(svg).not.toContain("<BIG>");
-    expect(svg.match(/M&M/)).toBe(null);
+    expect(/M&M/.exec(svg)).toBe(null);
   });
 
   it("references nothing it would have to fetch", () => {
@@ -124,7 +124,7 @@ describe("indexSvg", () => {
       meta,
       measure,
     );
-    const height = (svg: string) => Number(svg.match(/height="(\d+)"/)![1]);
+    const height = (svg: string) => Number(/height="(\d+)"/.exec(svg)![1]);
     expect(height(many)).toBeGreaterThan(height(few));
   });
 });

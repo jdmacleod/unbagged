@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-type State<T> = {
+interface State<T> {
   data: T | null;
   error: string | null;
   loading: boolean;
@@ -18,7 +18,7 @@ type State<T> = {
    *  that failed is not evidence of anything. Counting failures here would let
    *  a dropped connection stand in for an answer. */
   reads: number;
-};
+}
 
 /**
  * Minimal data fetching. No client library: this app makes a handful of GETs

@@ -24,13 +24,15 @@ import { ErrorBox } from "./ui";
  *
  * Issue #49.
  */
-type Props = {
+interface Props {
   children: ReactNode;
   /** Remounts the subtree when it changes, so moving tab clears a stuck view. */
   resetKey?: string;
-};
+}
 
-type State = { message: string | null };
+interface State {
+  message: string | null;
+}
 
 export class ErrorBoundary extends Component<Props, State> {
   state: State = { message: null };
