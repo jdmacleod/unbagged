@@ -43,6 +43,13 @@ updates:
       interval: monthly
     commit-message:
       prefix: "deps"
+    # One PR a month for the lock, not one per package. Five separate bumps of
+    # this one file each ran the full CI, container suite included, and each
+    # merge sent the rest back for a rebase and a sixth run. A major version
+    # still arrives on its own, where it can be read on its own.
+    groups:
+      runtime:
+        update-types: [minor, patch]
 
   - package-ecosystem: npm
     directory: /frontend
@@ -50,3 +57,18 @@ updates:
       interval: monthly
     commit-message:
       prefix: "deps"
+    groups:
+      # React and React DOM must move together: a PR bumping `react` alone
+      # (#115) left `react-dom` on the old version, the two refused each other,
+      # and the app rendered nothing. Grouped by name, so a major moves as a
+      # pair too.
+      react:
+        patterns: ["react", "react-dom", "@types/react", "@types/react-dom"]
+      frontend:
+        update-types: [minor, patch]
+    ignore:
+      # Type definitions for the Node runtime the build uses, which is 22 in
+      # the Dockerfile and in ci.yml. A newer major describes APIs that runtime
+      # does not have; bump it when the runtime moves.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
