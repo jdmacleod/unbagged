@@ -29,7 +29,10 @@ classifiers = [
 dependencies = [
     "pdfplumber>=0.11",        # text extraction, page by page
     "pypdf>=4",                # structure: page count, metadata
-    "fastapi>=0.115",
+    # Capped below 0.142, which made opentelemetry-api a hard dependency: a
+    # telemetry library in an app built to have none. Held, with the lock and
+    # dependabot, until that is decided (CODING_STANDARDS.md, Dependencies).
+    "fastapi>=0.115,<0.142",
     "uvicorn[standard]>=0.30",
     "python-multipart>=0.0.9", # multipart upload parsing
 ]

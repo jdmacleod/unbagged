@@ -50,6 +50,13 @@ updates:
     groups:
       runtime:
         update-types: [minor, patch]
+    ignore:
+      # FastAPI 0.142 made opentelemetry-api a hard dependency. It cannot export
+      # without an SDK, an exporter and OTEL_* settings, none of which the image
+      # has, but it is a telemetry library in an app built to have none
+      # (CLAUDE.md). Held at 0.141.1, Starlette with it, until that is decided.
+      - dependency-name: "fastapi"
+        versions: [">=0.142"]
 
   - package-ecosystem: npm
     directory: /frontend
