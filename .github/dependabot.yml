@@ -72,3 +72,7 @@ updates:
       # does not have; bump it when the runtime moves.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
+      # Held at 6.0: typescript-eslint parses with TypeScript's JS compiler API,
+      # which TypeScript 7 no longer ships (CODING_STANDARDS.md, TypeScript).
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]

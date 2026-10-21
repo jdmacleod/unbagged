@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { api } from "../api";
-import { useAsync } from "../components/useAsync";
-import { Aside, ErrorBox, Spine, Spinner } from "../components/ui";
 import { useShowMore } from "../components/ShowMore";
+import { Aside, ErrorBox, Spine, Spinner } from "../components/ui";
+import { useAsync } from "../components/useAsync";
 import { categoryVar, money, percent } from "../format";
 import type { PricePoint, PriceSeries } from "../types";
 
@@ -339,7 +339,7 @@ function Series({ series }: { series: PriceSeries }) {
                 // `shelf_disclosed` guarantees every point has one. Never a
                 // paid amount standing in: that would draw a shelf price nobody
                 // disclosed.
-                d={path(pts, (p) => p.unit_retail as number, s)}
+                d={path(pts, (p) => p.unit_retail!, s)}
                 fill="none"
                 stroke="currentColor"
                 strokeWidth={1}

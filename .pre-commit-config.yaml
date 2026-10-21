@@ -17,6 +17,8 @@ repos:
       - id: check-merge-conflict
       - id: end-of-file-fixer
         stages: [pre-commit]  # its manifest adds pre-push; once is enough
+        # Written by ESLint, without a final newline, every time it prunes.
+        exclude: ^frontend/eslint-suppressions\.json$
       - id: trailing-whitespace
         stages: [pre-commit]  # its manifest adds pre-push; once is enough
       - id: mixed-line-ending
@@ -122,6 +124,16 @@ repos:
         entry: tools/npm_hook.sh prettier --write --ignore-path ../.prettierignore --
         language: system
         files: ^frontend/.*\.(ts|tsx|js|mjs|cjs|css|json|html)$
+
+      # Type-aware ESLint on the changed UI files, with the suppressions baseline.
+      # When a fix leaves a suppression unused it fails until you run
+      # `npx eslint --prune-suppressions` in frontend/.
+      - id: eslint
+        name: eslint (frontend)
+        entry: tools/npm_hook.sh eslint --max-warnings=0 --
+        language: system
+        files: ^frontend/.*\.(ts|tsx)$
+        require_serial: true
 
       # The checks too slow for every commit and too important to leave to CI:
       # the frontend type-check and both unit-test tiers. `make pre-push` names

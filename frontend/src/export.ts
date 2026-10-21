@@ -35,11 +35,18 @@ export const TIER_TYPE: Record<number, { size: number; weight: number }> = {
   1: { size: 13, weight: 400 },
 };
 
-export type ExportEntry = { description: string; tier: number };
+export interface ExportEntry {
+  description: string;
+  tier: number;
+}
 export type Placed = ExportEntry & { x: number; size: number; weight: number };
-export type Line = { items: Placed[]; height: number; baseline: number };
+export interface Line {
+  items: Placed[];
+  height: number;
+  baseline: number;
+}
 
-export type LayoutOptions = {
+export interface LayoutOptions {
   width: number;
   padding: number;
   /** Space after each entry, as a fraction of that entry's own size. A fixed
@@ -47,7 +54,7 @@ export type LayoutOptions = {
    *  index fixed with an em-based margin. */
   gapEm: number;
   lineHeight: number;
-};
+}
 
 export const DEFAULTS: LayoutOptions = {
   width: 1200,
@@ -109,11 +116,11 @@ export function escapeXml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
-export type IndexMeta = {
+export interface IndexMeta {
   retailer: string;
   productCount: number;
   coverage: string;
-};
+}
 
 /** The whole index as one self-contained SVG document. */
 export function indexSvg(

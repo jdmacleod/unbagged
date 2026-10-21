@@ -1,6 +1,6 @@
 import { api } from "../api";
-import { useAsync } from "../components/useAsync";
 import { Empty, ErrorBox, Spinner } from "../components/ui";
+import { useAsync } from "../components/useAsync";
 import { humanise } from "../format";
 import type { Identity, Inference, Provenance } from "../types";
 

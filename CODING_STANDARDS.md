@@ -7,7 +7,8 @@ possible and this file explains them. A rule no tool checks is marked as a
 
 Existing code that breaks a rule is listed in a baseline that may only shrink:
 `# noqa: <code> - baselined, may only shrink` for complexity, and
-`tools/size_baseline.json` for file size. New code meets the rules.
+`tools/size_baseline.json` for file size, `frontend/eslint-suppressions.json` for
+the UI. New code meets the rules.
 
 ## 1. Purpose and precedence
 
@@ -29,7 +30,7 @@ Fastest first. Each catches what the one before it cannot.
 | Layer | When | What runs | Configured in |
 |---|---|---|---|
 | Format hook | After every Claude Code edit | `ruff format` and import sorting on the edited Python file, Prettier on the edited UI file; never a path under `data/` | `.claude/settings.json`, `tools/format_edited.sh` |
-| Pre-commit | Every commit, staged files | Hygiene, YAML/TOML/JSON syntax, gitleaks, ruff, Prettier, actionlint, zizmor, markdownlint, shellcheck, hadolint, the size check, the `data/` refusal, the PII scanner | `.pre-commit-config.yaml` |
+| Pre-commit | Every commit, staged files | Hygiene, YAML/TOML/JSON syntax, gitleaks, ruff, Prettier, ESLint, actionlint, zizmor, markdownlint, shellcheck, hadolint, the size check, the `data/` refusal, the PII scanner | `.pre-commit-config.yaml` |
 | Commit message | Every commit | Conventional Commits (section 8) | `.pre-commit-config.yaml` |
 | Pre-push | Every push | The UI type-check, then the Python and UI unit tests (`make pre-push`) | `.pre-commit-config.yaml`, `Makefile` |
 | CI | Every push and pull request | Everything above, plus editorconfig-checker, ty (advisory), the container suite, the PII history scan, CodeQL | `.github/workflows/` |
@@ -41,7 +42,7 @@ existing `.git/hooks/pre-push` is kept as `pre-push.legacy` and still runs first
 | Command | Does |
 |---|---|
 | `make fmt` | Format: ruff format and import sorting; Prettier over `frontend/` |
-| `make lint` | ruff check and format check; Prettier check over `frontend/` |
+| `make lint` | ruff check and format check; Prettier check and ESLint over `frontend/` |
 | `make types` | ty over `src`, `tools` and `tests`; reports, never fails |
 | `make size` | The size check; `make size-report` lists files over the preferred size; `make size-update` lowers the baseline |
 | `make typecheck-frontend` | `tsc` over the UI, no emit |
@@ -103,9 +104,27 @@ restructure the code.
   markdownlint's). The pre-commit hook runs it from `frontend/node_modules`
   through `tools/npm_hook.sh`, so run `make setup-frontend` once first; CI runs
   `npm run format:check`.
-- **Types:** `tsc` in strict mode (`frontend/tsconfig.json`: `strict`,
+- **Types:** TypeScript 6.0 in strict mode (`frontend/tsconfig.json`: `strict`,
   `noUnusedLocals`, `noUnusedParameters`, `noFallthroughCasesInSwitch`,
-  `verbatimModuleSyntax`). It runs in the pre-push hook and in CI's frontend build.
+  `verbatimModuleSyntax`). It runs in the pre-push hook and in CI. **Not 7 yet:**
+  TypeScript 7's package no longer carries the JS compiler API that
+  typescript-eslint parses with, and typescript-eslint supports up to 6.0. Move to
+  7 when it does.
+- **Lint:** ESLint, type-aware (`frontend/eslint.config.js`): `recommended`,
+  typescript-eslint `strictTypeChecked` and `stylisticTypeChecked`, react-hooks,
+  jsx-a11y and `import-x/order`, with Prettier's config last so the two never
+  disagree. Two relaxations: an arrow shorthand may return void (`onClick={() =>
+  setOpen(false)}`), and a template may interpolate a number. Function limits:
+  complexity 15, 120 lines, nesting depth 4. `npm run lint` runs it with
+  `--max-warnings=0` in the hook, `make lint` and CI.
+- **Suppressions baseline:** the 39 findings that predate ESLint are in
+  `frontend/eslint-suppressions.json`. It may only shrink: fix one and the hook
+  fails until `npx eslint --prune-suppressions` removes its entry. Never run
+  `--suppress-all` or `--suppress-rule` to get a change through.
+- **Inline disables:** `// eslint-disable-next-line <rule> -- <reason>`, never a
+  file-wide disable.
+- `npm overrides` lets `eslint-plugin-jsx-a11y` 6.10.2 run on ESLint 10, which it
+  works with but has not yet declared; drop the override when it does.
 - **Tests:** vitest over the pure functions behind what the reader sees
   (`frontend/src/logic.test.ts`); browser behaviour is the container suite's.
 - Visual rules (colour, type, spacing, no cards, `.num` for aligned numerals) are
@@ -189,4 +208,4 @@ restructure the code.
 Arriving in their own pull requests, each of which updates this file:
 
 - ty as a gate, once it is stable and the count is near zero.
-- ESLint over the UI, with a shrink-only suppressions baseline.
+- TypeScript 7, once typescript-eslint supports it.

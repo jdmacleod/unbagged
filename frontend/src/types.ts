@@ -2,13 +2,13 @@
 // is small, and a type that says what a field means is worth more here than one
 // that merely matches.
 
-export type Provenance = {
+export interface Provenance {
   source_document_id: number | null;
   page: number | null;
   locator: string | null;
-};
+}
 
-export type RequestMeta = {
+export interface RequestMeta {
   id: number;
   retailer_id: string;
   display_name: string;
@@ -19,9 +19,9 @@ export type RequestMeta = {
   period_start: string | null;
   period_end: string | null;
   adapter_schema_version: number | null;
-};
+}
 
-export type Basket = {
+export interface Basket {
   id: number;
   occurred_at: string;
   external_order_id: string | null;
@@ -62,9 +62,9 @@ export type Basket = {
    *  Null when the retailer stated no total to check against. */
   stated_pre_discount_delta: number | null;
   provenance: Provenance;
-};
+}
 
-export type LineItem = {
+export interface LineItem {
   id: number;
   description_raw: string;
   upc: string | null;
@@ -78,11 +78,11 @@ export type LineItem = {
   /** retail_amt − paid_amt. Zero on a full-price line. */
   saved_amt: number | null;
   category: string | null;
-};
+}
 
 export type BasketDetail = Basket & { items: LineItem[] };
 
-export type Stats = {
+export interface Stats {
   /** False when the retailer disclosed no specific pieces of personal
    *  information. Every count below is then null rather than 0, because "0
    *  visits" is a claim about the retailer that such a response never made. */
@@ -117,24 +117,24 @@ export type Stats = {
   zero_value_lines: number | null;
   negative_lines: number | null;
   stores: { store_code: string; visits: number }[];
-};
+}
 
-export type Timeline = {
+export interface Timeline {
   stats: Stats;
   filtered_count: number;
   baskets: Basket[];
-};
+}
 
-export type Identity = {
+export interface Identity {
   id: number;
   id_type: string;
   value: string;
   scope: string | null;
   first_seen: string | null;
   provenance: Provenance;
-};
+}
 
-export type Inference = {
+export interface Inference {
   id: number;
   label: string;
   value_raw: string;
@@ -145,23 +145,23 @@ export type Inference = {
   /** true / false / null — "we don't know" is a third answer, not a false. */
   derivable_from_txns: boolean | null;
   provenance: Provenance;
-};
+}
 
-export type Profile = {
+export interface Profile {
   identities: Identity[];
   identity_count: number;
   inferences_by_origin: Record<string, Inference[]>;
   household_scoped: Inference[];
   household_scoped_count: number;
-};
+}
 
-export type DisclosureCell = {
+export interface DisclosureCell {
   category: string;
   status: "provided" | "partial" | "absent" | null;
   evidence?: string | null;
   notes?: string | null;
   provenance?: Provenance;
-};
+}
 
 export type ComplianceRow = RequestMeta & {
   cells: Record<string, DisclosureCell>;
@@ -177,9 +177,12 @@ export type ComplianceRow = RequestMeta & {
   }[];
 };
 
-export type Compliance = { categories: string[]; rows: ComplianceRow[] };
+export interface Compliance {
+  categories: string[];
+  rows: ComplianceRow[];
+}
 
-export type CompareRow = {
+export interface CompareRow {
   id: number;
   retailer_id: string;
   display_name: string;
@@ -206,14 +209,17 @@ export type CompareRow = {
   /** Request scope: false when no basket in the response carried lines. */
   lines_disclosed: boolean;
   total_stated: number | null;
-};
+}
 
-export type Compare = { requests: CompareRow[]; comparable: boolean };
+export interface Compare {
+  requests: CompareRow[];
+  comparable: boolean;
+}
 
 /** One day, not one line. Several lines sharing a date are averaged into a
  *  single observation of that day's price; `lines` keeps the raw count, which
  *  is the only trace of quantity a response without a quantity field leaves. */
-export type PricePoint = {
+export interface PricePoint {
   date: string;
   /** The shelf price, or null where the response disclosed only what was paid
    *  (Albertsons). Never filled in from `paid_amt`. */
@@ -236,7 +242,7 @@ export type PricePoint = {
    *  ordinary price, which is consistent with buying more than one. Null when
    *  it looks like a single item. A suspicion, never a disclosed fact. */
   multiple_of: number | null;
-};
+}
 
 /** How a product's amounts behave, which decides whether they are a price.
  *  - `unit`     one item at a broadly stable price; the only priceable shape
@@ -244,7 +250,7 @@ export type PricePoint = {
  *  - `weight`   amounts move every trip, as a per-pound item does */
 export type PriceShape = "unit" | "multiple" | "weight";
 
-export type PriceSeries = {
+export interface PriceSeries {
   /** What identifies this product across visits, and the value to key a list
    *  or a selection on. The retailer's code where one was disclosed, and the
    *  name it printed where none was — H Mart's receipts carry no codes at all.
@@ -277,9 +283,9 @@ export type PriceSeries = {
    *  look like a single item. */
   change_pct: number | null;
   points: PricePoint[];
-};
+}
 
-export type PriceHistory = {
+export interface PriceHistory {
   min_observations: number;
   product_count: number;
   /** How many of those have amounts that behave like a price. */
@@ -292,15 +298,15 @@ export type PriceHistory = {
    *  different thing from nothing being bought often enough. */
   lines_disclosed: boolean;
   products: PriceSeries[];
-};
+}
 
-export type ParseWarning = {
+export interface ParseWarning {
   severity: string;
   message: string;
   locator: string | null;
-};
+}
 
-export type UploadResult = {
+export interface UploadResult {
   request_id: number;
   retailer_id: string;
   display_name: string;
@@ -308,19 +314,19 @@ export type UploadResult = {
   confident: boolean;
   summary: Record<string, number>;
   warnings: ParseWarning[];
-};
+}
 
-export type FollowUpLetter = {
+export interface FollowUpLetter {
   letter: string;
   absent_categories: string[];
   partial_categories: string[];
   note: string;
-};
+}
 
 /** One product in the index. Size is carried as an ordinal `tier`, never as a
  *  pixel value: the API has no business knowing the type scale, and quantising
  *  to five absolute steps is what makes the encoding honest. See DESIGN.md. */
-export type IndexEntry = {
+export interface IndexEntry {
   /** What identifies this product across visits, and the value to key a list
    *  or a selection on. The retailer's code where one was disclosed, and the
    *  name it printed where none was — H Mart's receipts carry no codes at all.
@@ -348,15 +354,15 @@ export type IndexEntry = {
   /** Bought more than once, then not again for six months before the coverage
    *  window closed. An observation about dates, never a claim about you. */
   stopped: boolean;
-};
+}
 
-export type IndexTier = {
+export interface IndexTier {
   tier: number;
   min_purchases: number;
   count: number;
-};
+}
 
-export type ProductIndex = {
+export interface ProductIndex {
   /** False when the retailer disclosed no purchase data at all, which is not
    *  the same as having bought nothing. */
   disclosed: boolean;
@@ -383,13 +389,13 @@ export type ProductIndex = {
   lines_disclosed: boolean;
   limit: number;
   products: IndexEntry[];
-};
+}
 
 /** One adapter the build knows about, and the reading it currently produces.
  *  `schema_version` is compared against a request's `adapter_schema_version`
  *  to tell whether a stored report predates a correction. */
-export type AdapterInfo = {
+export interface AdapterInfo {
   retailer_id: string;
   display_name: string;
   schema_version: number;
-};
+}

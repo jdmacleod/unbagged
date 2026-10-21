@@ -260,6 +260,10 @@ No migration runs and nothing needs re-reading.
 - **The UI is formatted by Prettier**, pinned to one release, by the hook, by
   `make fmt` and in CI. The one-time reformat is its own commit, which
   `git blame` skips.
+- **The UI is linted by type-aware ESLint**, with React hooks, accessibility
+  and import order rules, at zero warnings; the findings that predate it are a
+  baseline that may only shrink. The UI moves from TypeScript 7 back to 6.0,
+  the newest release the linter can read.
 - **Files have a size limit.** A new file past 800 lines (1,200 for tests) fails
   the hook and CI; the ten already past it may shrink but not grow.
 

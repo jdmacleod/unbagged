@@ -1,6 +1,7 @@
 {
   "Exclude": [
     "package-lock\\.json$",
+    "eslint-suppressions\\.json$",
     "\\.svg$",
     "\\.png$",
     "\\.ico$",

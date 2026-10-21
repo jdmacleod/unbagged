@@ -233,6 +233,12 @@ jobs:
         working-directory: frontend
       - run: npm run format:check
         working-directory: frontend
+      - run: npm run lint
+        working-directory: frontend
+      # Also inside `npm run build`, but named on its own so a type error reads
+      # as a type error in the checks list rather than as a failed build.
+      - run: npm run typecheck
+        working-directory: frontend
       - run: npm run build
         working-directory: frontend
       # The UI unit tests cover the pure functions behind what the reader sees:

@@ -1,16 +1,16 @@
 import { api } from "../api";
-import { useAsync } from "../components/useAsync";
 import { Aside, Caveat, ErrorBox, Spine, Spinner } from "../components/ui";
+import { useAsync } from "../components/useAsync";
 import { day, money, number, paidLabel } from "../format";
 import type { CompareRow } from "../types";
 
-type Metric = {
+interface Metric {
   key: keyof CompareRow;
   label: string;
   format: (value: number | null | undefined) => string;
   /** Marks a row that is about provenance rather than quantity. */
   foreign?: boolean;
-};
+}
 
 /** The rows, given the columns that will sit beside them.
  *

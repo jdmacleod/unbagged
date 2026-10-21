@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { api } from "../api";
-import { useAsync } from "../components/useAsync";
 import { Aside, Empty, ErrorBox, Spine, Spinner } from "../components/ui";
-import { number } from "../format";
+import { useAsync } from "../components/useAsync";
 import { canvasMeasure, downloadSvg, indexSvg } from "../export";
+import { number } from "../format";
 import type { IndexEntry, IndexTier, ProductIndex as Index } from "../types";
 
 /**
