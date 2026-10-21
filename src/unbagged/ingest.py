@@ -559,7 +559,7 @@ def _why_nothing_matched(bundle: SourceBundle) -> str:
             message = str(exc)
             if message not in reasons:
                 reasons.append(message)
-        except Exception:  # noqa: S110 - the swallow is the behaviour, see below
+        except Exception:  # noqa: S110, BLE001 - the swallow is the behaviour, see below
             # A malformed file that fails in some other way is still unreadable;
             # it just has no message worth quoting. Deliberately not logged: this
             # runs only to explain a failed upload, and the caller already reports

@@ -29,11 +29,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-import unbagged.adapters  # noqa: E402,F401  (registers the adapters)
-from unbagged.adapters.registry import registry  # noqa: E402
-from unbagged.extraction import ExtractionError, extract  # noqa: E402
-from unbagged.jsonscan import iter_json, walk  # noqa: E402
-from unbagged.models import SourceBundle, SourceDocument  # noqa: E402
+import unbagged.adapters  # noqa: F401  (registers the adapters)
+from unbagged.adapters.registry import registry
+from unbagged.extraction import ExtractionError, extract
+from unbagged.jsonscan import iter_json, walk
+from unbagged.models import SourceBundle, SourceDocument
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUTPUT = REPO_ROOT / "tools" / "denylist.txt"
@@ -113,7 +113,7 @@ TEXT_SUFFIXES = {
 def repo_corpus() -> str:
     """Everything already committed, lowercased, as one string."""
     listed = subprocess.run(
-        ["git", "ls-files"], cwd=REPO_ROOT, capture_output=True, text=True
+        ["git", "ls-files"], cwd=REPO_ROOT, capture_output=True, text=True, check=False
     ).stdout.split()
     chunks = []
     for name in listed:
@@ -146,7 +146,7 @@ def split_known_values(values: set[str], corpus: str) -> tuple[set[str], set[str
 def is_gitignored(path: Path) -> bool:
     """A denylist that is not gitignored is a PII file waiting to be committed."""
     result = subprocess.run(
-        ["git", "check-ignore", "-q", str(path)], cwd=REPO_ROOT, capture_output=True
+        ["git", "check-ignore", "-q", str(path)], cwd=REPO_ROOT, capture_output=True, check=False
     )
     return result.returncode == 0
 
@@ -272,7 +272,7 @@ def from_adapter(report: Path, found: dict[str, set[str]]) -> bool:
         return False
     try:
         result = match.adapter.parse(SourceBundle(documents=(document,)))
-    except Exception:
+    except Exception:  # noqa: BLE001 - a parse that fails proves nothing either way
         return False
 
     for identity in result.identities:
@@ -345,7 +345,7 @@ def merge(output: Path, values: set[str]) -> tuple[int, int]:
     return len(existing), len(combined)
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915 - baselined, may only shrink
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("reports", nargs="+", type=Path)
     parser.add_argument("-o", "--output", type=Path, default=DEFAULT_OUTPUT)

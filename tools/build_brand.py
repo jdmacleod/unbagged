@@ -207,7 +207,7 @@ def equivalent(name: str, produced: bytes, committed: bytes) -> bool:
     if name.endswith(".png"):
         try:
             return png_pixels(produced) == png_pixels(committed)
-        except Exception:
+        except Exception:  # noqa: BLE001 - an unreadable PNG is simply not equivalent
             return False
     return produced == committed
 

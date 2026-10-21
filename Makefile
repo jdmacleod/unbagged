@@ -8,7 +8,7 @@ PY := $(shell test -x .venv/bin/python && echo .venv/bin/python || echo $(BOOTST
 COMPOSE := docker compose
 DEV_COMPOSE := docker compose -f docker-compose.yml -f docker-compose.dev.yml
 
-.PHONY: help fmt format hooks check pre-push typecheck-frontend setup setup-frontend build-frontend serve up down logs reset dev test test-frontend test-container setup-browser lint denylist check-pii check-pii-history fixtures fixtures-check lock lock-check brand brand-check icons-check screenshots clean
+.PHONY: help fmt format hooks check pre-push types typecheck-frontend size size-report size-update setup setup-frontend build-frontend serve up down logs reset dev test test-frontend test-container setup-browser lint denylist check-pii check-pii-history fixtures fixtures-check lock lock-check brand brand-check icons-check screenshots clean
 
 help:  ## Show this help
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -92,6 +92,18 @@ format: fmt  ## Alias for fmt
 hooks:  ## Install the pre-commit, commit-msg and pre-push hooks
 	$(PY) -m pre_commit install
 
+size:  ## Fail on a file past the size limit, or a baselined file that grew
+	$(PY) -m tools.check_size
+
+size-report:  ## List every file over the preferred size
+	$(PY) -m tools.check_size --report
+
+size-update:  ## Lower the size baseline to today's counts (it never rises)
+	$(PY) -m tools.check_size --update
+
+types:  ## Python type check with ty: advisory, reports and never fails
+	-$(PY) -m ty check
+
 typecheck-frontend:  ## Type-check the UI (tsc, no emit)
 	cd frontend && npm run typecheck
 
@@ -107,6 +119,7 @@ check:  ## Every repo gate that needs no Docker: PII, fixtures, lock, then every
 	$(PY) -m tools.scan_pii
 	$(PY) -m tools.make_fixtures --check
 	$(PY) -m tools.check_lock
+	$(PY) -m tools.check_size
 	$(PY) -m pre_commit run --all-files
 	$(PY) -m pre_commit run --all-files --hook-stage manual editorconfig-checker
 

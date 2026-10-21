@@ -63,7 +63,7 @@ def source() -> str:
     return FIXTURE.read_text(encoding="utf-8")
 
 
-@pytest.fixture()
+@pytest.fixture
 def parsed(tmp_path, source):
     return HMartAdapter().parse(bundle(tmp_path, source))
 
@@ -389,7 +389,7 @@ class TestWhenTheCapturesArrive:
     against a visit that no longer exists.
     """
 
-    @pytest.fixture()
+    @pytest.fixture
     def visit(self, source) -> dict:
         from unbagged.extraction import read_tables
 
@@ -837,7 +837,7 @@ class TestWhenAModelIsAskedAboutACapture:
     `from_reply` — and the wiring that turns a model's answer into rows was not.
     """
 
-    @pytest.fixture()
+    @pytest.fixture
     def usable(self, monkeypatch):
         """A model the adapter believes it can reach."""
         from unbagged.transcription import ollama
@@ -1259,7 +1259,7 @@ class TestWhenTheModelsAnswerIsAccepted:
     branch was opened for.
     """
 
-    @pytest.fixture()
+    @pytest.fixture
     def usable(self, monkeypatch):
         """A model the adapter believes it can reach."""
         from unbagged.transcription import ollama
@@ -1268,12 +1268,12 @@ class TestWhenTheModelsAnswerIsAccepted:
         monkeypatch.setattr(HMART.ollama, "availability", lambda: where)
         return where
 
-    @pytest.fixture()
+    @pytest.fixture
     def holder(self):
         """The suite above, for its capture builder and its statement bundle."""
         return TestWhenTheCapturesArrive()
 
-    @pytest.fixture()
+    @pytest.fixture
     def visit(self, source) -> dict:
         row = read_tables(source).tables[0].rows[2]
         stamp = row.value(2)[:19]

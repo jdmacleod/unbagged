@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import json
 import random
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from faker import Faker
 
@@ -103,7 +103,7 @@ FICTIONAL_STREETS = (
 # 380 distinct UPCs across 23 months, and a fixture with thirty of them makes the
 # price-history view look like noise instead of a personal inflation series.
 DEPARTMENTS = (
-    # (department, [(item, low, high)], brands)
+    # Each entry: a department, its items as (name, low price, high price), its brands.
     (
         "PRODUCE",
         (
@@ -479,8 +479,8 @@ def _identity_blob(fake: Faker, rng: random.Random, loyalty: str) -> dict:
                                 "cardNumberWithCD": _card_number_with_cd(rng, loyalty),
                                 "dataSource": "LOYAL",
                                 "firstPurchaseDate": fake.date_between(
-                                    datetime(2009, 1, 1).date(),
-                                    datetime(2019, 12, 31).date(),
+                                    date(2009, 1, 1),
+                                    date(2019, 12, 31),
                                 ).isoformat(),
                                 "key": f"{rng.randrange(10**11, 10**12)}",
                                 "status": "ACTIVE",

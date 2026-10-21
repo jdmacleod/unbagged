@@ -231,7 +231,7 @@ class TestTheStripperBreakingIsVisible:
         assert b"metadata" not in build_brand.strip_svg(svg)
 
     @pytest.mark.parametrize(
-        "svg, why",
+        ("svg", "why"),
         [
             (b"<svg><script>alert(1)</script></svg>", "a <script> element"),
             (b"<svg><foreignObject><b/></foreignObject></svg>", "a <foreignObject> element"),

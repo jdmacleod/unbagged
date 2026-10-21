@@ -47,10 +47,9 @@ repos:
       - id: gitleaks
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    # Keep this rev and the `ruff` cap in pyproject.toml on the same minor
-    # version. The formatter's stable style changes between minor releases, and
-    # this hook and CI must not disagree about what formatted means.
-    rev: v0.16.6
+    # The same version `pyproject.toml` pins for CI and the venv;
+    # tests/test_packaging.py fails when the two disagree.
+    rev: v0.16.10
     hooks:
       - id: ruff
       # `ruff` above is the linter. This is the formatter, and it is a separate
@@ -107,6 +106,14 @@ repos:
         entry: python3 -m tools.scan_pii
         language: system
         pass_filenames: true
+
+      # Size limits (CODING_STANDARDS.md, size and complexity): fails a new file
+      # past the limit or a baselined file that grew; warns past the warning size.
+      - id: size
+        name: file size limits
+        entry: python3 -m tools.check_size --files
+        language: system
+        types_or: [python, ts, tsx]
 
       # The checks too slow for every commit and too important to leave to CI:
       # the frontend type-check and both unit-test tiers. `make pre-push` names

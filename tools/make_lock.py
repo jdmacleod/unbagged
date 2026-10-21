@@ -131,7 +131,7 @@ def main() -> int:
         compiled = compile_in_container(Path(tmp))
         count = write_lock(compiled)
     print(f"make_lock: wrote {LOCK.relative_to(REPO_ROOT)} — {count} packages")
-    from tools.check_lock import main as check  # noqa: PLC0415
+    from tools.check_lock import main as check
 
     return check()
 

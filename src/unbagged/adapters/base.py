@@ -54,8 +54,8 @@ __all__ = [
     "DisclosureStatus",
     "FollowUpAction",
     "FollowUpKind",
-    "Identity",
     "IdType",
+    "Identity",
     "Inference",
     "InferenceOrigin",
     "ParseResult",
@@ -71,8 +71,8 @@ __all__ = [
     "SourceDocument",
     "Transaction",
     "TxnItem",
-    "absent_disclosures",
     "WarningCollector",
+    "absent_disclosures",
 ]
 
 

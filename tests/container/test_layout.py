@@ -264,7 +264,7 @@ class TestNoViewScrollsSideways:
             page.close()
 
     @pytest.mark.parametrize(
-        "view,setup",
+        ("view", "setup"),
         [
             # The receipt table: the widest thing in the app, and it is supposed
             # to scroll inside its own box rather than move the page.

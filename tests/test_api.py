@@ -1025,7 +1025,6 @@ class TestStaticRouteTraversal:
 
     @pytest.fixture
     def served(self, tmp_path, monkeypatch):
-        import os
 
         static = tmp_path / "static"
         (static / "assets").mkdir(parents=True)
@@ -1033,7 +1032,7 @@ class TestStaticRouteTraversal:
         (static / "assets" / "app.js").write_text("APP_JS")
         secret = tmp_path / "secret.txt"
         secret.write_text("TOP_SECRET")
-        os.symlink(secret, static / "escape.txt")
+        (static / "escape.txt").symlink_to(secret)
         # A root-level asset, which is what the brand files are.
         (static / "favicon.ico").write_bytes(b"\x00\x00\x01\x00ICONDATA")
 

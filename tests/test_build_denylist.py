@@ -65,6 +65,7 @@ class TestNeverPrintsValues:
             capture_output=True,
             text=True,
             cwd=Path(__file__).parent.parent,
+            check=False,
         )
         assert result.returncode == 0
         printed = result.stdout + result.stderr

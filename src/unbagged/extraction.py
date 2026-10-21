@@ -477,7 +477,7 @@ class _Tree:
             self.open[-1].remove(element)
 
 
-def read_tables(
+def read_tables(  # noqa: C901, PLR0915 - baselined, may only shrink
     source: str,
     *,
     max_rows: int | None = None,
@@ -968,7 +968,7 @@ def _cell_value(cell: ET.Element) -> str | _Shared | None:
     return value
 
 
-def read_workbook(
+def read_workbook(  # noqa: C901, PLR0912, PLR0915 - baselined, may only shrink
     path: Path,
     *,
     max_rows: int | None = None,
@@ -1387,14 +1387,14 @@ def probe(document: SourceDocument) -> DocumentFacts | None:
             return DocumentFacts(looks_like_image(path) or "image/png", 1)
         if kind == "text":
             return DocumentFacts(document.media_type or "text/plain", len(extract_text_file(path)))
-    except Exception:
+    except Exception:  # noqa: BLE001 - metadata that cannot be worked out goes unstored
         # Same reasoning as the docstring: metadata that cannot be worked out is
         # metadata that goes unstored, and nothing downstream reads it yet.
         return None
     return None
 
 
-def extract(document: SourceDocument, max_pages: int | None = None) -> ExtractedDocument:
+def extract(document: SourceDocument, max_pages: int | None = None) -> ExtractedDocument:  # noqa: C901 - baselined, may only shrink
     """Read one stored document into pages of text, or into sheets.
 
     `max_pages` exists for sniff(): deciding which adapter owns a bundle should

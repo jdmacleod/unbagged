@@ -119,7 +119,8 @@ def upload_fixture(retailer: str, paths: tuple[Path, ...]) -> None:
         ]
     parts.append(f"--{boundary}--\r\n".encode())
     body = b"".join(parts)
-    # noqa: S310 on both lines — BASE is a 127.0.0.1 literal built above, not input.
+
+    # S310 on both calls below: BASE is a 127.0.0.1 literal built above, not input.
     request = urllib.request.Request(  # noqa: S310
         f"{BASE}/api/requests",
         data=body,

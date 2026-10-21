@@ -211,7 +211,7 @@ class AlbertsonsAdapter:
         for document in bundle.documents:
             try:
                 extracted = extract(document, max_pages=SNIFF_ROWS)
-            except Exception:
+            except Exception:  # noqa: BLE001 - sniff() must not raise
                 # sniff() must not raise. Logged, because a format change
                 # shows up here first.
                 log.debug("albertsons sniff could not read %s", document.original_filename)
@@ -232,7 +232,7 @@ class AlbertsonsAdapter:
                 return 0.9
         return SniffResult(0.0, reason) if reason else 0.0
 
-    def parse(self, bundle: SourceBundle) -> ParseResult:
+    def parse(self, bundle: SourceBundle) -> ParseResult:  # noqa: C901 - baselined, may only shrink
         warnings = WarningCollector()
         extracted = extract_all(bundle.documents)
 
@@ -412,7 +412,8 @@ def _occurred_on(value: str | None, date1904: bool) -> str | None:
             serial = float(text)
             if serial < 1:
                 return None
-            epoch = datetime(1904, 1, 1) if date1904 else datetime(1899, 12, 30)
+            # A spreadsheet serial counts days on a wall clock; no zone exists to attach.
+            epoch = datetime(1904, 1, 1) if date1904 else datetime(1899, 12, 30)  # noqa: DTZ001
             moment = epoch + timedelta(seconds=round(serial * 86400))
             if moment.time() == datetime.min.time():
                 return moment.date().isoformat()
@@ -687,7 +688,7 @@ def _derivable(label: str) -> bool | None:
 # --------------------------------------------------------------------------
 
 
-def _identities(report, cite, cards, demographic_sheets) -> list[Identity]:
+def _identities(report, cite, cards, demographic_sheets) -> list[Identity]:  # noqa: C901, PLR0912 - baselined, may only shrink
     found: list[Identity] = []
     seen: set[tuple[str, str]] = set()
 
@@ -811,7 +812,8 @@ def _submitted(value: str) -> str | None:
     """`03/02/2026 09:15 AM` → `2026-03-02T09:15:00`. A wall clock, no zone."""
     for pattern in SUBMITTED:
         try:
-            return datetime.strptime(value.strip(), pattern).strftime("%Y-%m-%dT%H:%M:%S")
+            moment = datetime.strptime(value.strip(), pattern)  # noqa: DTZ007 - a wall clock
+            return moment.strftime("%Y-%m-%dT%H:%M:%S")
         except ValueError:
             continue
     return None
@@ -907,7 +909,7 @@ def _disclosures(report, source, transactions, inferences, transaction_sheets, i
         gaps.append(f"Nothing from {', '.join(digital[:-1])} or {digital[-1]}.")
     # Cited to the workbook where there is one: that is where the pieces are.
     if transaction_sheets:
-        document, table, columns, header_row = transaction_sheets[0]
+        document, table, _columns, header_row = transaction_sheets[0]
         pieces = Provenance(document.document_id, None, table.locator(header_row, 1))
     else:
         pieces = provenance

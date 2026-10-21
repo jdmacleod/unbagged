@@ -146,7 +146,7 @@ class TestMalformedBaskets:
 
 class TestAmountCoercion:
     @pytest.mark.parametrize(
-        "raw,expected",
+        ("raw", "expected"),
         [
             (2.49, 2.49),
             ("2.49", 2.49),

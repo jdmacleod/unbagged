@@ -129,6 +129,7 @@ class TestTheCommittedFile:
             cwd=signers.REPO_ROOT,
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode != 0, (
             "verification passed with no signers file configured, so the -c in "
