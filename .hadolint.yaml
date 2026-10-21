@@ -1,0 +1,7 @@
+# hadolint (CODING_STANDARDS.md, Docker). What is off, and why:
+ignored:
+  # Pin versions in apt-get install. Debian's slim images carry one version of
+  # each package per point release and drop old ones from the mirror, so a pin
+  # breaks the build the week the image's base moves. The base image digest is
+  # what pins the system; the Python dependencies are hash-locked separately.
+  - DL3008

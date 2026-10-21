@@ -44,11 +44,18 @@ historical**: `DESIGN.md` is the authority for anything the user sees, and it de
   behind the Compliance view and behind any change to `DisclosureCategory`, and it is
   cited from `models.py`, `letters.py`, `views.py` and the app's own footer.
 
+## Code standards
+
+Read `CODING_STANDARDS.md` before writing code; it names the tool behind every rule.
+Before finishing, run `make fmt lint` or `pre-commit run --files <changed>`. Never
+hand-format against the formatter; restructure the code instead. Commit messages are
+Conventional Commits, and the commit-msg hook rejects anything else. Formatting-only
+changes go in their own pull request.
+
 ## Conventions
 
-- Python 3.12, `src/` layout, `ruff` for lint and format. `make lint` runs both
-  halves and CI runs the same two commands; `make format` applies the formatter.
-  `docs/handoff.md` is excluded from formatting because it is the live contract.
+- Python 3.12, `src/` layout. `docs/handoff.md` is excluded from formatting because
+  it is the live contract.
 - Adapters degrade with `ParseWarning`s rather than raising; absence of a disclosure is
   recorded explicitly as `status=absent`, never as a missing row.
 - Every emitted record carries provenance: `source_document_id`, `page`, `locator`.

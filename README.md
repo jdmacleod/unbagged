@@ -173,7 +173,8 @@ make test-frontend   # UI unit tests (vitest)
 make setup-browser   # once: without it the browser tests SKIP rather than run
 make test-container  # slow: builds and runs a real container (needs Docker + Chromium)
 make lint            # ruff check + ruff format --check, the two gates CI runs
-make format          # apply the formatter
+make fmt             # apply the formatters
+make check           # every hook over every file, plus the PII, fixture and lock checks
 make screenshots     # regenerate docs/screenshots from the fixture
 make check-pii       # run this before every commit
 ```

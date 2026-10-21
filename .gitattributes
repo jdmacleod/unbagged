@@ -1,0 +1,11 @@
+# Line endings are LF everywhere (.editorconfig); git normalises on commit so a
+# checkout on any platform cannot introduce CRLF into a diff.
+* text=auto eol=lf
+
+# Binary: never diffed or normalised.
+*.png binary
+*.ico binary
+
+# Generated: collapsed in GitHub diffs, and excluded from language stats.
+frontend/package-lock.json linguist-generated=true -diff
+docker/requirements.txt linguist-generated=true

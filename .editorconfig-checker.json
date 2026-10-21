@@ -1,0 +1,14 @@
+{
+  "Exclude": [
+    "package-lock\\.json$",
+    "\\.svg$",
+    "\\.png$",
+    "\\.ico$",
+    "^src/unbagged/adapters/.*/fixtures/",
+    "^docs/handoff\\.md$"
+  ],
+  "Disable": {
+    "IndentSize": true,
+    "MaxLineLength": true
+  }
+}

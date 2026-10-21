@@ -56,7 +56,6 @@ one exception is a local vision model, which is off unless `UNBAGGED_OLLAMA_HOST
 and which refuses a host that is not this machine until that is acknowledged explicitly.
 That shapes what counts:
 
-
 - **In scope:** anything above. Also the Docker packaging, the CI workflows, and the
   documentation where it tells someone to do something unsafe.
 - **Not in scope:** denial of service against a single-user local app; a user choosing to

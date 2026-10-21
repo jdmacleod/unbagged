@@ -94,7 +94,7 @@ EXPOSE 8000
 # Binds 0.0.0.0 *inside the container only*. What decides who can reach it is
 # the port publishing in docker-compose.yml, which is 127.0.0.1-scoped.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=2).status == 200 else 1)"
+    CMD ["python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=2).status == 200 else 1)"]
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["uvicorn", "unbagged.api:app", "--host", "0.0.0.0", "--port", "8000"]

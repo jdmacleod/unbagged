@@ -1,0 +1,26 @@
+# Editor defaults that match the code as it is (CODING_STANDARDS.md). The
+# formatters (ruff format; Prettier for the frontend) have the last word.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+
+[*.{py,pyi,toml,ini,sh}]
+indent_size = 4
+
+[{Dockerfile,*.sql}]
+indent_size = 4
+
+[*.{ts,tsx,js,mjs,cjs,json,yaml,yml,css,html,svg}]
+indent_size = 2
+
+[Makefile]
+indent_style = tab
+
+# Two trailing spaces are a Markdown line break.
+[*.md]
+trim_trailing_whitespace = false

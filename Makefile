@@ -8,7 +8,7 @@ PY := $(shell test -x .venv/bin/python && echo .venv/bin/python || echo $(BOOTST
 COMPOSE := docker compose
 DEV_COMPOSE := docker compose -f docker-compose.yml -f docker-compose.dev.yml
 
-.PHONY: help format setup setup-frontend build-frontend serve up down logs reset dev test test-frontend test-container setup-browser lint denylist check-pii check-pii-history fixtures fixtures-check lock lock-check brand brand-check icons-check screenshots clean
+.PHONY: help fmt format hooks check pre-push typecheck-frontend setup setup-frontend build-frontend serve up down logs reset dev test test-frontend test-container setup-browser lint denylist check-pii check-pii-history fixtures fixtures-check lock lock-check brand brand-check icons-check screenshots clean
 
 help:  ## Show this help
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -18,7 +18,7 @@ setup:  ## Create the venv, install dev deps, install git hooks
 	$(BOOTSTRAP_PY) -m venv .venv
 	.venv/bin/python -m pip install --upgrade pip
 	.venv/bin/python -m pip install -e ".[dev]"
-	.venv/bin/pre-commit install
+	$(MAKE) hooks
 	@mkdir -p data/incoming data/db
 	@echo
 	@echo "Ready. data/incoming and data/db are gitignored — put real reports there."
@@ -83,8 +83,32 @@ setup-browser:  ## Install Chromium for the browser tests
 	$(PY) -m pip install -e ".[browser]"
 	$(PY) -m playwright install chromium -p no:cacheprovider
 
-format:  ## Reformat with ruff
+fmt:  ## Apply the formatters (see CODING_STANDARDS.md)
 	$(PY) -m ruff format .
+	$(PY) -m ruff check --fix --select I .
+
+format: fmt  ## Alias for fmt
+
+hooks:  ## Install the pre-commit, commit-msg and pre-push hooks
+	$(PY) -m pre_commit install
+
+typecheck-frontend:  ## Type-check the UI (tsc, no emit)
+	cd frontend && npm run typecheck
+
+# What the pre-push hook runs: the checks too slow for every commit. Fails
+# with a pointer rather than a stack trace when the UI was never installed.
+pre-push:  ## The pre-push gate: UI type-check, then both unit-test tiers
+	@test -d frontend/node_modules || { echo "frontend/node_modules is missing: run 'make setup-frontend' once."; exit 1; }
+	$(MAKE) --no-print-directory typecheck-frontend
+	$(MAKE) --no-print-directory test
+	$(MAKE) --no-print-directory test-frontend
+
+check:  ## Every repo gate that needs no Docker: PII, fixtures, lock, then every hook
+	$(PY) -m tools.scan_pii
+	$(PY) -m tools.make_fixtures --check
+	$(PY) -m tools.check_lock
+	$(PY) -m pre_commit run --all-files
+	$(PY) -m pre_commit run --all-files --hook-stage manual editorconfig-checker
 
 lint:  ## Lint and check formatting with ruff
 	$(PY) -m ruff check .
