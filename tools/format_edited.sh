@@ -27,12 +27,20 @@ esac
 # pre-commit hook does.
 cd "$root" || exit 0
 ruff="$root/.venv/bin/ruff"
-[ -x "$ruff" ] || exit 0
 
 case "$rel" in
     *.py)
+        [ -x "$ruff" ] || exit 0
         "$ruff" format --quiet "$rel" >/dev/null 2>&1
         "$ruff" check --quiet --fix --select I "$rel" >/dev/null 2>&1
+        ;;
+    frontend/*.ts | frontend/*.tsx | frontend/*.css | frontend/*.json | frontend/*.html)
+        # The Prettier pinned in frontend/, with the root config and ignore file,
+        # as the pre-commit hook runs it.
+        prettier="$root/frontend/node_modules/.bin/prettier"
+        [ -x "$prettier" ] && (cd "$root/frontend" &&
+            "$prettier" --write --log-level silent --ignore-path ../.prettierignore \
+                "$root/$rel" >/dev/null 2>&1)
         ;;
 esac
 

@@ -227,6 +227,8 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
         working-directory: frontend
+      - run: npm run format:check
+        working-directory: frontend
       - run: npm run build
         working-directory: frontend
       # The UI unit tests cover the pure functions behind what the reader sees:

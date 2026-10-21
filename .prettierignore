@@ -1,0 +1,15 @@
+# Prettier formats frontend/ (CODING_STANDARDS.md, TypeScript and React). The
+# scripts run it from there with `--ignore-path ../.prettierignore`, so these
+# patterns are resolved against the repository root.
+
+# Written by their tools.
+**/package-lock.json
+**/eslint-suppressions.json
+
+# Build output and dependencies. The UI builds into the Python package.
+**/node_modules/
+frontend/dist/
+src/unbagged/static/
+
+# Markdown is markdownlint's (.markdownlint-cli2.yaml), not Prettier's.
+**/*.md

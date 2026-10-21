@@ -257,6 +257,9 @@ No migration runs and nothing needs re-reading.
   places, and a test fails when they drift.
 - **Python is type-checked, advisory for now.** ty reports a count in CI and in
   `make types`, and never fails a build.
+- **The UI is formatted by Prettier**, pinned to one release, by the hook, by
+  `make fmt` and in CI. The one-time reformat is its own commit, which
+  `git blame` skips.
 - **Files have a size limit.** A new file past 800 lines (1,200 for tests) fails
   the hook and CI; the ten already past it may shrink but not grow.
 

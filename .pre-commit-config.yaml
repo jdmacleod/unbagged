@@ -115,6 +115,14 @@ repos:
         language: system
         types_or: [python, ts, tsx]
 
+      # Prettier from the version pinned in frontend/ (`make setup-frontend`
+      # first); tools/npm_hook.sh passes the paths.
+      - id: prettier
+        name: prettier (frontend)
+        entry: tools/npm_hook.sh prettier --write --ignore-path ../.prettierignore --
+        language: system
+        files: ^frontend/.*\.(ts|tsx|js|mjs|cjs|css|json|html)$
+
       # The checks too slow for every commit and too important to leave to CI:
       # the frontend type-check and both unit-test tiers. `make pre-push` names
       # exactly what runs.
