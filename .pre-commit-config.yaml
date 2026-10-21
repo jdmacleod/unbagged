@@ -11,11 +11,14 @@ repos:
     rev: v6.0.0
     hooks:
       - id: check-added-large-files
+        stages: [pre-commit]  # its manifest adds pre-push; once is enough
         # A 5 MB PDF sneaking in is a red flag, not a large asset.
         args: ["--maxkb=5120"]
       - id: check-merge-conflict
       - id: end-of-file-fixer
+        stages: [pre-commit]  # its manifest adds pre-push; once is enough
       - id: trailing-whitespace
+        stages: [pre-commit]  # its manifest adds pre-push; once is enough
       - id: mixed-line-ending
         args: ["--fix=no"]
       - id: check-yaml
