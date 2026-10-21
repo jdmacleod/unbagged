@@ -34,9 +34,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from unbagged import db, views  # noqa: E402
-from unbagged.adapters.kroger import reader  # noqa: E402
-from unbagged.extraction import extract_pdf, extract_text_file, looks_like_pdf  # noqa: E402
+from unbagged import db, views
+from unbagged.adapters.kroger import reader
+from unbagged.extraction import extract_pdf, extract_text_file, looks_like_pdf
 
 # Line classes whose presence would explain a total that excludes them. Matched
 # against descriptions inside this process only; never printed.

@@ -434,7 +434,7 @@ def report(results: list[Result]) -> None:
     print("sign   every negative line came back negative")
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915 - baselined, may only shrink
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument(
         "--host",

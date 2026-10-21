@@ -363,7 +363,8 @@ def ask(
                 payload.pop("think")
                 continue
             return None
-        except Exception:  # noqa: BLE001 - a model that will not answer is not a failed upload
+        except Exception:
+            # Broad on purpose: a model that will not answer is not a failed upload.
             log.debug("vision read failed", exc_info=True)
             return None
 

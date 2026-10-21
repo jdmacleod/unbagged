@@ -299,7 +299,7 @@ class TestCompareCountsOnlyKnownCategories:
     where Compliance, which keys on the enum, said one went unassessed."""
 
     def test_an_unknown_category_does_not_complete_the_set(self, conn):
-        assessed = [c for c in DisclosureCategory][:-1]
+        assessed = list(DisclosureCategory)[:-1]
         result = ParseResult(
             request=RequestMeta(retailer_id="kroger", display_name="Kroger", statute="CCPA"),
             disclosures=tuple(

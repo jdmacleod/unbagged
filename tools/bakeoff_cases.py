@@ -162,13 +162,11 @@ CASES: tuple[Case, ...] = (
             "exactly this."
         ),
         lines=(
-            _BASKET[:4]
-            + (
+            (
+                *_BASKET[:4],
                 _buy("SC - MILK PROMO", "-1.50"),
                 _buy("SC - SPEND 30 SAVE 5", "-5.00"),
                 _buy("CANCEL ITEM", "-3.49", left="CL"),
-            )
-            + (
                 Line("", "TAX", "0.61", "tax"),
                 Line("***", "BALANCE", "2.52", "balance"),
                 Line("", "CREDIT", "2.52", "tender"),
@@ -289,7 +287,7 @@ class Score:
         return self.strict_ok / self.returned if self.returned else 0.0
 
 
-def score(reply: dict | None, case: Case, seconds: float, failed: str = "") -> Score:
+def score(reply: dict | None, case: Case, seconds: float, failed: str = "") -> Score:  # noqa: C901, PLR0912 - baselined, may only shrink
     """Measure one answer against the page it was given.
 
     Reading and parsing are scored apart, and the furniture count is taken with

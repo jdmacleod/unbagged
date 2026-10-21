@@ -143,7 +143,7 @@ def cascading_from_request(conn) -> set[str]:
     found = set()
     for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'"):
         table = row["name"]
-        for fk in conn.execute(f"PRAGMA foreign_key_list({table})"):  # noqa: S608
+        for fk in conn.execute(f"PRAGMA foreign_key_list({table})"):
             if fk["table"] == "request" and fk["on_delete"] == "CASCADE":
                 found.add(table)
     return found

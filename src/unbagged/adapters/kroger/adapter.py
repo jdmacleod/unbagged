@@ -246,7 +246,7 @@ class KrogerAdapter:
                 score = max(score, score + 0.1)
             try:
                 head = extract(document, max_pages=SNIFF_PAGES).text
-            except Exception:  # noqa: S112 - see the comment below
+            except Exception:  # noqa: S112, BLE001 - see the comment below
                 # sniff() must not raise: an unreadable file is simply not a
                 # Kroger report as far as selection is concerned.
                 continue
@@ -416,7 +416,7 @@ class KrogerAdapter:
             )
         return tuple(identities)
 
-    def _identities_from_accounts(self, blob, add, provenance) -> None:
+    def _identities_from_accounts(self, blob, add, provenance) -> None:  # noqa: C901 - baselined, may only shrink
         """The nested `accounts` / `groups` shape."""
         cursor = Cursor(blob.raw, blob.start)
         for i, outer in enumerate(blob.data.get("accounts") or []):
@@ -593,7 +593,7 @@ class KrogerAdapter:
             offset = cursor.find('"date"')
             try:
                 transaction = self._basket(basket, index, offset, path, provenance, warnings)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - one bad basket costs one warning, not the parse
                 # Rule 4: one malformed basket costs one warning and one record,
                 # not the other fifty-three baskets.
                 warnings.error(f"Basket {index} could not be read ({exc}).", locator=path)

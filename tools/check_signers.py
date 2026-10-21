@@ -98,6 +98,7 @@ def verify(tag: str) -> tuple[bool, str]:
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
+        check=False,
     )
     return result.returncode == 0, (result.stderr or result.stdout).strip()
 

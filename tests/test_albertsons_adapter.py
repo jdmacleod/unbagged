@@ -63,12 +63,12 @@ def bundle(tmp_path, *files: tuple[str, str | bytes]) -> SourceBundle:
     return SourceBundle(documents=tuple(documents))
 
 
-@pytest.fixture()
+@pytest.fixture
 def both(tmp_path, report_text, workbook_bytes) -> SourceBundle:
     return bundle(tmp_path, ("report.txt", report_text), ("details.xlsx", workbook_bytes))
 
 
-@pytest.fixture()
+@pytest.fixture
 def parsed(both):
     return AlbertsonsAdapter().parse(both)
 
@@ -380,7 +380,7 @@ class TestThroughTheApp:
     one document rather than unpacking it, the registry picks this adapter, and
     everything it read is stored."""
 
-    @pytest.fixture()
+    @pytest.fixture
     def client(self, tmp_path, monkeypatch):
         from fastapi.testclient import TestClient
 
@@ -391,7 +391,7 @@ class TestThroughTheApp:
         with TestClient(api.app) as test_client:
             yield test_client
 
-    @pytest.fixture()
+    @pytest.fixture
     def uploaded(self, client, report_text, workbook_bytes) -> int:
         xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         response = client.post(

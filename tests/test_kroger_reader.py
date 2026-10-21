@@ -42,7 +42,7 @@ class TestPageMarkers:
         assert clean.count('"orderno"') == raw.count('"orderno"')
 
     def test_page_numbers_are_recoverable_from_offsets(self, cleaned):
-        clean, pages = cleaned
+        _clean, pages = cleaned
         assert pages.page_of(0) >= 1
         offsets = [at for at, _ in pages.breaks]
         numbers = [pages.page_of(at) for at in offsets]

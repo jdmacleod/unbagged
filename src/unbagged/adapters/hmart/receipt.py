@@ -184,7 +184,7 @@ class Receipt:
         restored = ReceiptLine(description=self.tax_description, amount=self.tax, row=0)
         return replace(
             self,
-            lines=self.lines + (restored,),
+            lines=(*self.lines, restored),
             tax=Decimal("0.00"),
             tax_inferred=False,
             tax_description="",

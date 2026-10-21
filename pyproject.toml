@@ -54,15 +54,15 @@ dev = [
     # networkidle) and then report a timeout rather than a diagnosis. See #51.
     "pytest-timeout>=2.3",
     "pre-commit>=3.7",
-    # Capped, and coupled to the `rev` in .pre-commit-config.yaml. `ruff format`
-    # output is version-dependent: stable style changes land in minor releases.
-    # CI installs `.[dev]` and runs `ruff format --check`, while the pre-commit
-    # hook runs its own pinned build, so an uncapped floor here means the two
-    # eventually format differently and CI rejects what the hook just wrote.
-    # Nothing bumps either automatically — dependabot has no pre-commit
-    # ecosystem, and its pip entry covers /docker only — so both move by hand,
-    # together.
-    "ruff>=0.16.6,<0.17",
+    # Pinned exactly, to the `rev` in .pre-commit-config.yaml. `ruff format` and
+    # the rule set are version-dependent, CI installs `.[dev]`, and the hook runs
+    # its own build: a range let the venv drift to 0.16.10 while the hook stayed
+    # on 0.16.6. tests/test_packaging.py now fails when the two disagree, so they
+    # move together, in a pull request of their own (CODING_STANDARDS.md).
+    "ruff==0.16.10",
+    # Advisory type checking (`make types`; CODING_STANDARDS.md, Python). Pinned
+    # exactly: ty is pre-1.0 and its diagnostics change between releases.
+    "ty==0.0.86",
 ]
 
 # A browser, only for the layout regression test. Its own group because it
@@ -114,6 +114,11 @@ markers = [
 # raised to 180s in tests/container/conftest.py, where the numbers are different.
 timeout = 60
 
+[tool.ty.src]
+# Advisory (CODING_STANDARDS.md, Python): `make types` reports, never fails.
+# `data/` is not in scope, and never may be.
+include = ["src", "tools", "tests"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
@@ -136,7 +141,27 @@ exclude = ["docs/handoff.md"]
 # already sitting in ingest.py silenced a rule that had never been running —
 # the suppression looked like a reviewed decision and was inert. Selecting it
 # makes every such marker mean what it appears to mean.
-select = ["E", "F", "I", "UP", "B", "SIM", "S"]
+#
+# The wider set follows CODING_STANDARDS.md, "Python", which says why each
+# narrowing exists. BLE and DTZ are selected so the suppressions already written
+# for them mean something: eleven `noqa: BLE001`/`DTZ007` markers were inert.
+select = [
+    "E", "F", "W", "I", "B", "UP", "C4", "SIM", "S",
+    "PLW", "PLE", "PLR0912", "PLR0915", "C90",
+    "RUF", "ASYNC", "PT", "TID", "PTH", "ERA", "BLE", "DTZ",
+]
+# One condition per assert: a test asserting two related facts together reads
+# better than two asserts, and splitting them buys nothing.
+ignore = ["PT018"]
+# Typographic characters the prose and the receipts use on purpose.
+allowed-confusables = ["×", "–", "−", "’", "‘", "“", "”", "ʼ", "´", "⁄", "′", "›"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 12
+
+[tool.ruff.lint.pylint]
+max-branches = 15
+max-statements = 50
 
 [tool.ruff.lint.per-file-ignores]
 # Tests assert, and a test that cannot use `assert` is a test nobody writes.

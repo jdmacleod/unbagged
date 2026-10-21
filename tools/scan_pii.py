@@ -450,7 +450,7 @@ def tracked_and_untracked() -> list[str]:
     """Everything git would consider part of the repo. Ignored paths — data/ above
     all — are excluded by construction: this tool never reads the user's reports."""
     listed = git("ls-files", "--cached", "--others", "--exclude-standard").splitlines()
-    return sorted(set(p for p in listed if p))
+    return sorted({p for p in listed if p})
 
 
 def scan_paths(paths: Iterable[str], denylist: Sequence[str]) -> list[Finding]:

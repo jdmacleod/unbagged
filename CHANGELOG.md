@@ -249,6 +249,16 @@ No migration runs and nothing needs re-reading.
   every gate that needs no Docker.
 - **The workflows no longer interpolate event values into shell**, and no
   checkout leaves its credentials behind for a later step.
+- **ruff checks far more, and CI and the hook run the same ruff.** The rule set
+  now covers complexity, blind excepts, naive datetimes, pytest style and
+  ruff's own checks, among others. Findings that predate it are fixed, or
+  suppressed on the line with a reason: twelve suppressions for rules that were
+  never running are now live or gone. ruff is pinned to one release in both
+  places, and a test fails when they drift.
+- **Python is type-checked, advisory for now.** ty reports a count in CI and in
+  `make types`, and never fails a build.
+- **Files have a size limit.** A new file past 800 lines (1,200 for tests) fails
+  the hook and CI; the ten already past it may shrink but not grow.
 
 ## [0.17.0] - 2026-09-18
 

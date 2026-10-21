@@ -106,7 +106,7 @@ def unexplained_files(produced_by_dir: dict[Path, set[str]]) -> list[str]:
     return stray
 
 
-def run(check: bool = False, seed: int | None = None) -> int:
+def run(check: bool = False, seed: int | None = None) -> int:  # noqa: C901, PLR0912 - baselined, may only shrink
     generators = find_generators()
     if not generators:
         print("make_fixtures: no generators found", file=sys.stderr)

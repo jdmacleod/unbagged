@@ -12,6 +12,7 @@ rows, a product named after the flag beside it, a visit split in two.
 """
 
 from decimal import Decimal
+from typing import ClassVar
 
 import pytest
 from tools import receiptimage
@@ -294,7 +295,7 @@ class TestWhichLineWasTheTax:
     def page(self, rows):
         return rc.read_capture(tr.transcribe(build_receipt(rows)), "Transaction_030419.png")
 
-    NO_TAX_LINE = [
+    NO_TAX_LINE: ClassVar = [
         ("", "Customer ID: 40100200300", None),
         ("", "APPLE", "1.00"),
         ("", "PEAR", "2.00"),
@@ -468,7 +469,7 @@ class TestTheOtherFreeVariableInTheGate:
             **kw,
         )
 
-    FABRICATED = {
+    FABRICATED: ClassVar = {
         "lines": [
             {"description": "PLATINUM WATCH", "amount": "1000.00"},
             {"description": "CAVIAR TIN", "amount": "250.00"},
@@ -883,7 +884,7 @@ class TestAPageWithNoPrintedTotalStoresNothing:
         nothing about matched VALUE: ten amounts of a tenth each let one
         invented line of 4,999 through, and 99.98% of the basket was fabricated."""
         trivial = ["0.10"] * 10
-        assert rc.from_reply(self.answer(trivial + ["4999.00"]), self.page(trivial)) is None
+        assert rc.from_reply(self.answer([*trivial, "4999.00"]), self.page(trivial)) is None
 
     def test_a_page_that_DID_print_its_total_is_unaffected(self):
         """The route that works is the one where the page states its own total,

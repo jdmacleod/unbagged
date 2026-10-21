@@ -10,6 +10,7 @@ Every function returns plain dicts and lists, ready to serialise.
 
 from __future__ import annotations
 
+import itertools
 import re
 import sqlite3
 from collections import defaultdict
@@ -767,7 +768,7 @@ def compare(conn: sqlite3.Connection) -> dict[str, Any]:
 # --------------------------------------------------------------------------
 
 
-def price_history(
+def price_history(  # noqa: C901 - baselined, may only shrink
     conn: sqlite3.Connection,
     request_id: int,
     *,
@@ -1100,7 +1101,7 @@ def _near_multiple(ratio: float) -> int | None:
     return nearest if abs(ratio - nearest) <= MULTIPLE_TOLERANCE * nearest else None
 
 
-def _price_shape(amounts: list[float]) -> dict[str, Any]:
+def _price_shape(amounts: list[float]) -> dict[str, Any]:  # noqa: C901 - baselined, may only shrink
     """Guess whether a product's amounts are a unit price, multiples, or weight.
 
     The base is the amount the product sits at most often, not the cheapest: a
@@ -1223,7 +1224,7 @@ TREND_SHARE = 0.75
 
 def _trending(amounts: list[float]) -> bool:
     """Does this series mostly move one way? Amounts arrive in date order."""
-    steps = [b - a for a, b in zip(amounts, amounts[1:], strict=False) if b != a]
+    steps = [b - a for a, b in itertools.pairwise(amounts) if b != a]
     if len(steps) < 3:
         return False
     up = sum(1 for s in steps if s > 0)

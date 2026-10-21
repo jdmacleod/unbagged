@@ -179,7 +179,7 @@ class HMartAdapter:
         for document in bundle.documents:
             try:
                 extracted = extract(document, max_pages=SNIFF_ROWS)
-            except Exception:
+            except Exception:  # noqa: BLE001 - sniff() must not raise
                 # A sniff must not raise, and a document this adapter cannot
                 # read is simply not its business. Logged rather than swallowed:
                 # a format change shows up here first, and a silent continue
@@ -203,7 +203,7 @@ class HMartAdapter:
                     return 0.9
         return CAPTURE_CONFIDENCE if _captures(bundle) else 0.0
 
-    def parse(self, bundle: SourceBundle) -> ParseResult:
+    def parse(self, bundle: SourceBundle) -> ParseResult:  # noqa: C901, PLR0912 - baselined, may only shrink
         """Read every sheet that carries the columns, in every document.
 
         Not just the first. `sniff()` claims a bundle if ANY document has a
@@ -388,7 +388,7 @@ def _statement_provenance(matched: list) -> Provenance:
     return _provenance(table, header_row, 1, document_id)
 
 
-def _itemise(
+def _itemise(  # noqa: C901, PLR0912, PLR0915 - baselined, may only shrink
     bundle: SourceBundle,
     transactions: list[Transaction],
     warnings: WarningCollector,
@@ -494,7 +494,10 @@ def _itemise(
                 locator=names[0],
             )
             continue
-        for receipt in receipts:
+        for captured in receipts:
+            # Refined as it is checked: adjudicated against the model's reading,
+            # then settled against the basket's tax. Each step replaces it.
+            receipt = captured
             if receipt.clipped:
                 # Refused on the strength of the CLIP, not of the arithmetic.
                 #
@@ -1188,7 +1191,8 @@ def _timestamp(value: str | None) -> str | None:
     if not value:
         return None
     try:
-        return datetime.strptime(value.strip(), STAMP).strftime("%Y-%m-%dT%H:%M:%S")
+        moment = datetime.strptime(value.strip(), STAMP)  # noqa: DTZ007 - a wall clock
+        return moment.strftime("%Y-%m-%dT%H:%M:%S")
     except ValueError:
         return None
 

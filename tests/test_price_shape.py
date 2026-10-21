@@ -193,7 +193,7 @@ class TestScoredAgainstGroundTruth:
         precision and recall are too noisy to assert on."""
         rng = random.Random(3)
         for kind in ("weight", "unit"):
-            amounts, true = self._series(rng, kind, 12)
+            amounts, _true = self._series(rng, kind, 12)
             assert _price_shape(amounts)["kind"] in {"weight", "multiple", "unit"}
             assert len(_price_shape(amounts)["multiples"]) == len(amounts)
 

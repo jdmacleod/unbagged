@@ -154,7 +154,7 @@ class TestTheSheetIsWrongInSomeWay:
 
 class TestTheAmountColumn:
     @pytest.mark.parametrize(
-        "text,expected",
+        ("text", "expected"),
         [("13.84", 13.84), ("38.7", 38.7), ("1,234.56", 1234.56), ("$5.00", 5.0)],
     )
     def test_amounts_arrive_as_strings_and_are_coerced(self, tmp_path, text, expected):

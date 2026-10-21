@@ -56,7 +56,7 @@ def bucket_number(value: float | int) -> str:
     if value == 0:
         return "<num:0>"
     sign = "-" if value < 0 else ""
-    exponent = int(math.floor(math.log10(abs(value))))
+    exponent = math.floor(math.log10(abs(value)))
     return f"<num:{sign}1e{exponent}>"
 
 
@@ -215,7 +215,7 @@ def sanitize_text(text: str, *, filename: str = "") -> dict[str, Any]:
 
         if looks_like_spreadsheetml(text):
             return skeleton_spreadsheet(text)
-    except Exception:  # noqa: S110 - the fall-through IS the behaviour, see below
+    except Exception:  # noqa: S110, BLE001 - the fall-through IS the behaviour, see below
         # This is the first tool a maintainer runs on a REAL response, so it
         # meets malformed files by definition — a refused DOCTYPE, a truncated
         # download, a format that only half matches. Falling through to the

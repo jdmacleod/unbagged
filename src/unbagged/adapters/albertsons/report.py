@@ -136,7 +136,7 @@ def heading(line: str) -> str | None:
         return " ".join(undouble(token) for token in tokens)
     plain = " ".join(tokens)
     known = (*PROSE_HEADINGS, DETAILED_REPORT, "Request details")
-    if plain in known or SECTION.match(plain) and not ROW.match(plain):
+    if plain in known or (SECTION.match(plain) and not ROW.match(plain)):
         return plain
     return None
 
@@ -162,7 +162,7 @@ def lines(pages: tuple[str, ...]) -> Iterator[tuple[int, str]]:
         yield number, line
 
 
-def read(pages: tuple[str, ...]) -> Report:
+def read(pages: tuple[str, ...]) -> Report:  # noqa: C901, PLR0912 - baselined, may only shrink
     report = Report()
     mode = "preamble"
     current: Section | None = None

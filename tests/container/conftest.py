@@ -51,7 +51,7 @@ def have_docker() -> bool:
     try:
         docker("info")
         return True
-    except Exception:
+    except Exception:  # noqa: BLE001 - any failure here means no usable Docker
         return False
 
 
@@ -302,7 +302,7 @@ def _wait_for_health(base: str, timeout: float = 60.0) -> None:
 # any `-n auto` collides by construction. Docker picks the port, the fixture
 # reads it back. `run_container` above already avoids the same trap with uuid
 # names and no published port.
-@pytest.fixture()
+@pytest.fixture
 def empty_app(image, tmp_path) -> Iterator[str]:
     """A container with nothing ingested.
 
@@ -342,7 +342,7 @@ def empty_app(image, tmp_path) -> Iterator[str]:
         docker("rm", "-f", name, check=False)
 
 
-@pytest.fixture()
+@pytest.fixture
 def page(empty_app):
     """A browser on an empty app.
 

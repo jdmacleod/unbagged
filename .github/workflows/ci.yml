@@ -167,10 +167,33 @@ jobs:
       # the lock to compare would need Docker and a network round trip, so the
       # thorough version is `make lock` and this is the fast half.
       - run: python -m tools.check_lock
+      # A new file past the size limit, or a baselined one that grew
+      # (CODING_STANDARDS.md, size and complexity).
+      - run: python -m tools.check_size
       # frontend/public/ is generated from resources/ with the C2PA manifests
       # stripped. Copying a source across by hand instead ships several KB of
       # provenance record on every page load and passes every other check.
       - run: python -m tools.build_brand --check
+
+  types:
+    name: Types (advisory)
+    runs-on: ubuntu-latest
+    # Advisory until ty is stable and the count is near zero
+    # (CODING_STANDARDS.md, Python): the count is the signal, not a red X.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e ".[dev]"
+      - name: ty
+        run: |
+          python -m ty check --output-format concise > ty.txt 2>&1 || true
+          count=$(grep -cE ': (error|warning)\[' ty.txt || true)
+          echo "ty: ${count} diagnostics" | tee -a "$GITHUB_STEP_SUMMARY"
 
   hooks:
     name: pre-commit

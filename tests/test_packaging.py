@@ -350,6 +350,24 @@ class TestVersionIsOneNumber:
         )
 
 
+class TestOneRuff:
+    """The ruff CI installs and the ruff the hook runs are the same build.
+
+    They had drifted: the venv resolved 0.16.10 from a `<0.17` range while the
+    hook stayed pinned at 0.16.6. Format output and the rule set both change
+    between releases, so two versions eventually disagree about what passes,
+    and CI rejects what the hook just wrote.
+    """
+
+    def test_the_dev_pin_matches_the_hook_rev(self):
+        pyproject = (ROOT / "pyproject.toml").read_text()
+        pinned = re.search(r'"ruff==([0-9.]+)"', pyproject)
+        assert pinned, "pin ruff exactly in the dev extras: ruff==X.Y.Z"
+        config = yaml.safe_load((ROOT / ".pre-commit-config.yaml").read_text())
+        (hook,) = [r for r in config["repos"] if r["repo"].endswith("/ruff-pre-commit")]
+        assert hook["rev"] == f"v{pinned.group(1)}"
+
+
 class TestToolsAreInvokedAsModules:
     """Issue #29: `tools/` resolves as a package only when the repo root is on
     the path, and running a script by path puts the script's OWN directory there
@@ -682,6 +700,7 @@ class TestTheWheelShipsOnlyTheApplication:
             ],
             capture_output=True,
             text=True,
+            check=False,
         )
         assert build.returncode == 0, build.stderr[-2000:]
         wheels = list(tmp_path.glob("*.whl"))
@@ -700,6 +719,7 @@ class TestTheWheelShipsOnlyTheApplication:
             [str(python), "-m", "pip", "install", "--quiet", str(wheels[0])],
             capture_output=True,
             text=True,
+            check=False,
         )
         assert install.returncode == 0, install.stderr[-2000:]
 
@@ -721,6 +741,7 @@ class TestTheWheelShipsOnlyTheApplication:
                 capture_output=True,
                 text=True,
                 cwd=str(tmp_path),
+                check=False,
             )
             assert result.returncode == 0, (
                 f"{module} does not import from an installed wheel:\n{result.stderr[-1500:]}"

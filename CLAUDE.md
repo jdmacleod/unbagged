@@ -48,9 +48,11 @@ historical**: `DESIGN.md` is the authority for anything the user sees, and it de
 
 Read `CODING_STANDARDS.md` before writing code; it names the tool behind every rule.
 Before finishing, run `make fmt lint` or `pre-commit run --files <changed>`. Never
-hand-format against the formatter; restructure the code instead. Commit messages are
-Conventional Commits, and the commit-msg hook rejects anything else. Formatting-only
-changes go in their own pull request.
+hand-format against the formatter; restructure the code instead. A file past 400
+lines is a signal to split it by responsibility; the size check fails a new file
+past 800 and a baselined one that grows. Commit messages are Conventional Commits,
+and the commit-msg hook rejects anything else. Formatting-only changes go in their
+own pull request.
 
 ## Conventions
 

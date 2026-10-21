@@ -146,7 +146,7 @@ class GenericAdapter:
                 try:
                     if extract(document, max_pages=max_pages).text.strip():
                         return FALLBACK_CONFIDENCE
-                except Exception:
+                except Exception:  # noqa: BLE001 - sniff() must not raise
                     break  # unreadable as a whole; a longer read will not help
         return 0.0
 

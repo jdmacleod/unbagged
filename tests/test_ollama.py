@@ -136,7 +136,7 @@ class TestFindingTheAnswerInTheReply:
     one that answered in a fence.
     """
 
-    @pytest.fixture()
+    @pytest.fixture
     def where(self, monkeypatch):
         monkeypatch.setenv(ollama.HOST_ENV, "localhost:11434")
         return ollama.availability(opener=replies(TAGS))
@@ -179,7 +179,7 @@ class TestAskingWithoutASchema:
     worth anything if the schema is the only difference between the two calls.
     """
 
-    @pytest.fixture()
+    @pytest.fixture
     def where(self, monkeypatch):
         monkeypatch.setenv(ollama.HOST_ENV, "localhost:11434")
         return ollama.availability(opener=replies(TAGS))
@@ -202,7 +202,7 @@ class TestAskingWithoutASchema:
 
 
 class TestWhatIsAsked:
-    @pytest.fixture()
+    @pytest.fixture
     def where(self, monkeypatch):
         monkeypatch.setenv(ollama.HOST_ENV, "localhost:11434")
         return ollama.availability(opener=replies(TAGS))
@@ -419,7 +419,7 @@ class TestGrowingTheWindowWhenTheAnswerWillNotFit:
     the reasoning-channel suppression for the rest of the call.
     """
 
-    @pytest.fixture()
+    @pytest.fixture
     def where(self, monkeypatch):
         monkeypatch.setenv(ollama.HOST_ENV, "localhost:11434")
         return ollama.availability(opener=replies(TAGS))
@@ -480,7 +480,7 @@ class TestAnAnswerThatRanOutOfWindowEveryTime:
     with it.
     """
 
-    @pytest.fixture()
+    @pytest.fixture
     def where(self, monkeypatch):
         monkeypatch.setenv(ollama.HOST_ENV, "localhost:11434")
         return ollama.availability(opener=replies(TAGS))

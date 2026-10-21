@@ -29,7 +29,7 @@ TEXT_BYTES = b"A response, as text.\n"
 
 class TestSafeFilename:
     @pytest.mark.parametrize(
-        "given,expected",
+        ("given", "expected"),
         [
             ("report.pdf", "report.pdf"),
             ("../../etc/passwd", "passwd"),
