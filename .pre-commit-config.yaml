@@ -1,15 +1,45 @@
-# Install with `pre-commit install`, or just run `make setup`.
-# Do not bypass these with `git commit --no-verify`.
+# Install with `make hooks` (or `make setup`, which runs it). That installs all
+# three hook types below: pre-commit on staged files, commit-msg on the message,
+# and pre-push on the whole tree. Do not bypass any of them with `--no-verify`.
+# What each hook enforces, and why, is in CODING_STANDARDS.md.
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
+# A hook with no `stages` of its own runs at the commit only. Without this,
+# every hook ran again at the commit-msg stage and again on push.
+default_stages: [pre-commit]
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
       - id: check-added-large-files
+        stages: [pre-commit]  # its manifest adds pre-push; once is enough
         # A 5 MB PDF sneaking in is a red flag, not a large asset.
         args: ["--maxkb=5120"]
       - id: check-merge-conflict
       - id: end-of-file-fixer
+        stages: [pre-commit]  # its manifest adds pre-push; once is enough
       - id: trailing-whitespace
+        stages: [pre-commit]  # its manifest adds pre-push; once is enough
+      - id: mixed-line-ending
+        args: ["--fix=no"]
+      - id: check-yaml
+        # The dev overlay uses Compose's own `!override` tag, which is valid
+        # Compose and not plain YAML; `docker compose config` is its checker.
+        exclude: ^docker-compose\.dev\.yml$
+      - id: check-toml
+      - id: check-json
+
+  # Workflows: actionlint for correctness (it runs shellcheck over `run:`
+  # blocks too), zizmor for the security footguns actionlint does not cover.
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
+
+  - repo: https://github.com/woodruffw/zizmor-pre-commit
+    rev: v1.30.1
+    hooks:
+      - id: zizmor
+        files: ^\.github/workflows/
 
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.1
@@ -29,6 +59,41 @@ repos:
       # have failed the gate is fixed in place and re-staged.
       - id: ruff-format
 
+  # Markdown: .markdownlint-cli2.yaml is a relaxed set, and says why each rule
+  # that is off is off.
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.23.3
+    hooks:
+      - id: markdownlint-cli2
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+
+  - repo: https://github.com/AleksaC/hadolint-py
+    rev: v2.15.1
+    hooks:
+      - id: hadolint
+
+  # CI only (`pre-commit run --hook-stage manual editorconfig-checker`): the
+  # formatters already own most of what it checks in the files they cover.
+  - repo: https://github.com/editorconfig-checker/editorconfig-checker.python
+    rev: 3.11.1
+    hooks:
+      - id: editorconfig-checker
+        alias: ec
+        stages: [manual]
+
+  # The message, not the change. The types are the ones this history already
+  # uses; a merge commit's generated message passes.
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args: [feat, fix, docs, test, chore, style, ci, deps, release, refactor, perf, build, revert]
+
   - repo: local
     hooks:
       - id: no-data-dir
@@ -42,3 +107,14 @@ repos:
         entry: python3 -m tools.scan_pii
         language: system
         pass_filenames: true
+
+      # The checks too slow for every commit and too important to leave to CI:
+      # the frontend type-check and both unit-test tiers. `make pre-push` names
+      # exactly what runs.
+      - id: pre-push
+        name: type-check and unit tests
+        entry: make pre-push
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

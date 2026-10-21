@@ -7,8 +7,9 @@ make setup
 ```
 
 That creates the venv, installs dev dependencies, and — the part that matters — runs
-`pre-commit install`. Without the hooks installed, nothing stands between your working
-tree and a public commit of someone's home address.
+`make hooks`, which installs the pre-commit, commit-msg and pre-push hooks. Without
+them, nothing stands between your working tree and a public commit of someone's home
+address.
 
 ## Never attach a real report to an issue or PR
 
@@ -125,7 +126,6 @@ The denylist holds literal strings that must never appear in this repository —
 street, your phone number, your loyalty card number, your report reference, and the
 dates and times you went shopping. Build it from your own report:
 
-
 ```bash
 make denylist REPORT=data/incoming/your-report.pdf
 make check-pii
@@ -137,7 +137,6 @@ gets screenshotted and transcripts get pasted into issues. Read
 `tools/denylist.txt` yourself if you want to check it.
 
 Three behaviours worth knowing:
-
 
 - It asks the adapters for your identifiers first, and only falls back to a regex
   sweep if none returns any. An adapter that knows the format returns exactly the
@@ -164,12 +163,10 @@ Three behaviours worth knowing:
   at it once. A real shopping date reaching a public branch is the alternative, and
   it has happened.
 
-
 The denylist is gitignored and `build_denylist.py` refuses to write anywhere that is
 not. Keep it local, and know that it protects only your machine — the pattern rules
 are what protect everyone else's. Run it again whenever a new response arrives: the
 list only knows about the visits it has been shown.
-
 
 ## Test data
 
@@ -211,7 +208,9 @@ is churn that makes a real screenshot change hard to spot in a diff.
 97 files. That commit is listed in `.git-blame-ignore-revs`. GitHub reads that file
 automatically; your local checkout does not, until you tell it once:
 
-    git config blame.ignoreRevsFile .git-blame-ignore-revs
+```sh
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+```
 
 Add a commit to that file only if it is purely mechanical — no logic, no renames.
 Anything a human had to decide belongs in a different commit, so that ignoring the
@@ -222,7 +221,9 @@ rather than one.
 
 Invoke everything in `tools/` as a module, from the repo root:
 
-    python -m tools.scan_pii
+```sh
+python -m tools.scan_pii
+```
 
 Not `python tools/scan_pii.py`. Running a script by path puts that script's own
 directory on `sys.path` instead of the repo root, so the `tools` package becomes
@@ -239,9 +240,11 @@ default rather than a guess. It needs a host and pulled models, so it is not a
 gate and does not run in CI; `src/unbagged/adapters/hmart/NOTES.md` carries the
 results and the date they were taken on.
 
-    python -m tools.bakeoff_vision --screen --host http://10.0.0.2:11434
-    python -m tools.bakeoff_vision --models qwen3-vl:8b --out results.json
-    python -m tools.bakeoff_vision --from results.json
+```sh
+python -m tools.bakeoff_vision --screen --host http://10.0.0.2:11434
+python -m tools.bakeoff_vision --models qwen3-vl:8b --out results.json
+python -m tools.bakeoff_vision --from results.json
+```
 
 A full matrix is measured in hours, so `--out` is written as it goes and
 `--from` re-renders it without asking a model anything. That file opens with the
@@ -357,8 +360,10 @@ write the seventh.
 **The tell: the check asserts something about a set, when the invariant is a
 relationship between that set and something else.**
 
-    ∃x P(x)  ∧  ∃y Q(y)          what gets written
-    ∀x. P(x) → Q(produces(x))    what was meant
+```text
+∃x P(x)  ∧  ∃y Q(y)          what gets written
+∀x. P(x) → Q(produces(x))    what was meant
+```
 
 The set-shaped version is always easier to write, always passes on the day it is
 written, and fails open in exactly the case the guard exists to catch.
@@ -429,13 +434,17 @@ Point at something that ships instead: the commit that landed the fix, or the
 CHANGELOG entry describing it. A short sha is greppable, permanent, and carries
 the reasoning with it.
 
-    Found by /qa on 2026-09-09; fixed in 822c97b.
+```text
+Found by /qa on 2026-09-09; fixed in 822c97b.
+```
 
 Where the omission itself is worth explaining — a docstring that would otherwise
 look like it forgot to cite anything — say so in a sentence instead:
 
-    Found by /qa on 2026-09-09 against the v0.13.0 image. (The QA report lives
-    under .gstack/, which is gitignored, so it is not cited here.)
+```text
+Found by /qa on 2026-09-09 against the v0.13.0 image. (The QA report lives
+under .gstack/, which is gitignored, so it is not cited here.)
+```
 
 Both forms are in the tree. Neither leaves a path that resolves for nobody.
 
@@ -473,8 +482,10 @@ compatibility contract is read against your database rather than a code API, and
 a prebuilt image would ask people to trust a binary in a project whose whole
 pitch is that they can read every line first.
 
-    git tag -s vX.Y.Z -m "unbagged X.Y.Z"    # the version in VERSION
-    git push origin vX.Y.Z
+```sh
+git tag -s vX.Y.Z -m "unbagged X.Y.Z"    # the version in VERSION
+git push origin vX.Y.Z
+```
 
 That is the whole procedure. `.github/workflows/release.yml` fires on the tag,
 runs `tools/release_notes.py`, and creates the release from the CHANGELOG
@@ -501,9 +512,11 @@ commit cannot be quietly moved — it has to be superseded by a new version.
 
 Tags are signed, and `.github/allowed_signers` is what lets you check one:
 
-    git config gpg.ssh.allowedSignersFile .github/allowed_signers
-    git verify-tag vX.Y.Z    # any released tag
-    # Good "git" signature for ... with ED25519 key SHA256:...
+```sh
+git config gpg.ssh.allowedSignersFile .github/allowed_signers
+git verify-tag vX.Y.Z    # any released tag
+# Good "git" signature for ... with ED25519 key SHA256:...
+```
 
 GitHub verifies independently and shows a Verified badge either way. The file
 matters for the case where someone has cloned the repository and wants to check
@@ -528,11 +541,12 @@ an authentication key), and add yourself to `.github/allowed_signers` with
 
 ## Style
 
-`ruff` for lint and format, 100-column lines, Python 3.12. `make lint` runs both
-halves — `ruff check` and `ruff format --check` — and `make format` applies the
-formatter. The pre-commit hook reformats in place, so a badly formatted commit is
-fixed rather than argued with; re-stage and commit again. `make lint` and `make test`
-before you push.
+`CODING_STANDARDS.md` is the reference: every formatting, lint and commit rule, and
+the tool that checks it. In short, `make hooks` once (`make setup` does it for you),
+`make fmt lint` before you commit, and Conventional Commit messages. The pre-commit
+hook reformats in place, so a badly formatted commit is fixed rather than argued
+with; re-stage and commit again. The pre-push hook runs the type-check and unit
+tests, so a push that would fail CI's fast jobs fails on your machine first.
 
 Editing the logo or an icon is the one change with a step that is easy to miss.
 `resources/README.md` covers it: the sources live there, `frontend/public/` holds

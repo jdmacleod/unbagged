@@ -1,0 +1,20 @@
+# markdownlint (CODING_STANDARDS.md, docs): a relaxed set. What is off, and why:
+config:
+  default: true
+  MD013: false # line length: prose is not wrapped to a fixed width
+  MD033: false # inline HTML: the README and DESIGN.md use it on purpose
+  MD029: false # ordered-list numbers: steps are numbered across interruptions
+  MD036: false # emphasis as a heading: bold lead-ins label paragraphs
+  MD040: false # fence language: plain trees, commands and receipts need none
+  MD060: false # table pipe spacing: compact `|---|` tables are the house style
+  MD037: false # spaces in emphasis: misreads arithmetic-style text, and its fix damages it
+  MD038: false # spaces in code: a code span may need its spaces
+  MD041: false # first-line heading: issue templates start at "##" on purpose
+  MD024:
+    siblings_only: true # the same subheading under different sections is fine
+gitignore: true
+ignores:
+  - "**/node_modules/**"
+  # The live contract (CLAUDE.md, "Project shape"): cited by section from code
+  # and tests, so it is not reflowed by any tool.
+  - "docs/handoff.md"

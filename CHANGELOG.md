@@ -236,6 +236,20 @@ No migration runs and nothing needs re-reading.
   the only stated remedy for a bad upload was moving the whole data directory
   aside.
 
+### Development
+
+- **Coding standards have one home.** `CODING_STANDARDS.md` names the tool
+  behind every formatting, lint and commit rule, and `CLAUDE.md` and
+  `CONTRIBUTING.md` point at it rather than restating it.
+- **The hooks cover every kind of file in the repository.** Pre-commit now
+  checks YAML, TOML and JSON syntax, the workflows (actionlint and zizmor), the
+  Markdown, the entrypoint script and the Dockerfile. A commit-msg hook holds
+  messages to Conventional Commits, and a pre-push hook runs the UI type-check
+  and both unit-test tiers. `make hooks` installs all three; `make check` runs
+  every gate that needs no Docker.
+- **The workflows no longer interpolate event values into shell**, and no
+  checkout leaves its credentials behind for a later step.
+
 ## [0.17.0] - 2026-09-18
 
 **This changes what responses you have already loaded look like.** No migration
@@ -1201,6 +1215,8 @@ differently.
 - **`SECURITY.md`** states what to report, how to report it privately, and what is
   in scope for a single-user local app.
 
+<!-- A historical release with two Added and two Changed subsections; the record is not rewritten. -->
+<!-- markdownlint-disable-next-line MD024 -->
 ### Added
 
 - **A response can be removed.** The endpoint and its client wrapper had existed
@@ -1212,6 +1228,8 @@ differently.
 - The synthetic report is named in the README as something you can drop in
   before your own response arrives, which takes weeks.
 
+<!-- A historical release with two Added and two Changed subsections; the record is not rewritten. -->
+<!-- markdownlint-disable-next-line MD024 -->
 ### Changed
 
 - Red now has two documented call sites instead of one: a delete confirmation

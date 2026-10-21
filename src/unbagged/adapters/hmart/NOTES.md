@@ -451,7 +451,6 @@ therefore decided some other way, and the decisions are worth keeping:
   white before the engine sees it. Unmasked, one capture read 14 lines and came
   up short of its stated total; masked, 16 lines reading exactly to it.
 
-
 - **One capture is clipped at the source**, and the earlier note here was wrong
   about what that means. It is the narrowest page in the corpus and its amount
   column runs into the right edge, so the last digit of every amount is cut —
@@ -520,7 +519,6 @@ therefore decided some other way, and the decisions are worth keeping:
   line itself is illegible, a bound of `0 <= tax <= balance` is what stands in:
   it holds the subtotal inside `[0, balance]`, so a basket can never claim more
   than the receipt says was paid.
-
 
 ### Which vision model, and the evidence for it
 
@@ -654,7 +652,6 @@ repo's version, and a digest for each model measured — so two results files ca
 be told apart, and a tag that changed underneath a re-run shows up as a changed
 digest rather than as an unexplained row. The prose above is still the only
 record for THIS run, which predates the header.
-
 
 ### Deliberately not read
 

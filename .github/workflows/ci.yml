@@ -24,6 +24,7 @@ jobs:
       # it away must still be caught before merge.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
           # Explicit rather than implied by the full fetch: check_signers.py
           # refuses to verify an empty set of tags, so a checkout without them
@@ -39,9 +40,11 @@ jobs:
 
       - name: Scan the history introduced by this PR
         if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          git fetch --no-tags origin "${{ github.base_ref }}"
-          python -m tools.scan_pii --history "origin/${{ github.base_ref }}..HEAD"
+          git fetch --no-tags origin "$BASE_REF"
+          python -m tools.scan_pii --history "origin/$BASE_REF..HEAD"
 
       - name: Scan the full history
         if: github.event_name == 'push'
@@ -72,9 +75,11 @@ jobs:
 
       - name: Refuse a source SVG that moved without its icons
         if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          git fetch --no-tags origin "${{ github.base_ref }}"
-          python -m tools.check_icon_sync "origin/${{ github.base_ref }}"
+          git fetch --no-tags origin "$BASE_REF"
+          python -m tools.check_icon_sync "origin/$BASE_REF"
 
       - name: Verify committed fixtures are generator output
         # Load-bearing: scan_pii.py stands a few address-shaped rules down inside
@@ -137,6 +142,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.12"
@@ -170,16 +177,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.12"
       - uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd  # v3.0.1
+      # Manual stage: the formatters own most of what it checks in the files they
+      # cover, so it runs here rather than on every commit (CODING_STANDARDS.md).
+      - name: editorconfig-checker
+        uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd  # v3.0.1
+        with:
+          extra_args: --all-files --hook-stage manual editorconfig-checker
 
   frontend:
     name: Frontend build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
         with:
           node-version: "22"
@@ -206,6 +223,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.12"
