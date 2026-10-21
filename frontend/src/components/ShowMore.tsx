@@ -31,8 +31,7 @@ export function useShowMore<T>(items: T[], step = 25) {
    * Never shrinks the list. Revealing rows and then taking them away underneath
    * a reader who is looking at them would be worse than not jumping at all.
    */
-  const revealThrough = (index: number) =>
-    setLimit((n) => (index < n ? n : index + 1 + step));
+  const revealThrough = (index: number) => setLimit((n) => (index < n ? n : index + 1 + step));
   const control =
     remaining > 0 ? (
       <div className="py-3 text-center">

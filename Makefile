@@ -86,6 +86,7 @@ setup-browser:  ## Install Chromium for the browser tests
 fmt:  ## Apply the formatters (see CODING_STANDARDS.md)
 	$(PY) -m ruff format .
 	$(PY) -m ruff check --fix --select I .
+	cd frontend && npm run -s format
 
 format: fmt  ## Alias for fmt
 
@@ -123,11 +124,12 @@ check:  ## Every repo gate that needs no Docker: PII, fixtures, lock, then every
 	$(PY) -m pre_commit run --all-files
 	$(PY) -m pre_commit run --all-files --hook-stage manual editorconfig-checker
 
-lint:  ## Lint and check formatting with ruff
+lint:  ## Lint and check formatting: ruff, and Prettier over the UI
 	$(PY) -m ruff check .
 # The half that had never run. `ruff check` and `ruff format` police
 # different things, and CLAUDE.md has always claimed both.
 	$(PY) -m ruff format --check .
+	cd frontend && npm run -s format:check
 
 denylist:  ## Build tools/denylist.txt from your own report (REPORT=path)
 	@test -n "$(REPORT)" || { echo "Usage: make denylist REPORT=data/incoming/your-report.pdf"; exit 1; }

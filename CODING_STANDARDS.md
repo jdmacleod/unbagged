@@ -28,8 +28,8 @@ Fastest first. Each catches what the one before it cannot.
 
 | Layer | When | What runs | Configured in |
 |---|---|---|---|
-| Format hook | After every Claude Code edit | `ruff format` and import sorting on the edited Python file; never a path under `data/` | `.claude/settings.json`, `tools/format_edited.sh` |
-| Pre-commit | Every commit, staged files | Hygiene, YAML/TOML/JSON syntax, gitleaks, ruff, actionlint, zizmor, markdownlint, shellcheck, hadolint, the size check, the `data/` refusal, the PII scanner | `.pre-commit-config.yaml` |
+| Format hook | After every Claude Code edit | `ruff format` and import sorting on the edited Python file, Prettier on the edited UI file; never a path under `data/` | `.claude/settings.json`, `tools/format_edited.sh` |
+| Pre-commit | Every commit, staged files | Hygiene, YAML/TOML/JSON syntax, gitleaks, ruff, Prettier, actionlint, zizmor, markdownlint, shellcheck, hadolint, the size check, the `data/` refusal, the PII scanner | `.pre-commit-config.yaml` |
 | Commit message | Every commit | Conventional Commits (section 8) | `.pre-commit-config.yaml` |
 | Pre-push | Every push | The UI type-check, then the Python and UI unit tests (`make pre-push`) | `.pre-commit-config.yaml`, `Makefile` |
 | CI | Every push and pull request | Everything above, plus editorconfig-checker, ty (advisory), the container suite, the PII history scan, CodeQL | `.github/workflows/` |
@@ -40,8 +40,8 @@ existing `.git/hooks/pre-push` is kept as `pre-push.legacy` and still runs first
 
 | Command | Does |
 |---|---|
-| `make fmt` | Format: ruff format, then ruff's import sorting |
-| `make lint` | ruff check and ruff format check |
+| `make fmt` | Format: ruff format and import sorting; Prettier over `frontend/` |
+| `make lint` | ruff check and format check; Prettier check over `frontend/` |
 | `make types` | ty over `src`, `tools` and `tests`; reports, never fails |
 | `make size` | The size check; `make size-report` lists files over the preferred size; `make size-update` lowers the baseline |
 | `make typecheck-frontend` | `tsc` over the UI, no emit |
@@ -97,6 +97,12 @@ restructure the code.
 
 ## 4. TypeScript and React
 
+- **Formatting:** Prettier, pinned exactly in `frontend/package.json` (3.9.10),
+  with one root `.prettierrc.json`: width 100, double quotes, trailing commas.
+  `.prettierignore` leaves out build output, lockfiles and Markdown (which is
+  markdownlint's). The pre-commit hook runs it from `frontend/node_modules`
+  through `tools/npm_hook.sh`, so run `make setup-frontend` once first; CI runs
+  `npm run format:check`.
 - **Types:** `tsc` in strict mode (`frontend/tsconfig.json`: `strict`,
   `noUnusedLocals`, `noUnusedParameters`, `noFallthroughCasesInSwitch`,
   `verbatimModuleSyntax`). It runs in the pre-push hook and in CI's frontend build.
@@ -183,5 +189,4 @@ restructure the code.
 Arriving in their own pull requests, each of which updates this file:
 
 - ty as a gate, once it is stable and the count is near zero.
-- Prettier over the UI, in a formatting-only pull request.
 - ESLint over the UI, with a shrink-only suppressions baseline.

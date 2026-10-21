@@ -157,18 +157,15 @@ function TimelineBody({
   if (!stats.disclosed) {
     return (
       <Spine margin={<Aside>no purchase data</Aside>}>
-        <h2 className="font-serif text-[17px] font-semibold">
-          Nothing to show here
-        </h2>
+        <h2 className="font-serif text-[17px] font-semibold">Nothing to show here</h2>
         <p className="mt-2 max-w-[62ch] text-muted">
-          This response contained no purchase data, so there is nothing to plot.
-          That is not the same as having made no purchases: the retailer did not
-          disclose the specific pieces of personal information it holds.
+          This response contained no purchase data, so there is nothing to plot. That is not the
+          same as having made no purchases: the retailer did not disclose the specific pieces of
+          personal information it holds.
         </p>
         <p className="mt-2 max-w-[62ch] text-muted">
-          The absence is recorded as a finding in the{" "}
-          <strong>Compliance</strong> view, which is where a response like this
-          is worth reading.
+          The absence is recorded as a finding in the <strong>Compliance</strong> view, which is
+          where a response like this is worth reading.
         </p>
       </Spine>
     );
@@ -196,10 +193,7 @@ function TimelineBody({
         margin={
           <Aside>
             {number(filteredCount)}
-            {filteredCount !== stats.basket_count
-              ? ` of ${number(stats.basket_count)}`
-              : ""}{" "}
-            visits
+            {filteredCount !== stats.basket_count ? ` of ${number(stats.basket_count)}` : ""} visits
           </Aside>
         }
       >
@@ -236,9 +230,7 @@ function TimelineBody({
       ) : (
         <Spine
           marginFirst
-          margin={
-            <MonthRail months={months} current={currentMonth} onJump={jumpTo} />
-          }
+          margin={<MonthRail months={months} current={currentMonth} onJump={jumpTo} />}
         >
           {/* Said once, above the roll, instead of 67 times inside it. Each row
               used to open onto this same sentence, which is a control that
@@ -256,21 +248,18 @@ function TimelineBody({
             stats.basket_count !== null &&
             stats.itemised_count < stats.basket_count ? (
               <p className="mb-4 max-w-[62ch] text-muted">
-                This retailer disclosed what <em>all</em> of these visits cost
-                and what was in {number(stats.itemised_count)} of the{" "}
-                {number(stats.basket_count)}. The rows that do not open are the
-                ones it itemised nothing for. What was disclosed, and what was
-                not, is recorded as a finding in the{" "}
-                <strong>Compliance</strong> view.
+                This retailer disclosed what <em>all</em> of these visits cost and what was in{" "}
+                {number(stats.itemised_count)} of the {number(stats.basket_count)}. The rows that do
+                not open are the ones it itemised nothing for. What was disclosed, and what was not,
+                is recorded as a finding in the <strong>Compliance</strong> view.
               </p>
             ) : null
           ) : (
             <p className="mb-4 max-w-[62ch] text-muted">
-              This retailer disclosed what each visit cost and never what was in
-              it. Every row below carries a date, a store and a total, and
-              nothing else. The absence is recorded as a finding in the{" "}
-              <strong>Compliance</strong> view, which is where a response like
-              this is worth reading.
+              This retailer disclosed what each visit cost and never what was in it. Every row below
+              carries a date, a store and a total, and nothing else. The absence is recorded as a
+              finding in the <strong>Compliance</strong> view, which is where a response like this
+              is worth reading.
             </p>
           )}
           <RunningHead
@@ -300,9 +289,7 @@ function TimelineBody({
                   // Null when no basket in the response states a saving, which
                   // is a response that discloses no shelf price at all.
                   showSaving={stats.total_saved !== null}
-                  onToggle={() =>
-                    setOpen(open === basket.id ? null : basket.id)
-                  }
+                  onToggle={() => setOpen(open === basket.id ? null : basket.id)}
                   hues={hues}
                 />
               );
@@ -353,8 +340,9 @@ function Arrival({
       {total === null ? "" : ` of ${number(total)}`} visits,{" "}
       {exact ? "the ones that included" : "the ones naming"}{" "}
       <span className="num text-[13px]">{product}</span>
-      {exact ? "" : " — this retailer disclosed no product codes, so that is a match on the name"}
-      .{" "}
+      {exact
+        ? ""
+        : " — this retailer disclosed no product codes, so that is a match on the name"}.{" "}
       <button
         onClick={onClear}
         className="text-accent underline underline-offset-2 hover:no-underline"
@@ -362,10 +350,7 @@ function Arrival({
         Show every visit
       </button>{" "}
       <span className="text-faint">or</span>{" "}
-      <a
-        href={indexHref}
-        className="text-accent underline underline-offset-2 hover:no-underline"
-      >
+      <a href={indexHref} className="text-accent underline underline-offset-2 hover:no-underline">
         back to the index
       </a>
       .
@@ -374,13 +359,7 @@ function Arrival({
 }
 
 /** The stores, in the margin, each with the hue its rows carry below. */
-function StoreKey({
-  stats,
-  hues,
-}: {
-  stats: Stats;
-  hues: Map<string, number>;
-}) {
+function StoreKey({ stats, hues }: { stats: Stats; hues: Map<string, number> }) {
   if (stats.stores.length === 0) return <Aside>no store recorded</Aside>;
   return (
     <div className="num pt-2 text-[11.5px] text-faint">
@@ -400,20 +379,7 @@ function StoreKey({
   );
 }
 
-const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function monthLabel(iso: string) {
   const [y, m] = iso.slice(0, 7).split("-");
@@ -474,9 +440,7 @@ export function fillMonths(months: MonthEntry[]): MonthEntry[] {
   const by = new Map(months.map((m) => [m.key, m]));
   const out: MonthEntry[] = [];
   const [firstYear, firstMonth] = months[0].key.split("-").map(Number);
-  const [lastYear, lastMonth] = months[months.length - 1].key
-    .split("-")
-    .map(Number);
+  const [lastYear, lastMonth] = months[months.length - 1].key.split("-").map(Number);
   let year = firstYear;
   let month = firstMonth;
   while (year < lastYear || (year === lastYear && month <= lastMonth)) {
@@ -592,10 +556,7 @@ function Header({ stats }: { stats: Stats }) {
           content. The dashes keep their places and say why, in the note slot
           this component already has. */}
       {stats.lines_disclosed ? null : (
-        <Figure
-          label="Covered"
-          value={`${day(stats.first_visit)} → ${day(stats.last_visit)}`}
-        />
+        <Figure label="Covered" value={`${day(stats.first_visit)} → ${day(stats.last_visit)}`} />
       )}
       <Figure
         label="Products"
@@ -637,9 +598,7 @@ function Figure({
 }) {
   return (
     <div>
-      <div className="text-[11.5px] tracking-[0.07em] text-muted uppercase">
-        {label}
-      </div>
+      <div className="text-[11.5px] tracking-[0.07em] text-muted uppercase">{label}</div>
       <div
         className={
           small
@@ -665,16 +624,12 @@ function Figure({
 function FootingNote({ baskets }: { baskets: Basket[] }) {
   const off = baskets.filter(doesNotFoot);
   if (off.length === 0) return null;
-  const worst = Math.max(
-    ...off.map((b) => Math.abs(b.stated_pre_discount_delta ?? 0)),
-  );
+  const worst = Math.max(...off.map((b) => Math.abs(b.stated_pre_discount_delta ?? 0)));
   return (
     <p className="mt-5 max-w-[62ch] text-muted">
-      {number(off.length)} of {number(baskets.length)} baskets do not add up to
-      the shelf total the retailer stated for them, the largest by{" "}
-      {money(worst)}. They are marked below. The difference is in the response
-      as it arrived, not in how it was read, so there is nothing here to
-      correct.
+      {number(off.length)} of {number(baskets.length)} baskets do not add up to the shelf total the
+      retailer stated for them, the largest by {money(worst)}. They are marked below. The difference
+      is in the response as it arrived, not in how it was read, so there is nothing here to correct.
     </p>
   );
 }
@@ -870,9 +825,7 @@ function MonthRail({
             <span className="flex h-[18px] min-w-0 flex-1 items-end gap-[2px]">
               {entries.map((month) => {
                 const here = month.key === current;
-                const height = Math.round(
-                  ((month.paid + month.saved) / peak) * 16,
-                );
+                const height = Math.round(((month.paid + month.saved) / peak) * 16);
                 if (month.visits === 0) {
                   // A month with no visit is not a missing row, it is a gap —
                   // and a gap is the shape of a period you stopped shopping.
@@ -943,9 +896,7 @@ function MonthChart({
   const peak = Math.max(...filled.map((m) => m.paid + m.saved), 1);
   return (
     <div>
-      <div className="num pb-1 text-[11.5px] text-faint">
-        {barLabel(months)}
-      </div>
+      <div className="num pb-1 text-[11.5px] text-faint">{barLabel(months)}</div>
       <div className="flex h-24 items-end gap-[3px] border-b border-rule">
         {filled.map((m) => (
           <button
@@ -968,10 +919,7 @@ function MonthChart({
           >
             {/* The saving sits above the paid amount, so the full bar height is
                 the shelf total. Both readings the response supports, one mark. */}
-            <span
-              className="block bg-line/45"
-              style={{ height: `${(m.saved / peak) * 92}px` }}
-            />
+            <span className="block bg-line/45" style={{ height: `${(m.saved / peak) * 92}px` }} />
             <span
               className={`block ${m.key === current ? "bg-accent" : "bg-ink/75"}`}
               style={{ height: `${(m.paid / peak) * 92}px` }}
@@ -981,9 +929,7 @@ function MonthChart({
       </div>
       <div className="num flex justify-between pt-1.5 text-[11.5px] text-faint">
         <span>{months[0].key}</span>
-        {months.length > 2 && (
-          <span>{months[Math.floor(months.length / 2)].key}</span>
-        )}
+        {months.length > 2 && <span>{months[Math.floor(months.length / 2)].key}</span>}
         <span>{months[months.length - 1].key}</span>
       </div>
     </div>
@@ -1006,8 +952,7 @@ function Filters({
   const field =
     "rounded-[2px] border border-line bg-transparent px-2 py-1.5 text-ink " +
     "focus:border-accent focus:outline-2 focus:outline-offset-1 focus:outline-accent";
-  const legend =
-    "flex flex-col gap-1 text-[11.5px] tracking-[0.05em] text-muted uppercase";
+  const legend = "flex flex-col gap-1 text-[11.5px] tracking-[0.05em] text-muted uppercase";
   return (
     <div className="flex flex-wrap items-end gap-3">
       <label className={legend}>
@@ -1096,8 +1041,7 @@ function BasketRow({
   const revealable = basket.lines_disclosed;
   const Element = revealable ? "button" : "div";
   const detail = useAsync<BasketDetail | null>(
-    () =>
-      open && revealable ? api.transaction(basket.id) : Promise.resolve(null),
+    () => (open && revealable ? api.transaction(basket.id) : Promise.resolve(null)),
     [open, revealable, basket.id],
   );
   const unreconciled = doesNotFoot(basket);
@@ -1189,8 +1133,8 @@ function BasketRow({
                 className="shrink-0 text-muted underline decoration-dotted underline-offset-2"
                 title="These line items do not add up to the total the retailer stated for this basket. The difference is in the response as supplied, not in how it was read."
               >
-                {(basket.stated_pre_discount_delta ?? 0) > 0 ? "over" : "under"}{" "}
-                by {money(Math.abs(basket.stated_pre_discount_delta ?? 0))}
+                {(basket.stated_pre_discount_delta ?? 0) > 0 ? "over" : "under"} by{" "}
+                {money(Math.abs(basket.stated_pre_discount_delta ?? 0))}
               </span>
             )}
             <span className="num shrink-0 text-muted">
@@ -1222,11 +1166,7 @@ function BasketRow({
               {/* The stated total when no lines were disclosed: it is the only
                   real money in a response like that, and an em dash here would
                   sit directly above a chart drawn from the same figure. */}
-              {money(
-                basket.lines_disclosed
-                  ? basket.paid_total
-                  : basket.total_pre_discount,
-              )}
+              {money(basket.lines_disclosed ? basket.paid_total : basket.total_pre_discount)}
             </span>
             {/* The citation rides the row at every width now. The margin
                 beside this roll holds the month rail, and a sticky rail and a
@@ -1279,22 +1219,16 @@ function LineItems({ detail }: { detail: BasketDetail }) {
           <tr className="text-left">
             <th className="py-1.5 font-medium">Description</th>
             {hasCodes && <th className="py-1.5 font-medium">UPC</th>}
-            {hasShelf && (
-              <th className="py-1.5 text-right font-medium">Shelf</th>
-            )}
+            {hasShelf && <th className="py-1.5 text-right font-medium">Shelf</th>}
             <th className="py-1.5 text-right font-medium">You paid</th>
-            {hasShelf && (
-              <th className="py-1.5 text-right font-medium">Saved</th>
-            )}
+            {hasShelf && <th className="py-1.5 text-right font-medium">Saved</th>}
           </tr>
         </thead>
         <tbody>
           {detail.items.map((item) => {
             // A row naming no product at zero cost is a placeholder in the
             // export, not something you bought. Shown, but marked.
-            const placeholder =
-              item.description_raw === "UNKNOWN" &&
-              (item.retail_amt ?? 0) === 0;
+            const placeholder = item.description_raw === "UNKNOWN" && (item.retail_amt ?? 0) === 0;
             return (
               <tr
                 key={item.id}
@@ -1321,22 +1255,14 @@ function LineItems({ detail }: { detail: BasketDetail }) {
                     )}
                   </td>
                 )}
-                {hasShelf && (
-                  <td className="num py-1.5 text-right">
-                    {money(item.retail_amt)}
-                  </td>
-                )}
-                <td className="num py-1.5 text-right font-semibold">
-                  {money(item.paid_amt)}
-                </td>
+                {hasShelf && <td className="num py-1.5 text-right">{money(item.retail_amt)}</td>}
+                <td className="num py-1.5 text-right font-semibold">{money(item.paid_amt)}</td>
                 {/* Blank when the line was full price, a dash only when the
                     retailer did not say. Most lines are full price, and a column
                     of zeros reads as broken — but the dash now means absence and
                     nothing else, so a disclosed zero may not borrow it. */}
                 {hasShelf && (
-                  <td className="num py-1.5 text-right text-muted">
-                    {saving(item.saved_amt)}
-                  </td>
+                  <td className="num py-1.5 text-right text-muted">{saving(item.saved_amt)}</td>
                 )}
               </tr>
             );
@@ -1350,27 +1276,17 @@ function LineItems({ detail }: { detail: BasketDetail }) {
             <td className="py-1.5" colSpan={hasCodes ? 2 : 1}>
               {number(detail.item_count)} lines
             </td>
-            {hasShelf && (
-              <td className="num py-1.5 text-right">
-                {money(detail.shelf_total)}
-              </td>
-            )}
-            <td className="num py-1.5 text-right">
-              {money(detail.paid_total)}
-            </td>
-            {hasShelf && (
-              <td className="num py-1.5 text-right">
-                {saving(detail.saved_total)}
-              </td>
-            )}
+            {hasShelf && <td className="num py-1.5 text-right">{money(detail.shelf_total)}</td>}
+            <td className="num py-1.5 text-right">{money(detail.paid_total)}</td>
+            {hasShelf && <td className="num py-1.5 text-right">{saving(detail.saved_total)}</td>}
           </tr>
         </tfoot>
       </table>
 
       {hasShelf || (
         <p className="mt-2 max-w-[62ch] text-[11.5px] text-muted">
-          This response gives what each line cost after markdowns and no shelf
-          price, so there is no saving to show.
+          This response gives what each line cost after markdowns and no shelf price, so there is no
+          saving to show.
         </p>
       )}
 
@@ -1380,16 +1296,12 @@ function LineItems({ detail }: { detail: BasketDetail }) {
         <p className="mt-2 max-w-[62ch] text-[11.5px] text-muted">
           {delta !== null && Math.abs(delta) >= FOOTING_TOLERANCE ? (
             <>
-              These lines add up to {money(detail.shelf_total)} before
-              discounts; the retailer states {money(stated)}, a difference of{" "}
-              {money(Math.abs(delta))}. Both figures come from the response as
-              supplied and it does not reconcile them.
+              These lines add up to {money(detail.shelf_total)} before discounts; the retailer
+              states {money(stated)}, a difference of {money(Math.abs(delta))}. Both figures come
+              from the response as supplied and it does not reconcile them.
             </>
           ) : (
-            <>
-              Matches the {money(stated)} the retailer states for this basket,
-              before discounts.
-            </>
+            <>Matches the {money(stated)} the retailer states for this basket, before discounts.</>
           )}
         </p>
       )}

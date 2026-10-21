@@ -31,23 +31,14 @@ export function Spinner({ label = "Loading" }: { label?: string }) {
  * component: nothing was lost, so nothing is unrecoverable, and red would be a
  * severity signal. Use `Caveat`.
  */
-export function ErrorBox({
-  error,
-  onRetry,
-}: {
-  error: string;
-  onRetry?: () => void;
-}) {
+export function ErrorBox({ error, onRetry }: { error: string; onRetry?: () => void }) {
   return (
     <p className="rounded-[2px] border border-danger/40 px-4 py-3 text-danger">
       {error}
       {onRetry && (
         <>
           {" "}
-          <button
-            onClick={onRetry}
-            className="underline decoration-dotted underline-offset-2"
-          >
+          <button onClick={onRetry} className="underline decoration-dotted underline-offset-2">
             Try again
           </button>
         </>
@@ -64,13 +55,7 @@ export function ErrorBox({
  * setting `StaleReading` uses, factored out once a second thing needed to say
  * "what you are looking at is still true, but here is what you should know".
  */
-export function Caveat({
-  children,
-  action,
-}: {
-  children: ReactNode;
-  action?: ReactNode;
-}) {
+export function Caveat({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
     <p className="mt-4 max-w-[62ch] border-l-2 border-dotted border-line pl-3 text-muted">
       {children}
@@ -103,16 +88,12 @@ export function Spine({
   children: ReactNode;
 }) {
   const content = (
-    <div
-      className={`min-w-0 ${marginFirst ? "lg:col-start-1 lg:row-start-1" : ""}`}
-    >
+    <div className={`min-w-0 ${marginFirst ? "lg:col-start-1 lg:row-start-1" : ""}`}>
       {children}
     </div>
   );
   const aside = (
-    <div
-      className={`hidden lg:block ${marginFirst ? "lg:col-start-2 lg:row-start-1" : ""}`}
-    >
+    <div className={`hidden lg:block ${marginFirst ? "lg:col-start-2 lg:row-start-1" : ""}`}>
       {margin}
     </div>
   );
@@ -158,11 +139,7 @@ export function Cite({ provenance }: { provenance?: Provenance | null }) {
     );
   }
   if (provenance?.locator) {
-    return (
-      <span className="num shrink-0 text-[11.5px] text-faint">
-        {provenance.locator}
-      </span>
-    );
+    return <span className="num shrink-0 text-[11.5px] text-faint">{provenance.locator}</span>;
   }
   return null;
 }

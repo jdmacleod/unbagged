@@ -30,10 +30,7 @@ function Version() {
   const health = useAsync(() => api.health(), []);
   if (!health.data?.version) return null;
   return (
-    <span
-      className="num sm:ml-auto"
-      title="The version of unbagged serving this page"
-    >
+    <span className="num sm:ml-auto" title="The version of unbagged serving this page">
       v{health.data.version}
     </span>
   );
@@ -157,12 +154,7 @@ export function productQuery(entry: Pick<IndexEntry, "upc" | "match_name">): str
 }
 
 export function isSameEntry(a: View, b: View): boolean {
-  return (
-    a.tab === b.tab &&
-    a.request === b.request &&
-    a.query === b.query &&
-    a.label === b.label
-  );
+  return a.tab === b.tab && a.request === b.request && a.query === b.query && a.label === b.label;
 }
 
 /**
@@ -181,9 +173,7 @@ export function announceUpload(result: UploadResult): string {
       `${s.identities} identifiers, ${s.inferences} inferred attributes.`,
   ];
   if (result.warnings.length > 0)
-    parts.push(
-      `${result.warnings.length} warning${result.warnings.length === 1 ? "" : "s"}.`,
-    );
+    parts.push(`${result.warnings.length} warning${result.warnings.length === 1 ? "" : "s"}.`);
   return parts.join(" ");
 }
 
@@ -215,9 +205,7 @@ export default function App() {
   // The response an upload just created, held until the request list has been
   // read again — `asOf` records the read count at the moment the upload landed,
   // so "again" is checkable rather than guessed at. See `resolveCurrent`.
-  const [settling, setSettling] = useState<{ id: number; asOf: number } | null>(
-    null,
-  );
+  const [settling, setSettling] = useState<{ id: number; asOf: number } | null>(null);
   // The report panel, so an upload that lands can put the reader on it.
   const reportRef = useRef<HTMLDivElement>(null);
   // True while a parse is in flight, hoisted out of `Upload` because two things
@@ -295,9 +283,7 @@ export default function App() {
     if (!lastUpload || requests.error !== null || settling !== null) return;
     if (requests.loading) return;
     const present = rows.some(
-      (r) =>
-        r.id === lastUpload.request_id &&
-        r.retailer_id === lastUpload.retailer_id,
+      (r) => r.id === lastUpload.request_id && r.retailer_id === lastUpload.retailer_id,
     );
     if (!present) setLastUpload(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -342,11 +328,7 @@ export default function App() {
   const liveUpload =
     lastUpload &&
     (settling?.id === lastUpload.request_id ||
-      rows.some(
-        (r) =>
-          r.id === lastUpload.request_id &&
-          r.retailer_id === lastUpload.retailer_id,
-      ))
+      rows.some((r) => r.id === lastUpload.request_id && r.retailer_id === lastUpload.retailer_id))
       ? lastUpload
       : null;
 
@@ -658,12 +640,9 @@ export default function App() {
     // to fill a 27-inch display, because a document does not. See DESIGN.md.
     <div className="mx-auto min-h-screen max-w-[64rem] bg-page px-6 py-10 sm:px-12">
       <header>
-        <h1 className="font-serif text-[26px] leading-none font-semibold">
-          unbagged
-        </h1>
+        <h1 className="font-serif text-[26px] leading-none font-semibold">unbagged</h1>
         <p className="mt-2 max-w-[62ch] text-muted">
-          Read what the grocery store knows about you. Nothing leaves this
-          machine.
+          Read what the grocery store knows about you. Nothing leaves this machine.
         </p>
       </header>
 
@@ -699,9 +678,7 @@ export default function App() {
                   and did not exist at all on touch. They also carry the only
                   thing distinguishing Products from Prices, which are adjacent
                   and are both lists of things you bought. */}
-              <span className="block text-[10.5px] leading-tight text-faint">
-                {t.hint}
-              </span>
+              <span className="block text-[10.5px] leading-tight text-faint">{t.hint}</span>
             </button>
           ))}
           {rows.length > 1 && (
@@ -752,14 +729,12 @@ export default function App() {
             </button>
           }
         >
-          The list of responses could not be re-read: {requests.error}. What is
-          below is the last list that loaded, and the response you are reading is
-          unaffected.
+          The list of responses could not be re-read: {requests.error}. What is below is the last
+          list that loaded, and the response you are reading is unaffected.
         </Caveat>
       )}
 
       <main>
-
         <ErrorBoundary resetKey={`${tab}:${current ?? ""}`}>
           {/* `firstLoad`, not `loading`. A reload has something on screen already,
               and replacing it with "Looking for stored responses" says the app has
@@ -855,7 +830,6 @@ export default function App() {
               )}
             </>
           )}
-
         </ErrorBoundary>
       </main>
 
@@ -912,10 +886,7 @@ export default function App() {
                   // navigation — and because pushing here is what left `?r=7`
                   // one Back press away, naming the response just deleted. See
                   // `go`. Issue #61.
-                  go(
-                    { request: null, query: null, label: null },
-                    { replace: true },
-                  );
+                  go({ request: null, query: null, label: null }, { replace: true });
                   // The upload panel needs no clearing here: `liveUpload`
                   // already hides a report whose response is gone, and only
                   // that one. Clearing on any removal — which this did — threw
@@ -931,8 +902,8 @@ export default function App() {
 
       <footer className="mt-10 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-rule pt-4 text-[11.5px] text-faint">
         <span className="max-w-[62ch]">
-          unbagged reports what a response contained and what it did not. Not
-          legal advice. Nothing is ever sent anywhere.
+          unbagged reports what a response contained and what it did not. Not legal advice. Nothing
+          is ever sent anywhere.
         </span>
         <Version />
       </footer>

@@ -23,13 +23,7 @@ describe("categoryIndex", () => {
   });
 
   it("stays inside the palette", () => {
-    for (const key of [
-      "",
-      "00318",
-      "SIMPLE TRUTH ORG LEMON 6CT",
-      "ééé",
-      "0".repeat(500),
-    ]) {
+    for (const key of ["", "00318", "SIMPLE TRUTH ORG LEMON 6CT", "ééé", "0".repeat(500)]) {
       const i = categoryIndex(key);
       expect(i).toBeGreaterThanOrEqual(0);
       expect(i).toBeLessThan(CATEGORY_COUNT);
@@ -44,9 +38,7 @@ describe("categoryIndex", () => {
   });
 
   it("spreads keys across more than one hue", () => {
-    const seen = new Set(
-      ["00318", "00427", "00891", "01102", "02201", "03310"].map(categoryIndex),
-    );
+    const seen = new Set(["00318", "00427", "00891", "01102", "02201", "03310"].map(categoryIndex));
     expect(seen.size).toBeGreaterThan(1);
   });
 });
@@ -178,9 +170,7 @@ describe("assignStoreHues", () => {
     const [a, b] = collidingPair;
     const forward = assignStoreHues([a, b]);
     const backward = assignStoreHues([b, a]);
-    expect([...forward.entries()].sort()).toEqual(
-      [...backward.entries()].sort(),
-    );
+    expect([...forward.entries()].sort()).toEqual([...backward.entries()].sort());
   });
 
   it("gives every key a hue inside the palette", () => {
@@ -213,9 +203,7 @@ describe("assignStoreHues", () => {
 
   const anyIndistinguishable = (hues: Map<string, number>) => {
     const got = [...hues.values()];
-    return INDISTINGUISHABLE_PAIRS.some(([x, y]) =>
-      got.includes(x) && got.includes(y),
-    );
+    return INDISTINGUISHABLE_PAIRS.some(([x, y]) => got.includes(x) && got.includes(y));
   };
 
   it("resolves a colliding pair into hues that are far apart, not merely different", () => {
@@ -254,9 +242,7 @@ describe("assignStoreHues", () => {
     // A basket can carry a store code that stats.stores excludes, because that
     // query drops nulls. Returning undefined would paint a transparent dot.
     const hues = assignStoreHues(["00318"]);
-    expect(storeVar(hues, "00427")).toBe(
-      `var(--cat-${categoryIndex("00427") + 1})`,
-    );
+    expect(storeVar(hues, "00427")).toBe(`var(--cat-${categoryIndex("00427") + 1})`);
     expect(storeVar(hues, "00318")).toBe(`var(--cat-${hues.get("00318")! + 1})`);
   });
 });

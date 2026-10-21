@@ -68,10 +68,9 @@ export class ErrorBoundary extends Component<Props, State> {
           onRetry={() => this.setState({ message: null })}
         />
         <p className="max-w-[62ch] text-muted">
-          The response itself is still stored and nothing has been lost —
-          this is a fault in drawing it, not in reading it. Try another view, or
-          reload the page. If it keeps happening, the version at the foot of
-          this page is the thing to quote.
+          The response itself is still stored and nothing has been lost — this is a fault in drawing
+          it, not in reading it. Try another view, or reload the page. If it keeps happening, the
+          version at the foot of this page is the thing to quote.
         </p>
       </div>
     );

@@ -24,18 +24,13 @@ export function Profile({ requestId }: { requestId: number }) {
   if (profile.error) return <ErrorBox error={profile.error} />;
   if (!profile.data) return <Spinner label="Reading the profile" />;
 
-  const { identities, inferences_by_origin, household_scoped_count } =
-    profile.data;
+  const { identities, inferences_by_origin, household_scoped_count } = profile.data;
   const mine = inferences_by_origin.first_party_model ?? [];
   const bought = inferences_by_origin.appended_third_party ?? [];
   const unclear = inferences_by_origin.unknown ?? [];
 
   if (identities.length === 0 && mine.length === 0 && bought.length === 0) {
-    return (
-      <Empty>
-        This response contained no identifiers or inferred attributes.
-      </Empty>
-    );
+    return <Empty>This response contained no identifiers or inferred attributes.</Empty>;
   }
 
   return (
@@ -45,11 +40,7 @@ export function Profile({ requestId }: { requestId: number }) {
         blurb="The separate keys this retailer holds for you. Each one is another way
                to find you in their systems."
         count={identities.length}
-        marginalia={
-          scopeNote(identities) ? (
-            <Aside>{scopeNote(identities)}</Aside>
-          ) : undefined
-        }
+        marginalia={scopeNote(identities) ? <Aside>{scopeNote(identities)}</Aside> : undefined}
       >
         {identities.length === 0 ? (
           <Empty>No identifiers were found in this response.</Empty>
@@ -77,9 +68,8 @@ export function Profile({ requestId }: { requestId: number }) {
           marginalia={<Aside>none disclosed</Aside>}
         >
           <Empty>
-            That is what the response contained, not what this tool could read.
-            A retailer holding inferences it never disclosed looks exactly like
-            this, which is worth knowing.
+            That is what the response contained, not what this tool could read. A retailer holding
+            inferences it never disclosed looks exactly like this, which is worth knowing.
           </Empty>
         </Movement>
       )}
@@ -100,9 +90,7 @@ export function Profile({ requestId }: { requestId: number }) {
         </Movement>
       )}
 
-      {bought.length > 0 && (
-        <Bought inferences={bought} householdCount={household_scoped_count} />
-      )}
+      {bought.length > 0 && <Bought inferences={bought} householdCount={household_scoped_count} />}
 
       {unclear.length > 0 && (
         <Movement
@@ -193,10 +181,7 @@ function Aside({ children }: { children: React.ReactNode }) {
 function Cite({ provenance }: { provenance: Provenance }) {
   if (!provenance?.page) return null;
   return (
-    <span
-      className="num shrink-0 text-[11.5px] text-faint"
-      title={provenance.locator ?? undefined}
-    >
+    <span className="num shrink-0 text-[11.5px] text-faint" title={provenance.locator ?? undefined}>
       p.{provenance.page}
     </span>
   );
@@ -205,13 +190,8 @@ function Cite({ provenance }: { provenance: Provenance }) {
 function IdentityRow({ identity }: { identity: Identity }) {
   return (
     <li className="flex items-baseline gap-4 border-b border-rule py-2.5">
-      <span className="w-40 shrink-0 text-muted">
-        {humanise(identity.id_type)}
-      </span>
-      <span
-        className="num min-w-0 flex-1 truncate text-[12.5px]"
-        title={identity.value}
-      >
+      <span className="w-40 shrink-0 text-muted">{humanise(identity.id_type)}</span>
+      <span className="num min-w-0 flex-1 truncate text-[12.5px]" title={identity.value}>
         {identity.value}
       </span>
       {/* A word, not a coloured pill. Colour is reserved for provenance. */}
@@ -242,18 +222,13 @@ function Derived({ inference }: { inference: Inference }) {
         <div className="flex items-baseline gap-2">
           <span>{humanise(inference.label)}</span>
           {inference.subject === "household" && (
-            <span
-              className="text-faint italic"
-              title="Describes your household, not you."
-            >
+            <span className="text-faint italic" title="Describes your household, not you.">
               household
             </span>
           )}
         </div>
         {inference.scale && (
-          <div className="mt-0.5 text-[11.5px] text-faint">
-            {humanise(inference.scale)}
-          </div>
+          <div className="mt-0.5 text-[11.5px] text-faint">{humanise(inference.scale)}</div>
         )}
         {pct !== null && (
           <div className="mt-1.5 h-0.5 max-w-md bg-rule">
@@ -313,9 +288,9 @@ function Bought({
                 What they bought about you
               </h2>
               <p className="mt-0.5 max-w-[62ch] text-foreign/85">
-                Nothing in a grocery basket says how long you have lived at your
-                address or whether you will take a cruise. These were obtained
-                elsewhere, and the response does not say from whom.
+                Nothing in a grocery basket says how long you have lived at your address or whether
+                you will take a cruise. These were obtained elsewhere, and the response does not say
+                from whom.
               </p>
             </div>
           </div>
@@ -328,9 +303,8 @@ function Bought({
 
           {householdCount > 0 && (
             <p className="mt-5 max-w-[62ch] text-foreign/85">
-              {householdCount} of these describe your <strong>household</strong>{" "}
-              rather than you, which means they describe people who never signed
-              up for anything.
+              {householdCount} of these describe your <strong>household</strong> rather than you,
+              which means they describe people who never signed up for anything.
             </p>
           )}
         </div>
@@ -348,14 +322,10 @@ function BoughtEntry({ inference }: { inference: Inference }) {
   return (
     <li className="border-b border-foreign-rule py-2">
       <div className="flex items-baseline gap-2">
-        <span className="min-w-0 flex-1 text-[12px]">
-          {humanise(inference.label)}
-        </span>
+        <span className="min-w-0 flex-1 text-[12px]">{humanise(inference.label)}</span>
         <Cite provenance={inference.provenance} />
       </div>
-      <div className="num text-[12.5px] text-foreign">
-        {inference.value_raw}
-      </div>
+      <div className="num text-[12.5px] text-foreign">{inference.value_raw}</div>
       {/* The honest field value, and the whole point of the view. Repeated on
           purpose: an inventory that keeps saying the same thing lands harder
           than one badge would. */}

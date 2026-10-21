@@ -206,6 +206,10 @@ jobs:
         with:
           python-version: "3.12"
       - uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd  # v3.0.1
+        env:
+          # The UI's hooks run from frontend/node_modules, which this job does not
+          # install; the frontend job runs both with it (format:check and lint).
+          SKIP: prettier,eslint
       # Manual stage: the formatters own most of what it checks in the files they
       # cover, so it runs here rather than on every commit (CODING_STANDARDS.md).
       - name: editorconfig-checker
@@ -226,6 +230,8 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+        working-directory: frontend
+      - run: npm run format:check
         working-directory: frontend
       - run: npm run build
         working-directory: frontend

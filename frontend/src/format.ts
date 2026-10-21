@@ -14,8 +14,7 @@ export const number = (value: number | null | undefined) =>
  *  exactly as given. Parsing it as UTC would move an evening shop to the next
  *  day; see the Kroger adapter's NOTES.md. */
 export const day = (iso: string | null | undefined) => iso?.slice(0, 10) ?? "—";
-export const clock = (iso: string | null | undefined) =>
-  iso?.slice(11, 16) ?? "";
+export const clock = (iso: string | null | undefined) => iso?.slice(11, 16) ?? "";
 export const dayAndTime = (iso: string | null | undefined) =>
   iso ? `${day(iso)} ${clock(iso)}`.trim() : "—";
 
@@ -34,9 +33,7 @@ export const saving = (value: number | null | undefined) =>
   value === null || value === undefined ? "—" : value ? `−${money(value)}` : "";
 
 export const percent = (value: number | null | undefined) =>
-  value === null || value === undefined
-    ? "—"
-    : `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
+  value === null || value === undefined ? "—" : `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
 
 /** "householdComposition" -> "Household composition", "ordinal_1_7" -> "Ordinal 1-7" */
 export const humanise = (label: string) => {
@@ -69,16 +66,13 @@ export const humanise = (label: string) => {
  *  different predicates over the same vocabulary, and collapsing them would
  *  make the axis lie about what it is measuring.
  */
-export const paidWord = (linesDisclosed: boolean) =>
-  linesDisclosed ? "paid" : "spent";
+export const paidWord = (linesDisclosed: boolean) => (linesDisclosed ? "paid" : "spent");
 
 /** The headline figure and the Compare row: "Total paid" / "Total spent". */
-export const paidLabel = (linesDisclosed: boolean) =>
-  `Total ${paidWord(linesDisclosed)}`;
+export const paidLabel = (linesDisclosed: boolean) => `Total ${paidWord(linesDisclosed)}`;
 
 /** The month bar axis, which is lower case and says what it is per: "spent, by month". */
-export const barAxisLabel = (anyItemised: boolean) =>
-  `${paidWord(anyItemised)}, by month`;
+export const barAxisLabel = (anyItemised: boolean) => `${paidWord(anyItemised)}, by month`;
 
 /** Stable categorical colour for a key.
  *
@@ -178,9 +172,7 @@ export function assignStoreHues(keys: string[]): Map<string, number> {
   const moved: string[] = [];
 
   const clears = (hue: number) =>
-    taken.every(
-      (t) => t !== hue && HUE_DISTANCE[hue][t] >= INDISTINGUISHABLE,
-    );
+    taken.every((t) => t !== hue && HUE_DISTANCE[hue][t] >= INDISTINGUISHABLE);
 
   for (const key of [...new Set(keys)].sort()) {
     const wanted = categoryIndex(key);
@@ -202,9 +194,7 @@ export function assignStoreHues(keys: string[]): Map<string, number> {
     }
     // Furthest from everything already on screen. SPREAD_ORDER is the input
     // order, so an exact tie resolves the same way every time.
-    const best = free.reduce((a, b) =>
-      nearest(taken, b) > nearest(taken, a) ? b : a,
-    );
+    const best = free.reduce((a, b) => (nearest(taken, b) > nearest(taken, a) ? b : a));
     taken.push(best);
     assigned.set(key, best);
   }
@@ -214,10 +204,7 @@ export function assignStoreHues(keys: string[]): Map<string, number> {
 
 /** Distance from `hue` to the closest hue already assigned. */
 function nearest(taken: number[], hue: number): number {
-  return taken.reduce(
-    (min, t) => Math.min(min, HUE_DISTANCE[hue][t]),
-    Number.POSITIVE_INFINITY,
-  );
+  return taken.reduce((min, t) => Math.min(min, HUE_DISTANCE[hue][t]), Number.POSITIVE_INFINITY);
 }
 
 /** The CSS variable for an assigned index, or for a key with no assignment.
