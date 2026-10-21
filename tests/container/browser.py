@@ -280,8 +280,28 @@ def return_to_tab(page) -> None:
     for the event, not for the reason behind it. This is the only trigger the
     suite has for the cross-tab refresh, so it is worth naming once rather than
     spelling the JS out at each call site.
+
+    **Returns only once the app has actually re-read the list.** The app skips
+    the event while a read is already in flight, which is right for a user
+    flapping between tabs and wrong for a test: an upload is followed by its own
+    re-read, and an event fired during it was ignored, so the read the test was
+    about never happened and its wait timed out 30 s later. It failed about one
+    run in three, on whichever test lost the race. So the event is fired again,
+    as a reader coming back again would, until a read goes out.
     """
-    page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
+    def is_list_read(request) -> bool:
+        return request.method == "GET" and urlparse(request.url).path == "/api/requests"
+
+    for _ in range(30):
+        try:
+            with page.expect_request(is_list_read, timeout=1_000):
+                page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+        except PlaywrightTimeoutError:
+            continue
+        return
+    raise AssertionError("returning to the tab never re-read the request list")
 
 
 def showing(page, retailer: str) -> None:
