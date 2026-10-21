@@ -150,11 +150,11 @@ exports what is on screen, filters included.
 | Retailer | State |
 |---|---|
 | Kroger | Full adapter — purchases, identity graph, inferred attributes, disclosures |
-| Safeway (Albertsons) | Stub. Expectations recorded in its `NOTES.md`; no real response seen |
+| Albertsons (Safeway, Vons and sister banners) | Full adapter — a report PDF with the loyalty profile and identifiers, and a workbook of line items with quantities, plus the attributes the retailer labels inferred |
 | H Mart | Full adapter — a spreadsheet export of basket totals, plus screen captures of its receipt viewer where those were supplied, which carry the line items the spreadsheet does not |
 | Anything else | Fallback: read as text, disclosures recorded, no data extracted |
 
-Kroger and H Mart are the two full adapters because they are the two formats anyone
+Kroger, H Mart and Albertsons are the full adapters because they are the formats anyone
 has had a real response for. A retailer with no adapter still works: the fallback
 reads the response as text and records what it did and did not address, since a
 letter with no data in it is itself the finding.

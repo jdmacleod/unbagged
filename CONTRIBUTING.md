@@ -179,6 +179,19 @@ generator is deterministic under a fixed seed, uses reserved-for-fiction values 
 phone prefixes, `example.com` domains, addresses that do not resolve), and its output is
 verified by the same scanner that guards the rest of the tree.
 
+**A fixture the scanner cannot read is generated where it is used, not committed.**
+Albertsons answers with an `.xlsx`, a zip of XML that `scan_pii.py` cannot see into, so
+committing one would put an unreviewed file in the one directory the scanner trusts.
+Its generator commits the text half of the response and exposes `build_workbook(seed)`
+for tests to call. Do the same for any other binary response format.
+
+**A fabricated date that matches a real one is a finding, not noise.** `make denylist`
+puts every visit date from a real response on the denylist, so a fixture date that
+happens to land on a day you shopped is reported as a leak — correctly, since nothing
+distinguishes the two. Move the generator's dates rather than suppressing the line, and
+say nothing in the generator about why the new ones were chosen: a comment that a
+window avoids your shopping history describes your shopping history.
+
 Screenshots in the README and docs come from synthetic fixtures only, and
 `make screenshots` is the only way they are made. It starts its own container on a
 scratch directory, ingests the fixture and deletes the directory, so it cannot

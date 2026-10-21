@@ -52,10 +52,107 @@ No migration runs and nothing needs re-reading. Not a PATCH.
 
 ## [Unreleased]
 
-Repo tooling and documentation only. Nothing about the application changed, so
-there is no version behind this yet.
+A new retailer, and a new kind of spreadsheet read.
+
+**This can change what a response you have already loaded shows, in three
+narrow cases.** Products and Prices now count a line with no shelf price by what
+was paid, so a Kroger line whose shelf amount could not be read but whose paid
+amount could is now listed where it was left out before. An H Mart response with
+no itemised visits no longer shows a saving column that was a dash on every
+row. And an H Mart receipt's line-item totals now sit under their own headings.
+No migration runs and nothing needs re-reading.
+
+### Added
+
+- **Albertsons responses are read.** Albertsons Companies answers for every
+  banner it runs — Albertsons, Safeway, Vons and the rest — with two files: a
+  report PDF holding the request details, a loyalty profile, consent
+  preferences and a points event, and a workbook holding every line item on the
+  card and a sheet of attributes the retailer labels inferred. Either may be
+  uploaded alone; the two are read as one response when uploaded together.
+
+  Lines carry a **quantity**, which Kroger's export does not, and a weight for
+  items sold by the pound. The amount is what the line cost after every
+  markdown, so it is recorded as the price paid with no shelf price beside it.
+
+  Two findings are raised as follow-ups when the response shows them: a loyalty
+  profile registered to a different first name than the request was made in,
+  and a purchase history that ends long before the request while the report
+  itself dates household activity after it. The response's statement of what it
+  withheld is quoted.
+
+  Uploaded alone, the workbook grades only the specific pieces it holds; the
+  categories that depend on the report's prose are left ungraded, shown as not
+  assessed, rather than recorded as unaddressed by the retailer. Compliance
+  counts those as neither answered nor absent, and Compare leaves the count of
+  categories not addressed blank rather than claiming none. A
+  department-key ring is kept as a line with no product code, so unrelated
+  items rung under one key are not merged into one product. The name the
+  request was made in is recorded among the identifiers the response holds.
+
+  The package was a stub named `safeway`. It is `albertsons` now, because that
+  is who issues the response; the stub never parsed anything, so no stored
+  report carries the old name.
+
+- **`.xlsx` workbooks are read directly.** Previously an Excel workbook was
+  refused with instructions to re-save it as XML Spreadsheet 2003. The reader is
+  the standard library's zip and XML support, no new dependency, and it returns
+  the same sheets the XML reader does, so an adapter cannot tell which kind it
+  was handed. A workbook is decided by what its package declares rather than by
+  its name. It is refused, as one unreadable file rather than a failed upload,
+  if it inflates past 64 MB, names a column past the last one Excel has, places
+  more than two million cells, carries a document type declaration anywhere in
+  a part's prolog, declares a text encoding that cannot be decoded, refers to a
+  string by a negative position, or has damaged compression. Everything a sheet
+  holds is released as it is read, and what one row may hold is budgeted at
+  every depth beneath it, so memory follows one row rather than the sheet. The
+  XML kind's reader gets the same treatment: it emptied each row but left it
+  attached, and two million empty rows held 468 MB. A password-protected workbook and one saved as Strict
+  Open XML each say what to do; an old binary `.xls` is still refused, with the
+  same advice. The upload picker offers `.xlsx` files, and no longer says an
+  Excel workbook will not do. `unbagged sanitize` reduces an `.xlsx` to its
+  shape, as it already did for the XML kind.
+
+- **Products and Prices work for a response that discloses only what was
+  paid.** Both decided what counts as a purchase by the shelf price alone, so
+  an Albertsons response listed no products and charted no prices over every
+  line item it holds. A line is now judged by its shelf price where there is
+  one and by what was paid where there is not, and the Timeline's product
+  count uses the same rule, so the headline and the page under it agree.
+  Markdowns and refunds still are not purchases. Where no shelf price was
+  disclosed, Prices draws only what you paid and says so, rather than drawing
+  a shelf line out of paid amounts.
+
+- **No loyalty saving is stated where no shelf price was disclosed.** The
+  request totals summed shelf prices over the lines that had one and paid
+  amounts over every line, so a response that discloses only what was paid
+  showed a "saving" of minus everything spent, on Compare and on the Timeline
+  header. Basket rows claimed a full-price saving of zero and the basket detail
+  a negative one. All three now show the shelf total and the saving as not
+  disclosed, and the request totals use the same line-by-line rule as the
+  basket rows, so the header is the sum of the rows under it. Kroger and H Mart
+  figures are unchanged.
+
+- **Prices reads a disclosed quantity.** Where a response says how many a line
+  was for, the price is the line divided by that number, so a line of two plots
+  at the price of one instead of being set aside as a suspected multiple. The
+  tooltip and the amounts list say how many and the price of each. Kroger
+  discloses no quantity and is priced exactly as before. H Mart keeps a
+  receipt's weight in the same field, and one line cannot tell a weight of
+  exactly two pounds from two items, so a response with any fractional quantity
+  is read as holding measures and nothing in it is divided. A product sold by
+  the pound is still recognised by its shape and still not drawn as a price
+  line, and the note about what a line omits now says so for a response that
+  states counts but not weights.
 
 ### Changed
+
+- **The Timeline leaves out shelf and saving columns a response never fills.**
+  A basket whose lines disclose no shelf price shows what was paid and says
+  once that there is no saving to show, instead of a dash in the Shelf and
+  Saved columns on every line; the basket rows drop their saving column when
+  the response states no saving anywhere. The rule is the one the line items
+  already follow for a product code no line carries.
 
 - **The vision model default is documented as the default**, rather than shown
   as one option among several. `minicpm-v4.5:8b` has been the shipped default
@@ -98,6 +195,17 @@ there is no version behind this yet.
   fixtures directory previously passed every gate the repo has.
 
 ### Fixed
+
+- **A basket with no product codes footed its totals one column to the right.**
+  The line-item footer spanned two columns whether or not the code column was
+  shown, so on a receipt that disclosed no codes every total sat under the
+  heading beside its own.
+
+- **The XML spreadsheet reader refuses a document type declaration wherever it
+  sits.** The check was a text scan of the first 4 KB, which a long comment
+  ahead of the declaration got past. It is now asked of the parser, the same
+  guard the `.xlsx` reader uses, and the reader refuses a cell placed past the
+  last column a spreadsheet can have.
 
 - **A product in the H Mart fixture costs about the same each time it is
   bought.** Amounts were drawn independently of the products they were printed
