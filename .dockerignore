@@ -66,8 +66,16 @@ build/
 .coverage
 htmlcov/
 
-node_modules/
+# Depth-qualified like everything above. A bare `node_modules/` matched the
+# root only, so frontend/node_modules — whatever a checkout last installed —
+# was sent and `COPY frontend/ ./` laid it over the tree `npm ci` had just
+# built from the lockfile. An image built on main after installing a branch's
+# dependencies failed in vite; one that built cleanly could still ship
+# packages the lockfile does not name. CI never has a local install, so it
+# could not see this.
+**/node_modules/
+**/*.tsbuildinfo
 frontend/dist/
-.vite/
+**/.vite/
 
 .DS_Store
