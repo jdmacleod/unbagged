@@ -54,13 +54,14 @@ No migration runs and nothing needs re-reading. Not a PATCH.
 
 A new retailer, and a new kind of spreadsheet read.
 
-**This can change what a response you have already loaded shows, in three
+**This can change what a response you have already loaded shows, in four
 narrow cases.** Products and Prices now count a line with no shelf price by what
 was paid, so a Kroger line whose shelf amount could not be read but whose paid
 amount could is now listed where it was left out before. An H Mart response with
 no itemised visits no longer shows a saving column that was a dash on every
-row. And an H Mart receipt's line-item totals now sit under their own headings.
-No migration runs and nothing needs re-reading.
+row. An H Mart receipt's line-item totals now sit under their own headings. And
+a carrier-bag fee leaves Products and is counted as set aside, as a container
+deposit already was. No migration runs and nothing needs re-reading.
 
 ### Added
 
@@ -146,6 +147,12 @@ No migration runs and nothing needs re-reading.
   states counts but not weights.
 
 ### Changed
+
+- **A bag fee is a charge, not a product.** Products now sets a carrier-bag fee
+  aside and counts it under the headline, as it does a container deposit or a
+  tax row, instead of listing it as something you bought. Which kinds of line
+  leave the index, and which of them the page counts, is now written down in one
+  place (#100, #105).
 
 - **The Timeline leaves out shelf and saving columns a response never fills.**
   A basket whose lines disclose no shelf price shows what was paid and says

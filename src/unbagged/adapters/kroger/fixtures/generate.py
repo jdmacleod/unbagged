@@ -45,10 +45,10 @@ PLACEHOLDER_DESCRIPTION = "UNKNOWN"
 PLACEHOLDER_UPC = "00010000080000"  # pii-scan: allow placeholder UPC, not an identifier
 
 #: The itemised statutory fee that the stated basket total leaves out. Its own
-#: UPC so it cannot collide with a product draw, and a name of its own so the
-#: Products index shows what it is rather than burying it — it is a charge the
-#: receipt made, and a reader should be able to see the fee that stopped the
-#: basket adding up.
+#: UPC so it cannot collide with a product draw. It is a charge the receipt
+#: made, not a thing bought, so Products sets it aside and says so (#105) — and
+#: it is what makes that set-aside count reachable from this fixture (#104).
+#: The Timeline still shows it, where it explains the basket that does not add up.
 BAG_FEE_DESCRIPTION = "CARRYOUT BAG FEE"
 #: 14 digits, which is the same width as `cardNumberWithCD` and therefore
 #: indistinguishable in shape from a payment card. Chosen to FAIL a Luhn check,
@@ -64,6 +64,16 @@ BAG_FEE_UPC = "00099000010002"  # pii-scan: allow fee UPC, not an identifier
 #: stated total, 18 falling short of it. Expressed as shares so the fixture's
 #: larger basket count lands on the same proportions.
 OVER_SHARE = 2 / 54
+
+#: A container deposit with its own price printed into the name field, as the
+#: views' label cleaner documents (`$0.05 CRV DEPOSIT`). No code. Set aside by
+#: Products through both the price-prefix and the vocabulary paths (#104).
+DEPOSIT_DESCRIPTION = "$0.05 CRV DEPOSIT"
+DEPOSIT_SHARE = 0.08
+#: A product whose printed name starts with stray punctuation, as the label
+#: cleaner also documents (`(CHINESE BROCCOLI`). The code still identifies it;
+#: only the label is cleaned (#104).
+STRAY_PUNCTUATION_SHARE = 0.03
 UNDER_SHARE = 18 / 54
 
 #: Discount depths and their weights. The depths are invented; the two figures
@@ -663,6 +673,35 @@ def _pick(rng: random.Random, seen: set[str] | None = None) -> tuple[str, str, f
     return None
 
 
+def _deposits_and_strays(index: int, items: list[dict]) -> list[dict]:
+    """The label shapes Products has to set aside or clean (#104).
+
+    A stray bracket is added in place. A deposit line is returned rather than
+    appended, for the caller to add after the basket is shuffled: the shuffle
+    draws once per line, so a longer list there would move every draw after
+    it. Drawn from a stream of their own, seeded per basket, for the same
+    reason — no existing product, total or footing outcome changes.
+    """
+    rng = random.Random(index * 7919 + 13)
+    deposits = []
+    if rng.random() < DEPOSIT_SHARE:
+        deposits.append(
+            {
+                "purchasedescription": DEPOSIT_DESCRIPTION,
+                "productupc": "",
+                "retailamt": "0.05",
+                "customerloyamt": "0.05",
+            }
+        )
+    if rng.random() < STRAY_PUNCTUATION_SHARE:
+        product = next(
+            (i for i in items if i["productupc"] not in ("", PLACEHOLDER_UPC, BAG_FEE_UPC)), None
+        )
+        if product is not None:
+            product["purchasedescription"] = "(" + product["purchasedescription"]
+    return deposits
+
+
 def _basket(rng: random.Random, when: datetime, index: int, origin: datetime) -> dict:
     items = []
     total = 0.0
@@ -756,6 +795,9 @@ def _basket(rng: random.Random, when: datetime, index: int, origin: datetime) ->
             }
         )
 
+    deposits = _deposits_and_strays(index, items)
+    total += sum(float(line["retailamt"]) for line in deposits)
+
     # What the retailer says the basket came to, which is not always what its
     # own lines come to. Measured across one real response: 34 of 54 baskets
     # reconciled to the cent, 2 had lines exceeding the stated total, and 18 fell
@@ -795,6 +837,7 @@ def _basket(rng: random.Random, when: datetime, index: int, origin: datetime) ->
         stated = round(total * (1 + rng.uniform(0.005, 0.065)), 2)
 
     rng.shuffle(items)
+    items.extend(deposits)
     return {
         # A US-format date with a zeroed time welded on, and the real clock in a
         # separate field — exactly as observed. Concatenating the two naively
