@@ -238,6 +238,8 @@ No migration runs and nothing needs re-reading.
 
 ### Development
 
+- **A response of many screen captures asks the OCR engine its version once**,
+  not once per capture (#84). Nothing else about reading captures changes.
 - **Coding standards have one home.** `CODING_STANDARDS.md` names the tool
   behind every formatting, lint and commit rule, and `CLAUDE.md` and
   `CONTRIBUTING.md` point at it rather than restating it.

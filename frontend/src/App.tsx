@@ -818,8 +818,9 @@ export default function App() {
                       // so a name filter opens a timeline claiming more visits
                       // "included" the product than actually did. Where the
                       // retailer disclosed no codes there is no exact handle to
-                      // use, so the name goes through and `exact` tells the
-                      // timeline to stop claiming the stronger thing.
+                      // use, so the name goes through as both query and label,
+                      // and Timeline reads that equality as an inexact match:
+                      // its banner stops claiming "the ones that included" it.
                       // The QUERY is the printed spelling, the LABEL is the one
                       // on screen. See `productQuery` for why.
                       query: productQuery(entry),

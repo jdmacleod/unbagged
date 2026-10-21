@@ -14,6 +14,7 @@ be locked, hashed, audited and upgraded for no behaviour of its own.
 from __future__ import annotations
 
 import csv
+import functools
 import io
 import logging
 import shutil
@@ -23,7 +24,8 @@ from dataclasses import dataclass
 log = logging.getLogger(__name__)
 
 #: The OCR engine's own name. Not configurable: a second engine would read
-#: differently, and a transcript is cached under the name of what produced it.
+#: differently, and every transcript records the name and version of what
+#: produced it. Nothing caches transcripts (issue #84 decided against it).
 ENGINE = "tesseract"
 
 #: Page segmentation mode 6 — "a single uniform block of text".
@@ -90,8 +92,14 @@ def available() -> bool:
     return shutil.which(ENGINE) is not None
 
 
+@functools.cache
 def version() -> str | None:
-    """The engine's version string, or None if it will not run."""
+    """The engine's version string, or None if it will not run.
+
+    Asked once per process. It was asked once per capture, spawning
+    `tesseract --version` each time, and the installed engine cannot change
+    under a running process.
+    """
     if not available():
         return None
     try:

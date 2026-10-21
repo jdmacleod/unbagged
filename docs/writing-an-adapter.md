@@ -133,7 +133,7 @@ Everything short of that is a warning plus a skipped record.
 ## Provenance in practice
 
 A `locator` is format-specific and opaque to everything except you and the human
-reading it: a JSON path, a line range, a CSV cell reference. Whatever lets
+reading it: a JSON path, a line range, a spreadsheet cell reference. Whatever lets
 someone find the value again.
 
 `page` is the printed page number where the format has one. That is what someone
