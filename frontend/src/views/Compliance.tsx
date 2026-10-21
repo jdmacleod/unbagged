@@ -39,10 +39,9 @@ export function Compliance() {
 
       <Spine>
         <p className="border-t border-rule pt-4 text-[11.5px] text-muted">
-          This records what a response contained and what it did not. It is not
-          a finding that anyone broke the law, and a retailer may lawfully
-          decline a request it cannot verify. The reasoning, and where the eight
-          categories come from, is in{" "}
+          This records what a response contained and what it did not. It is not a finding that
+          anyone broke the law, and a retailer may lawfully decline a request it cannot verify. The
+          reasoning, and where the eight categories come from, is in{" "}
           <code className="num">docs/legal-basis.md</code>.
         </p>
       </Spine>
@@ -50,13 +49,7 @@ export function Compliance() {
   );
 }
 
-function Retailer({
-  row,
-  categories,
-}: {
-  row: ComplianceRow;
-  categories: string[];
-}) {
+function Retailer({ row, categories }: { row: ComplianceRow; categories: string[] }) {
   const [showLetter, setShowLetter] = useState(false);
   const assessed = categories.length - row.unassessed_count;
   const answered = assessed - row.absent_count;
@@ -105,14 +98,13 @@ function Retailer({
                   : `${row.display_name} addressed every category`}
             </h2>
             <p className="mt-0.5 max-w-[62ch] text-muted">
-              {row.display_name} answered {answered} of {assessed}. An absence
-              here is not a blank: it is a record that the category was asked
-              about and not addressed.
+              {row.display_name} answered {answered} of {assessed}. An absence here is not a blank:
+              it is a record that the category was asked about and not addressed.
               {row.unassessed_count > 0 && (
                 <>
                   {" "}
-                  {row.unassessed_count} could not be assessed from what was
-                  uploaded, and are counted neither way.
+                  {row.unassessed_count} could not be assessed from what was uploaded, and are
+                  counted neither way.
                 </>
               )}
             </p>
@@ -156,9 +148,7 @@ function Retailer({
           aria-expanded={showLetter}
           className="rounded-[2px] border border-line px-3 py-1.5 hover:bg-sunken"
         >
-          {showLetter
-            ? "Hide the draft"
-            : `Draft a follow-up to ${row.display_name}`}
+          {showLetter ? "Hide the draft" : `Draft a follow-up to ${row.display_name}`}
         </button>
         {showLetter && <Letter requestId={row.id} />}
       </Spine>
@@ -209,9 +199,7 @@ function Category({
           rule at a different x depending on how long the category name was,
           which destroys the one effect this layout exists for. */}
       <div className="grid grid-cols-[minmax(0,1fr)_11rem_2.5rem] items-baseline gap-4">
-        <span className={answered ? "" : "text-muted"}>
-          {humanise(category)}
-        </span>
+        <span className={answered ? "" : "text-muted"}>{humanise(category)}</span>
 
         {answered ? (
           <span>{status === "provided" ? "answered" : "answered in part"}</span>
@@ -240,9 +228,7 @@ function Category({
         </p>
       )}
       {cell.notes && cell.notes !== suppressNote && (
-        <p className="mt-1.5 max-w-[62ch] text-[11.5px] text-faint">
-          {cell.notes}
-        </p>
+        <p className="mt-1.5 max-w-[62ch] text-[11.5px] text-faint">{cell.notes}</p>
       )}
     </div>
   );
@@ -265,10 +251,7 @@ export function draftRows(text: string, cap = 8): number {
 }
 
 /** True when the collapsed field is hiding something, wrapping included. */
-function useOverflows(
-  ref: React.RefObject<HTMLTextAreaElement | null>,
-  deps: unknown[],
-) {
+function useOverflows(ref: React.RefObject<HTMLTextAreaElement | null>, deps: unknown[]) {
   const [overflows, setOverflows] = useState(false);
   useEffect(() => {
     const el = ref.current;

@@ -28,9 +28,7 @@ type Metric = {
 export function rowsFor(requests: CompareRow[]): Metric[] {
   const disclosed = requests.filter((r) => r.disclosed);
   const label = paidLabel(disclosed.every((r) => r.lines_disclosed));
-  return ROWS.map((row) =>
-    row.key === "total_paid" ? { ...row, label } : row,
-  );
+  return ROWS.map((row) => (row.key === "total_paid" ? { ...row, label } : row));
 }
 
 const ROWS: Metric[] = [
@@ -125,34 +123,24 @@ export function Compare() {
             know". */}
         {anyDash && (
           <Caveat>
-            An em dash means the response did not disclose that. It is not a
-            zero. A zero appears only where the retailer answered the category
-            in full.
+            An em dash means the response did not disclose that. It is not a zero. A zero appears
+            only where the retailer answered the category in full.
           </Caveat>
         )}
 
         <Sheet requests={requests} pending={!comparable} />
 
         <p className="mt-4 max-w-[62ch] text-[11.5px] text-muted">
-          {!comparable && (
-            <>A blank rule means no response has arrived to fill it in yet. </>
-          )}
-          Categories not addressed is counted for every retailer either way,
-          because what a retailer failed to answer is a finding about that
-          retailer.
+          {!comparable && <>A blank rule means no response has arrived to fill it in yet. </>}
+          Categories not addressed is counted for every retailer either way, because what a retailer
+          failed to answer is a finding about that retailer.
         </p>
       </Spine>
     </div>
   );
 }
 
-function Sheet({
-  requests,
-  pending,
-}: {
-  requests: CompareRow[];
-  pending: boolean;
-}) {
+function Sheet({ requests, pending }: { requests: CompareRow[]; pending: boolean }) {
   // One column per retailer, plus a blank one while there is only the first.
   const cols = `minmax(0,1fr) repeat(${requests.length + (pending ? 1 : 0)}, minmax(7rem, 11rem))`;
 
@@ -166,9 +154,7 @@ function Sheet({
           <span />
           {requests.map((r) => (
             <div key={r.id} className="text-right">
-              <div className="font-serif text-[15px] font-semibold">
-                {r.display_name}
-              </div>
+              <div className="font-serif text-[15px] font-semibold">{r.display_name}</div>
               <div className="num mt-0.5 whitespace-nowrap text-[11px] text-faint">
                 {r.disclosed ? (
                   <>
@@ -196,12 +182,8 @@ function Sheet({
           ))}
           {pending && (
             <div className="text-right">
-              <div className="font-serif text-[15px] font-semibold text-faint">
-                Awaiting
-              </div>
-              <div className="num mt-0.5 text-[11px] text-faint">
-                no response yet
-              </div>
+              <div className="font-serif text-[15px] font-semibold text-faint">Awaiting</div>
+              <div className="num mt-0.5 text-[11px] text-faint">no response yet</div>
             </div>
           )}
         </div>
@@ -212,9 +194,7 @@ function Sheet({
             className="grid items-baseline gap-4 border-b border-rule py-2"
             style={{ gridTemplateColumns: cols }}
           >
-            <span className={row.foreign ? "text-foreign" : "text-muted"}>
-              {row.label}
-            </span>
+            <span className={row.foreign ? "text-foreign" : "text-muted"}>{row.label}</span>
             {requests.map((r) => {
               const value = r[row.key] as number | null;
               const dash = value === null || value === undefined;
@@ -247,10 +227,7 @@ function Sheet({
               <span className="flex justify-end">
                 {/* The blank waiting to be filled in. Same mark as an unanswered
                     disclosure category, same meaning: nothing here yet. */}
-                <span
-                  aria-hidden
-                  className="mt-2 inline-block h-px w-14 bg-line"
-                />
+                <span aria-hidden className="mt-2 inline-block h-px w-14 bg-line" />
                 <span className="sr-only">no response yet</span>
               </span>
             )}

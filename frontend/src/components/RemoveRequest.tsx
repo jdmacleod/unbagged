@@ -46,9 +46,7 @@ export function RemoveRequest({
       onRemoved();
     } catch (caught) {
       setError(
-        caught instanceof ApiError
-          ? caught.message
-          : "Could not remove it. Nothing was changed.",
+        caught instanceof ApiError ? caught.message : "Could not remove it. Nothing was changed.",
       );
     } finally {
       setBusy(false);
@@ -86,13 +84,12 @@ export function RemoveRequest({
             , covering <span className="num text-[12.5px]">{covered}</span>
           </>
         )}
-        ? Its baskets, line items, identifiers, inferred attributes and
-        disclosure findings are deleted from the database, and there is no undo.
+        ? Its baskets, line items, identifiers, inferred attributes and disclosure findings are
+        deleted from the database, and there is no undo.
       </p>
       <p className="mt-1 max-w-[62ch] text-[11.5px] text-faint">
-        The file you uploaded stays on disk in{" "}
-        <code className="num">data/</code>. You can read it again by dropping it
-        back in.
+        The file you uploaded stays on disk in <code className="num">data/</code>. You can read it
+        again by dropping it back in.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <button

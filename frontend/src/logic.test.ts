@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  currentMonthKey,
-  doesNotFoot,
-  fillMonths,
-  monthIndex,
-} from "./views/Timeline";
+import { currentMonthKey, doesNotFoot, fillMonths, monthIndex } from "./views/Timeline";
 import { countOf, scale, tip } from "./views/PriceHistory";
 import { gaugeWidth, scopeNote } from "./views/Profile";
 import { draftRows } from "./views/Compliance";
@@ -12,17 +7,9 @@ import { rowsFor } from "./views/Compare";
 import { nothingWasItemised } from "./views/ProductIndex";
 import { announceUpload, isSameEntry, productQuery, resolveCurrent } from "./App";
 import type { View } from "./App";
-import type {
-  Basket,
-  CompareRow,
-  Identity,
-  Inference,
-  PricePoint,
-  UploadResult,
-} from "./types";
+import type { Basket, CompareRow, Identity, Inference, PricePoint, UploadResult } from "./types";
 
-const basket = (delta: number | null): Basket =>
-  ({ stated_pre_discount_delta: delta }) as Basket;
+const basket = (delta: number | null): Basket => ({ stated_pre_discount_delta: delta }) as Basket;
 
 describe("doesNotFoot", () => {
   it("ignores float noise from summing currency", () => {
@@ -95,11 +82,7 @@ describe("scale", () => {
   it("places points by date, not by position in the array", () => {
     // The reason Recharts was removed: its category axis drew irregular dates
     // at equal spacing, which on a time series is a correctness bug.
-    const pts = [
-      point("2024-01-01", 1),
-      point("2024-01-02", 1),
-      point("2024-12-31", 1),
-    ];
+    const pts = [point("2024-01-01", 1), point("2024-01-02", 1), point("2024-12-31", 1)];
     const s = scale(pts);
     const [a, b, c] = pts.map(s.x);
     expect(b - a).toBeLessThan((c - b) / 10);
@@ -130,10 +113,7 @@ describe("scale", () => {
         unit_retail: null,
         saved_amt: null,
       }) as PricePoint;
-    const s = scale([
-      paidOnly("2024-01-01", 3.5),
-      paidOnly("2024-06-01", 4.25),
-    ]);
+    const s = scale([paidOnly("2024-01-01", 3.5), paidOnly("2024-06-01", 4.25)]);
     expect(s.lo).toBe(3.5);
     expect(s.hi).toBe(4.25);
   });
@@ -302,12 +282,7 @@ describe("fillMonths", () => {
     const filled = fillMonths(
       monthIndex([visit("2023-11-10T10:00:00"), visit("2024-02-10T10:00:00")]),
     );
-    expect(filled.map((m) => m.key)).toEqual([
-      "2023-11",
-      "2023-12",
-      "2024-01",
-      "2024-02",
-    ]);
+    expect(filled.map((m) => m.key)).toEqual(["2023-11", "2023-12", "2024-01", "2024-02"]);
   });
 
   it("is a no-op on an empty roll", () => {
@@ -324,8 +299,7 @@ describe("fillMonths", () => {
 });
 
 describe("currentMonthKey", () => {
-  const marks = (...tops: number[]) =>
-    tops.map((top, i) => ({ key: `m${i}`, top }));
+  const marks = (...tops: number[]) => tops.map((top, i) => ({ key: `m${i}`, top }));
 
   it("names the last month whose mark has passed the threshold", () => {
     // Not the first one still on screen. A month taller than the viewport has
@@ -393,21 +367,15 @@ describe("scopeNote", () => {
   });
 
   it("names a household scope, which covers people who never enrolled", () => {
-    expect(scopeNote([id("household"), id("individual")])).toBe(
-      "1 household-scoped",
-    );
+    expect(scopeNote([id("household"), id("individual")])).toBe("1 household-scoped");
   });
 
   it("reports a mixture rather than rounding it to one answer", () => {
-    expect(scopeNote([id("individual"), id(null)])).toBe(
-      "1 with no scope stated",
-    );
+    expect(scopeNote([id("individual"), id(null)])).toBe("1 with no scope stated");
   });
 
   it("says all individual only when every one of them says so", () => {
-    expect(scopeNote([id("individual"), id("individual")])).toBe(
-      "all individual",
-    );
+    expect(scopeNote([id("individual"), id("individual")])).toBe("all individual");
   });
 });
 
@@ -559,9 +527,7 @@ describe("announceUpload", () => {
     // A low-confidence match is the one case where the retailer named may not
     // be the retailer meant, and it is invisible to someone not looking at the
     // panel.
-    expect(announceUpload(uploaded({ confident: false }))).toContain(
-      "uncertain match",
-    );
+    expect(announceUpload(uploaded({ confident: false }))).toContain("uncertain match");
   });
 
   it("counts warnings rather than reading all of them out", () => {
@@ -595,35 +561,26 @@ describe("announceUpload", () => {
 });
 
 describe("rowsFor", () => {
-  const column = (
-    disclosed: boolean,
-    lines_disclosed: boolean,
-  ): CompareRow =>
+  const column = (disclosed: boolean, lines_disclosed: boolean): CompareRow =>
     ({ id: 1, disclosed, lines_disclosed }) as CompareRow;
 
   const moneyLabel = (requests: CompareRow[]) =>
     rowsFor(requests).find((r) => r.key === "total_paid")!.label;
 
   it("says paid when every disclosed column has line items", () => {
-    expect(moneyLabel([column(true, true), column(true, true)])).toBe(
-      "Total paid",
-    );
+    expect(moneyLabel([column(true, true), column(true, true)])).toBe("Total paid");
   });
 
   it("says spent when any disclosed column has none", () => {
     // The H Mart case beside a Kroger one. "Paid" would claim a summed line
     // amount for a column that only ever carried stated basket totals.
-    expect(moneyLabel([column(true, true), column(true, false)])).toBe(
-      "Total spent",
-    );
+    expect(moneyLabel([column(true, true), column(true, false)])).toBe("Total spent");
   });
 
   it("ignores columns that disclosed nothing at all", () => {
     // Every cell in an undisclosed column is an em dash, so it has no quantity
     // to name and must not drag the word for the columns that do.
-    expect(moneyLabel([column(true, true), column(false, false)])).toBe(
-      "Total paid",
-    );
+    expect(moneyLabel([column(true, true), column(false, false)])).toBe("Total paid");
   });
 
   it("falls back to paid when no column is disclosed", () => {

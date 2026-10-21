@@ -129,12 +129,7 @@ function IndexBody({
   // the filter" with no filter on screen and no escape but a reload. That exact
   // bug shipped once already on Prices.
   const filters = (
-    <Filters
-      q={q}
-      setQ={setQ}
-      minPurchases={minPurchases}
-      setMinPurchases={setMinPurchases}
-    />
+    <Filters q={q} setQ={setQ} minPurchases={minPurchases} setMinPurchases={setMinPurchases} />
   );
 
   // A retailer that answered with a letter disclosed no purchases at all.
@@ -150,18 +145,15 @@ function IndexBody({
   if (!data.disclosed) {
     return (
       <Spine margin={<Aside>no purchase data</Aside>}>
-        <h2 className="font-serif text-[17px] font-semibold">
-          Nothing to show here
-        </h2>
+        <h2 className="font-serif text-[17px] font-semibold">Nothing to show here</h2>
         <p className="mt-2 max-w-[62ch] text-muted">
-          This response contained no purchase data, so there are no products to
-          list. That is not the same as having bought nothing: the retailer did
-          not disclose the specific pieces of personal information it holds.
+          This response contained no purchase data, so there are no products to list. That is not
+          the same as having bought nothing: the retailer did not disclose the specific pieces of
+          personal information it holds.
         </p>
         <p className="mt-2 max-w-[62ch] text-muted">
-          The absence is recorded as a finding in the{" "}
-          <strong>Compliance</strong> view, which is where a response like this
-          is worth reading.
+          The absence is recorded as a finding in the <strong>Compliance</strong> view, which is
+          where a response like this is worth reading.
         </p>
       </Spine>
     );
@@ -170,13 +162,11 @@ function IndexBody({
   if (nothingWasItemised(data)) {
     return (
       <Spine margin={<Aside>no line items</Aside>}>
-        <h2 className="font-serif text-[17px] font-semibold">
-          No products to list
-        </h2>
+        <h2 className="font-serif text-[17px] font-semibold">No products to list</h2>
         <p className="mt-1 mb-4 max-w-[62ch] text-muted">
-          This retailer disclosed what each visit cost and never what was in it,
-          so there are no products to list. What they did disclose is on the
-          Timeline; what they did not is in <strong>Compliance</strong>.
+          This retailer disclosed what each visit cost and never what was in it, so there are no
+          products to list. What they did disclose is on the Timeline; what they did not is in{" "}
+          <strong>Compliance</strong>.
         </p>
       </Spine>
     );
@@ -212,10 +202,7 @@ function IndexBody({
           </Empty>
         </Spine>
       ) : (
-        <Spine
-          marginFirst
-          margin={<Rail letters={letters} tiers={data.tiers} />}
-        >
+        <Spine marginFirst margin={<Rail letters={letters} tiers={data.tiers} />}>
           {/* Below lg the margin does not exist, so the rail comes inline as a
               strip. Without this the jump control and the legend simply vanish
               on a phone, which is how a fix has been silently lost here before. */}
@@ -240,9 +227,8 @@ function IndexBody({
 
           {data.truncated && (
             <p className="num mt-4 max-w-[62ch] text-[11.5px] text-faint">
-              Showing {number(data.limit)} of {number(data.product_count)}{" "}
-              products. The rest are in the response; this page stops here so it
-              stays readable.
+              Showing {number(data.limit)} of {number(data.product_count)} products. The rest are in
+              the response; this page stops here so it stays readable.
             </p>
           )}
 
@@ -256,9 +242,7 @@ function IndexBody({
         </Spine>
       )}
 
-      {stopped.length > 0 && (
-        <Stopped entries={stopped} staleBefore={data.stale_before} />
-      )}
+      {stopped.length > 0 && <Stopped entries={stopped} staleBefore={data.stale_before} />}
     </div>
   );
 }
@@ -290,9 +274,7 @@ function SaveIndex({ data }: { data: Index }) {
   if (data.products.length === 0) return null;
 
   const coverage = () => {
-    const seen = data.products
-      .flatMap((p) => [p.first_seen, p.last_seen])
-      .filter(Boolean);
+    const seen = data.products.flatMap((p) => [p.first_seen, p.last_seen]).filter(Boolean);
     if (seen.length === 0) return "";
     return `${seen.reduce((a, b) => (a < b ? a : b)).slice(0, 7)} \u2192 ${seen
       .reduce((a, b) => (a > b ? a : b))
@@ -315,10 +297,7 @@ function SaveIndex({ data }: { data: Index }) {
   }
 
   return (
-    <button
-      onClick={save}
-      className="rounded-[2px] border border-line px-3 py-1.5 hover:bg-sunken"
-    >
+    <button onClick={save} className="rounded-[2px] border border-line px-3 py-1.5 hover:bg-sunken">
       {saved ? "Saved" : "Save as an image"}
     </button>
   );
@@ -369,8 +348,8 @@ function Headline({ data }: { data: Index }) {
               covered two years and stated it as a fact about every other one.
               The window is on the Timeline, measured; it is not restated here
               where nothing checks it. */}
-          Your groceries, in the retailer&rsquo;s own words. Size is how often
-          you bought it, in five steps. Most of this page is one trip.
+          Your groceries, in the retailer&rsquo;s own words. Size is how often you bought it, in
+          five steps. Most of this page is one trip.
         </p>
         {/* Said out loud, because the count above moved. A deposit line and a
             tax row are charges the receipt made, not things anybody chose, and
@@ -384,10 +363,8 @@ function Headline({ data }: { data: Index }) {
                 charged on nine visits is one entry that is not a product, and
                 calling it nine lines would describe a subtraction the total
                 never made. Caught by review on #102. */}
-            {number(data.set_aside)}{" "}
-            {data.set_aside === 1 ? "entry was" : "entries were"} set aside as
-            charges rather than products: deposits, taxes, and names that were
-            only punctuation.
+            {number(data.set_aside)} {data.set_aside === 1 ? "entry was" : "entries were"} set aside
+            as charges rather than products: deposits, taxes, and names that were only punctuation.
           </p>
         )}
       </div>
@@ -411,8 +388,7 @@ function Filters({
   const field =
     "rounded-[2px] border border-line bg-transparent px-2 py-1.5 text-ink " +
     "focus:border-accent focus:outline-2 focus:outline-offset-1 focus:outline-accent";
-  const legend =
-    "flex flex-col gap-1 text-[11.5px] tracking-[0.05em] text-muted uppercase";
+  const legend = "flex flex-col gap-1 text-[11.5px] tracking-[0.05em] text-muted uppercase";
   return (
     <div className="flex flex-wrap items-end gap-3">
       <label className={legend}>
@@ -496,10 +472,7 @@ function Block({
             id={opensLetter ? `letter-${letter}` : undefined}
           >
             {opensLetter && (
-              <span
-                aria-hidden
-                className="mr-1.5 font-serif text-[22px] font-semibold text-faint"
-              >
+              <span aria-hidden className="mr-1.5 font-serif text-[22px] font-semibold text-faint">
                 {letter}
               </span>
             )}
@@ -520,8 +493,7 @@ function Block({
               {/* Size conveys nothing to a screen reader, so the count travels
                   in the accessible name instead. */}
               <span className="sr-only">
-                , bought {entry.purchases}{" "}
-                {entry.purchases === 1 ? "time" : "times"}
+                , bought {entry.purchases} {entry.purchases === 1 ? "time" : "times"}
               </span>
             </a>
             {/* A real space between entries. Without it the browser has no
@@ -536,26 +508,14 @@ function Block({
 }
 
 /** The thumb index and the size legend, in the margin, at lg and up. */
-function Rail({
-  letters,
-  tiers,
-}: {
-  letters: Set<string>;
-  tiers: IndexTier[];
-}) {
+function Rail({ letters, tiers }: { letters: Set<string>; tiers: IndexTier[] }) {
   return (
     <div className="sticky top-4 pt-2">
-      <div className="num border-b border-rule pb-1 text-[11.5px] text-faint">
-        jump
-      </div>
+      <div className="num border-b border-rule pb-1 text-[11.5px] text-faint">jump</div>
       <div className="num mt-2 flex flex-wrap gap-x-2 gap-y-0.5 text-[12px]">
         {["#", ...ALPHABET].map((letter) =>
           letters.has(letter) ? (
-            <a
-              key={letter}
-              href={`#letter-${letter}`}
-              className="text-accent hover:underline"
-            >
+            <a key={letter} href={`#letter-${letter}`} className="text-accent hover:underline">
               {letter}
             </a>
           ) : (
@@ -598,13 +558,7 @@ function StripRail({ letters }: { letters: Set<string> }) {
  * size is a mark nobody can read: the screen-reader path carries the count in
  * the accessible name, and everyone else was left guessing.
  */
-function Legend({
-  tiers,
-  className = "",
-}: {
-  tiers: IndexTier[];
-  className?: string;
-}) {
+function Legend({ tiers, className = "" }: { tiers: IndexTier[]; className?: string }) {
   return (
     <div className={className}>
       <div className="num text-[11.5px] text-faint">size = times bought</div>
@@ -613,9 +567,7 @@ function Legend({
           <span aria-hidden className={`${LEGEND_CLASS[tier]} w-7 shrink-0`}>
             Aa
           </span>
-          <span className="num text-[11px] text-faint">
-            {tierRange(tiers, tier)}
-          </span>
+          <span className="num text-[11px] text-faint">{tierRange(tiers, tier)}</span>
         </div>
       ))}
     </div>
@@ -652,36 +604,22 @@ function InlineLegend({ tiers }: { tiers: IndexTier[] }) {
  * seasonal product, a brand switch and an abandoned habit are indistinguishable
  * in this data, and the response does not say which.
  */
-function Stopped({
-  entries,
-  staleBefore,
-}: {
-  entries: IndexEntry[];
-  staleBefore: string | null;
-}) {
+function Stopped({ entries, staleBefore }: { entries: IndexEntry[]; staleBefore: string | null }) {
   return (
     <Spine margin={<Aside>{number(entries.length)} of them</Aside>}>
-      <h3 className="font-serif text-[17px] font-semibold">
-        Bought more than once, and not since
-      </h3>
+      <h3 className="font-serif text-[17px] font-semibold">Bought more than once, and not since</h3>
       <p className="mt-0.5 mb-4 max-w-[62ch] text-muted">
-        These stopped appearing after{" "}
-        <span className="num">{staleBefore}</span>, while the coverage window
-        kept running. The response gives dates, not reasons: a season ending, a
-        brand switched and a habit dropped look identical here.
+        These stopped appearing after <span className="num">{staleBefore}</span>, while the coverage
+        window kept running. The response gives dates, not reasons: a season ending, a brand
+        switched and a habit dropped look identical here.
       </p>
       <ul className="border-t border-rule">
         {entries.map((entry) => (
-          <li
-            key={entry.key}
-            className="flex items-baseline gap-4 border-b border-rule py-2"
-          >
+          <li key={entry.key} className="flex items-baseline gap-4 border-b border-rule py-2">
             <span className="min-w-0 flex-1 truncate" title={entry.description}>
               {entry.description}
             </span>
-            <span className="num shrink-0 text-[12.5px] text-muted">
-              {entry.purchases}×
-            </span>
+            <span className="num shrink-0 text-[12.5px] text-muted">{entry.purchases}×</span>
             <span className="num w-24 shrink-0 text-right text-[12.5px] text-faint">
               {entry.last_seen}
             </span>

@@ -22,8 +22,7 @@
  *   on Linux, which is a documented and accepted variance rather than a new one.
  */
 
-const FONT_SERIF =
-  'ui-serif, Georgia, "Iowan Old Style", "Palatino Linotype", serif';
+const FONT_SERIF = 'ui-serif, Georgia, "Iowan Old Style", "Palatino Linotype", serif';
 const FONT_SANS =
   'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 
@@ -97,8 +96,7 @@ export function layoutIndex(
   }
   flush();
 
-  const height =
-    lines.reduce((total, line) => total + line.height, 0) + opts.padding * 2;
+  const height = lines.reduce((total, line) => total + line.height, 0) + opts.padding * 2;
   return { lines, width: opts.width, height };
 }
 
@@ -140,9 +138,7 @@ export function indexSvg(
               y -
               line.height +
               line.baseline
-            ).toFixed(
-              1,
-            )}" font-size="${item.size}" font-weight="${item.weight}">` +
+            ).toFixed(1)}" font-size="${item.size}" font-weight="${item.weight}">` +
             `${escapeXml(item.description)}</text>`,
         )
         .join("");

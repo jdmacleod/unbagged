@@ -188,10 +188,9 @@ export function Upload({
               instruction is gone rather than softened: a sentence telling
               somebody to do work the machine does is worse than no sentence. */}
           <p className="mt-1 max-w-[62ch] text-muted">
-            Whatever the retailer sent back: a PDF, text, a spreadsheet export,
-            screen captures, or the zip they arrived in. Drop it all at once
-            &mdash; it is one response, however many files. Nothing is uploaded
-            anywhere.
+            Whatever the retailer sent back: a PDF, text, a spreadsheet export, screen captures, or
+            the zip they arrived in. Drop it all at once &mdash; it is one response, however many
+            files. Nothing is uploaded anywhere.
           </p>
         </div>
       )}
@@ -254,8 +253,8 @@ export function Upload({
           <>
             <span className="font-medium">Drop it here</span>
             <span className="mt-1 block text-muted">
-              PDF, text, an Excel workbook or spreadsheet export, or screen
-              captures of a receipt. Or click to choose.
+              PDF, text, an Excel workbook or spreadsheet export, or screen captures of a receipt.
+              Or click to choose.
             </span>
             {/* What happens next, and roughly how long. A long report is tens
                 of seconds of text extraction, and a reader with no estimate
@@ -303,21 +302,19 @@ export function Upload({
             {/* A word, not a coloured pill. Confidence is a fact about the
                 match, not a severity, and colour here means provenance. */}
             <span className="num ml-2 text-[11.5px] text-faint">
-              {result.confident ? "match" : "uncertain match"}{" "}
-              {Math.round(result.confidence * 100)}%
+              {result.confident ? "match" : "uncertain match"} {Math.round(result.confidence * 100)}
+              %
             </span>
           </p>
           {!result.confident && (
             <p className="mt-1 max-w-[62ch] text-muted">
-              Low confidence. Check this is the retailer you meant before
-              reading anything into it.
+              Low confidence. Check this is the retailer you meant before reading anything into it.
             </p>
           )}
           <p className="num mt-1 text-[11.5px] text-muted">
             {result.summary.transactions.toLocaleString()} visits ·{" "}
-            {result.summary.items.toLocaleString()} line items ·{" "}
-            {result.summary.identities} identifiers ·{" "}
-            {result.summary.inferences} inferred attributes
+            {result.summary.items.toLocaleString()} line items · {result.summary.identities}{" "}
+            identifiers · {result.summary.inferences} inferred attributes
           </p>
           {result.warnings.length > 0 && (
             <ul className="mt-2 space-y-1">
@@ -325,9 +322,7 @@ export function Upload({
                 <li key={i} className="max-w-[62ch] text-muted">
                   {w.message}
                   {w.locator && (
-                    <span className="num ml-1 text-[11.5px] text-faint">
-                      {w.locator}
-                    </span>
+                    <span className="num ml-1 text-[11.5px] text-faint">{w.locator}</span>
                   )}
                 </li>
               ))}

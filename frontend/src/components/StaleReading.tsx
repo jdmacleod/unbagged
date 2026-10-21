@@ -33,20 +33,17 @@ export function StaleReading({ request }: { request: RequestMeta }) {
 
   // Silent unless we can actually make the comparison. An unknown adapter, or a
   // report stored before the column existed, is not evidence of a stale read.
-  if (current === undefined || stored === null || stored >= current)
-    return null;
+  if (current === undefined || stored === null || stored >= current) return null;
 
   return (
     <Caveat>
-      This response was read by version <span className="num">{stored}</span> of
-      the {request.display_name} adapter; the current version is{" "}
-      <span className="num">{current}</span>. What you paid and what you saved
-      are computed from that older reading and are wrong for this report.{" "}
-      <strong className="font-medium text-ink">
-        Upload the same file again to re-read it.
-      </strong>{" "}
-      Nothing was lost: the amounts the retailer disclosed are stored exactly as
-      they arrived, so a re-read recovers the correct figures.
+      This response was read by version <span className="num">{stored}</span> of the{" "}
+      {request.display_name} adapter; the current version is <span className="num">{current}</span>.
+      What you paid and what you saved are computed from that older reading and are wrong for this
+      report.{" "}
+      <strong className="font-medium text-ink">Upload the same file again to re-read it.</strong>{" "}
+      Nothing was lost: the amounts the retailer disclosed are stored exactly as they arrived, so a
+      re-read recovers the correct figures.
     </Caveat>
   );
 }

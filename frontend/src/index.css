@@ -7,14 +7,11 @@
    "no third-party request" true without an allowlist to maintain. See the
    DESIGN.md decisions log, 2026-09-04. */
 @theme {
-  --font-serif:
-    ui-serif, Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  --font-serif: ui-serif, Georgia, "Iowan Old Style", "Palatino Linotype", serif;
   --font-sans:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
-    Arial, sans-serif;
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono:
-    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
-    monospace;
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
   /* The spine's content width. Wider than a prose measure on purpose: prose in
      this app carries its own max-w-[62ch], so this track only ever has to hold

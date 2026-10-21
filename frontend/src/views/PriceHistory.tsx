@@ -31,17 +31,11 @@ export function PriceHistory({ requestId }: { requestId: number }) {
   if (history.error) return <ErrorBox error={history.error} />;
   if (!history.data) return <Spinner label="Building price histories" />;
 
-  const {
-    products,
-    product_count,
-    priceable_count,
-    quantity_disclosed,
-    lines_disclosed,
-  } = history.data;
+  const { products, product_count, priceable_count, quantity_disclosed, lines_disclosed } =
+    history.data;
   const priceable = products.filter((p) => p.priceable);
   const rest = products.filter((p) => !p.priceable);
-  const current =
-    products.find((p) => p.key === selected) ?? priceable[0] ?? products[0];
+  const current = products.find((p) => p.key === selected) ?? priceable[0] ?? products[0];
 
   return (
     <PriceBody
@@ -115,14 +109,11 @@ function PriceBody({
     // line items at all, so there is nothing to raise or lower.
     return (
       <Spine margin={<Aside>no line items</Aside>}>
-        <h2 className="font-serif text-[17px] font-semibold">
-          No product prices to follow
-        </h2>
+        <h2 className="font-serif text-[17px] font-semibold">No product prices to follow</h2>
         <p className="mt-1 mb-4 max-w-[62ch] text-muted">
-          This retailer disclosed what each visit cost and never what was in it.
-          Without line items there are no product prices to follow. What they
-          did disclose is on the Timeline; what they did not is in{" "}
-          <strong>Compliance</strong>.
+          This retailer disclosed what each visit cost and never what was in it. Without line items
+          there are no product prices to follow. What they did disclose is on the Timeline; what
+          they did not is in <strong>Compliance</strong>.
         </p>
       </Spine>
     );
@@ -131,12 +122,10 @@ function PriceBody({
   if (productCount === 0) {
     return (
       <Spine margin={<Aside>no series</Aside>}>
-        <h2 className="font-serif text-[17px] font-semibold">
-          Nothing bought often enough
-        </h2>
+        <h2 className="font-serif text-[17px] font-semibold">Nothing bought often enough</h2>
         <p className="mt-1 mb-4 max-w-[62ch] text-muted">
-          No product was bought at least {minObservations} times, so there is no
-          series to plot. Lower the threshold to widen the net.
+          No product was bought at least {minObservations} times, so there is no series to plot.
+          Lower the threshold to widen the net.
         </p>
         {threshold}
       </Spine>
@@ -174,11 +163,7 @@ function PriceBody({
               row from the unpriceable table below rendered a full series,
               complete with a line through amounts the classifier had just said
               were not a price. */}
-          {current.priceable ? (
-            <Series series={current} />
-          ) : (
-            <Unpriced series={current} />
-          )}
+          {current.priceable ? <Series series={current} /> : <Unpriced series={current} />}
         </Spine>
       )}
 
@@ -221,17 +206,16 @@ function QuantityNote({ quantityDisclosed }: { quantityDisclosed: boolean }) {
   // weighed, so the weight half of this note stays true for it.
   return quantityDisclosed ? (
     <p className="max-w-[62ch] text-muted">
-      This response says how many of each item you bought, so a price here is
-      the price of one. It does not say what a weighed item weighed, so a
-      per-pound item reads as whatever it weighed that day. That is not a price
-      change. Where the amounts give it away, this view says so.
+      This response says how many of each item you bought, so a price here is the price of one. It
+      does not say what a weighed item weighed, so a per-pound item reads as whatever it weighed
+      that day. That is not a price change. Where the amounts give it away, this view says so.
     </p>
   ) : (
     <p className="max-w-[62ch] text-muted">
-      A line here carries an amount and nothing else: no quantity, no weight. So
-      two of something reads as one expensive line. A per-pound item reads as
-      whatever it weighed that day. Neither is a price change, and nothing here
-      can tell them apart. Where the amounts give it away, this view says so.
+      A line here carries an amount and nothing else: no quantity, no weight. So two of something
+      reads as one expensive line. A per-pound item reads as whatever it weighed that day. Neither
+      is a price change, and nothing here can tell them apart. Where the amounts give it away, this
+      view says so.
     </p>
   );
 }
@@ -268,16 +252,9 @@ export function scale(points: PricePoint[]) {
   };
 }
 
-function path(
-  points: PricePoint[],
-  pick: (p: PricePoint) => number,
-  s: ReturnType<typeof scale>,
-) {
+function path(points: PricePoint[], pick: (p: PricePoint) => number, s: ReturnType<typeof scale>) {
   return points
-    .map(
-      (p, i) =>
-        `${i ? "L" : "M"}${s.x(p).toFixed(1)},${s.y(pick(p)).toFixed(1)}`,
-    )
+    .map((p, i) => `${i ? "L" : "M"}${s.x(p).toFixed(1)},${s.y(pick(p)).toFixed(1)}`)
     .join(" ");
 }
 
@@ -315,10 +292,7 @@ function Series({ series }: { series: PriceSeries }) {
   return (
     <div>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h3
-          className="font-serif text-[17px] font-semibold"
-          style={{ color: hue }}
-        >
+        <h3 className="font-serif text-[17px] font-semibold" style={{ color: hue }}>
           {series.description}
         </h3>
         {series.upc && (
@@ -330,8 +304,7 @@ function Series({ series }: { series: PriceSeries }) {
         )}
       </div>
       <p className="num mt-1 text-[11.5px] text-faint">
-        bought {series.purchases} times · {series.first_seen} →{" "}
-        {series.last_seen}
+        bought {series.purchases} times · {series.first_seen} → {series.last_seen}
         {series.base_price ? ` · usually ${money(series.base_price)}` : ""}
       </p>
 
@@ -401,24 +374,14 @@ function Series({ series }: { series: PriceSeries }) {
                     vectorEffect="non-scaling-stroke"
                   />
                 ) : (
-                  <circle
-                    cx={s.x(p)}
-                    cy={s.y(p.unit_paid)}
-                    r={2.5}
-                    fill={hue}
-                  />
+                  <circle cx={s.x(p)} cy={s.y(p.unit_paid)} r={2.5} fill={hue} />
                 )}
                 {/* The hit target, invisible and much larger than the dot.
                     preserveAspectRatio="none" squashes the 800-unit viewBox into
                     about 580 CSS pixels, so an r=2 dot renders 2.9px wide and is
                     effectively unhoverable. This is what makes the tooltip
                     reachable; the visible dot stays small on purpose. */}
-                <circle
-                  cx={s.x(p)}
-                  cy={s.y(p.unit_paid)}
-                  r={14}
-                  fill="transparent"
-                >
+                <circle cx={s.x(p)} cy={s.y(p.unit_paid)} r={14} fill="transparent">
                   <title>{tip(p)}</title>
                 </circle>
               </g>
@@ -435,27 +398,21 @@ function Series({ series }: { series: PriceSeries }) {
         {/* Only about lines that are drawn: the shelf line is drawn only when
             every point has a shelf price. */}
         {savedEver && series.shelf_disclosed && (
-          <>
-            The heavier line is what you paid; the lighter one is the shelf
-            price.{" "}
-          </>
+          <>The heavier line is what you paid; the lighter one is the shelf price. </>
         )}
         {!series.shelf_disclosed && (
           <>
-            This response gives what you paid after markdowns and no shelf
-            price, so the line is what you paid
-            {pts.some((p) => countOf(p))
-              ? " for one, where it says how many"
-              : ""}
-            .{" "}
+            This response gives what you paid after markdowns and no shelf price, so the line is
+            what you paid
+            {pts.some((p) => countOf(p)) ? " for one, where it says how many" : ""}.{" "}
           </>
         )}
         {series.multiple_count > 0 && (
           <>
             {series.multiple_count} hollow{" "}
-            {series.multiple_count === 1 ? "point sits" : "points sit"} at a
-            near-exact multiple of the usual amount, which is consistent with
-            buying more than one rather than with the price changing.{" "}
+            {series.multiple_count === 1 ? "point sits" : "points sit"} at a near-exact multiple of
+            the usual amount, which is consistent with buying more than one rather than with the
+            price changing.{" "}
           </>
         )}
         Hover a point for the date and what it cost.
@@ -477,10 +434,7 @@ function Unpriced({ series }: { series: PriceSeries }) {
   return (
     <div>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h3
-          className="font-serif text-[17px] font-semibold"
-          style={{ color: hue }}
-        >
+        <h3 className="font-serif text-[17px] font-semibold" style={{ color: hue }}>
           {series.description}
         </h3>
         {series.upc && (
@@ -492,23 +446,20 @@ function Unpriced({ series }: { series: PriceSeries }) {
         )}
       </div>
       <p className="num mt-1 text-[11.5px] text-faint">
-        bought {series.purchases} times · {series.first_seen} →{" "}
-        {series.last_seen}
+        bought {series.purchases} times · {series.first_seen} → {series.last_seen}
       </p>
       <p className="mt-3 max-w-[62ch] text-muted">
         {series.shape === "weight" ? (
           <>
-            These amounts range too widely to be one item at one price. That is
-            what a product sold by the pound looks like, weighed at the
-            register. No price line is drawn: it would assert a change the
-            response cannot support.
+            These amounts range too widely to be one item at one price. That is what a product sold
+            by the pound looks like, weighed at the register. No price line is drawn: it would
+            assert a change the response cannot support.
           </>
         ) : (
           <>
-            {series.multiple_count} of these amounts sit at a near-exact
-            multiple of the usual one, which is consistent with buying more than
-            one rather than with the price changing. A line through them would
-            report a fuller trolley as inflation, so none is drawn.
+            {series.multiple_count} of these amounts sit at a near-exact multiple of the usual one,
+            which is consistent with buying more than one rather than with the price changing. A
+            line through them would report a fuller trolley as inflation, so none is drawn.
           </>
         )}
       </p>
@@ -532,18 +483,14 @@ function Unpriced({ series }: { series: PriceSeries }) {
                 {point.date}
                 {/* With the date, not the amount: the amount column is a fixed
                     measure of aligned numerals and a prefix wrapped it. */}
-                {count ? (
-                  <span className="ml-1.5 text-faint">{count} bought</span>
-                ) : null}
+                {count ? <span className="ml-1.5 text-faint">{count} bought</span> : null}
               </span>
               <span className="num text-right text-[12.5px]">
                 {money(point.unit_paid)}
                 {/* A suspected multiple only where no count was disclosed: the
                     response already said how many, so guessing is redundant. */}
                 {point.multiple_of && !count ? (
-                  <span className="ml-1.5 text-faint">
-                    ×{point.multiple_of}?
-                  </span>
+                  <span className="ml-1.5 text-faint">×{point.multiple_of}?</span>
                 ) : null}
               </span>
             </div>
@@ -635,13 +582,11 @@ function Unpriceable({
   const cols = "grid-cols-[minmax(0,1fr)_4.5rem_6rem_8rem]";
   return (
     <div>
-      <h3 className="font-serif text-[17px] font-semibold">
-        No unit price in the response
-      </h3>
+      <h3 className="font-serif text-[17px] font-semibold">No unit price in the response</h3>
       <p className="mt-0.5 mb-4 max-w-[62ch] text-muted">
-        {total} of these were bought often enough, but their amounts do not
-        behave like the price of one item. Shown so the gap is visible rather
-        than silently dropped, with no price change claimed for any of them.
+        {total} of these were bought often enough, but their amounts do not behave like the price of
+        one item. Shown so the gap is visible rather than silently dropped, with no price change
+        claimed for any of them.
       </p>
       <div className="scroll-x border-t border-rule">
         <div className="min-w-[24rem]">
@@ -677,9 +622,7 @@ function Unpriceable({
                 {p.base_price === null ? "—" : money(p.base_price)}
               </span>
               <span className="text-right text-muted">
-                {p.shape === "weight"
-                  ? "sold by weight"
-                  : `${p.multiple_count} multi-buys`}
+                {p.shape === "weight" ? "sold by weight" : `${p.multiple_count} multi-buys`}
               </span>
             </button>
           ))}
