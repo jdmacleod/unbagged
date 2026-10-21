@@ -182,11 +182,9 @@ function PriceBody({
         </Spine>
       )}
 
-      {quantityDisclosed || (
-        <Spine margin={<Aside>what a line omits</Aside>}>
-          <QuantityNote />
-        </Spine>
-      )}
+      <Spine margin={<Aside>what a line omits</Aside>}>
+        <QuantityNote quantityDisclosed={quantityDisclosed} />
+      </Spine>
 
       <Spine margin={<Aside>priced series</Aside>}>
         <Table products={visible} current={current} onSelect={onSelect} />
@@ -218,8 +216,17 @@ function PriceBody({
  * generator picks products with replacement, and it was wrong about the real
  * format in the exact place the reader most needed it to be right.
  */
-function QuantityNote() {
-  return (
+function QuantityNote({ quantityDisclosed }: { quantityDisclosed: boolean }) {
+  // A response that says how many still does not say what a weighed item
+  // weighed, so the weight half of this note stays true for it.
+  return quantityDisclosed ? (
+    <p className="max-w-[62ch] text-muted">
+      This response says how many of each item you bought, so a price here is
+      the price of one. It does not say what a weighed item weighed, so a
+      per-pound item reads as whatever it weighed that day. That is not a price
+      change. Where the amounts give it away, this view says so.
+    </p>
+  ) : (
     <p className="max-w-[62ch] text-muted">
       A line here carries an amount and nothing else: no quantity, no weight. So
       two of something reads as one expensive line. A per-pound item reads as
@@ -239,7 +246,13 @@ export function scale(points: PricePoint[]) {
   const t = points.map((p) => Date.parse(p.date));
   const [t0, t1] = [Math.min(...t), Math.max(...t)];
   const span = t1 - t0 || 1;
-  const values = points.flatMap((p) => [p.retail_amt, p.paid_amt]);
+  // A missing shelf price is left out, not read as zero: a null in Math.min
+  // would pull the axis down to $0 and flatten every line above it.
+  // Per unit: a two-can line plots at one can's price, where the response
+  // says how many. Without a quantity the unit amounts are the line amounts.
+  const values = points.flatMap((p) =>
+    p.unit_retail === null ? [p.unit_paid] : [p.unit_retail, p.unit_paid],
+  );
   const lo = Math.min(...values);
   const hi = Math.max(...values);
   const range = hi - lo || 1;
@@ -268,9 +281,22 @@ function path(
     .join(" ");
 }
 
-function tip(p: PricePoint): string {
-  const parts = [`${p.date} · ${money(p.paid_amt)} paid`];
-  if (p.saved_amt > 0)
+/** How many the line was for, where the response states a count. Decided by
+ *  the API for the whole response and read here, never re-derived: one line
+ *  cannot tell a weight of 2.00 lb from two items. Exported for tests. */
+export function countOf(p: PricePoint): number | null {
+  return p.count;
+}
+
+/** The hover text for one point. Exported for `logic.test.ts`. */
+export function tip(p: PricePoint): string {
+  const count = countOf(p);
+  const parts = [
+    count
+      ? `${p.date} · ${count} at ${money(p.unit_paid)} each, ${money(p.paid_amt)} paid`
+      : `${p.date} · ${money(p.paid_amt)} paid`,
+  ];
+  if (p.saved_amt !== null && p.saved_amt > 0)
     parts.push(`${money(p.saved_amt)} off ${money(p.retail_amt)}`);
   if (p.multiple_of) {
     parts.push(
@@ -283,7 +309,7 @@ function tip(p: PricePoint): string {
 function Series({ series }: { series: PriceSeries }) {
   const pts = series.points;
   const s = scale(pts);
-  const savedEver = pts.some((p) => p.saved_amt > 0);
+  const savedEver = pts.some((p) => p.saved_amt !== null && p.saved_amt > 0);
   const hue = categoryVar(series.key);
 
   return (
@@ -333,16 +359,23 @@ function Series({ series }: { series: PriceSeries }) {
             role="img"
             aria-label={`${series.description}: ${series.purchases} purchases from ${series.first_seen} to ${series.last_seen}`}
           >
+            {/* Only where every point has one. A shelf line with gaps would
+                be joined across them, drawing prices nobody disclosed. */}
+            {series.shelf_disclosed && (
+              <path
+                // `shelf_disclosed` guarantees every point has one. Never a
+                // paid amount standing in: that would draw a shelf price nobody
+                // disclosed.
+                d={path(pts, (p) => p.unit_retail as number, s)}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1}
+                vectorEffect="non-scaling-stroke"
+                className="text-line"
+              />
+            )}
             <path
-              d={path(pts, (p) => p.retail_amt, s)}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1}
-              vectorEffect="non-scaling-stroke"
-              className="text-line"
-            />
-            <path
-              d={path(pts, (p) => p.paid_amt, s)}
+              d={path(pts, (p) => p.unit_paid, s)}
               fill="none"
               stroke={hue}
               strokeWidth={1.5}
@@ -360,7 +393,7 @@ function Series({ series }: { series: PriceSeries }) {
                   // one item, so it is not a point on a price line.
                   <circle
                     cx={s.x(p)}
-                    cy={s.y(p.paid_amt)}
+                    cy={s.y(p.unit_paid)}
                     r={3}
                     fill="var(--paper-page)"
                     stroke={hue}
@@ -368,7 +401,12 @@ function Series({ series }: { series: PriceSeries }) {
                     vectorEffect="non-scaling-stroke"
                   />
                 ) : (
-                  <circle cx={s.x(p)} cy={s.y(p.paid_amt)} r={2.5} fill={hue} />
+                  <circle
+                    cx={s.x(p)}
+                    cy={s.y(p.unit_paid)}
+                    r={2.5}
+                    fill={hue}
+                  />
                 )}
                 {/* The hit target, invisible and much larger than the dot.
                     preserveAspectRatio="none" squashes the 800-unit viewBox into
@@ -377,7 +415,7 @@ function Series({ series }: { series: PriceSeries }) {
                     reachable; the visible dot stays small on purpose. */}
                 <circle
                   cx={s.x(p)}
-                  cy={s.y(p.paid_amt)}
+                  cy={s.y(p.unit_paid)}
                   r={14}
                   fill="transparent"
                 >
@@ -394,10 +432,22 @@ function Series({ series }: { series: PriceSeries }) {
       </div>
 
       <p className="mt-2 max-w-[62ch] text-[11.5px] text-faint">
-        {savedEver && (
+        {/* Only about lines that are drawn: the shelf line is drawn only when
+            every point has a shelf price. */}
+        {savedEver && series.shelf_disclosed && (
           <>
             The heavier line is what you paid; the lighter one is the shelf
             price.{" "}
+          </>
+        )}
+        {!series.shelf_disclosed && (
+          <>
+            This response gives what you paid after markdowns and no shelf
+            price, so the line is what you paid
+            {pts.some((p) => countOf(p))
+              ? " for one, where it says how many"
+              : ""}
+            .{" "}
           </>
         )}
         {series.multiple_count > 0 && (
@@ -465,22 +515,40 @@ function Unpriced({ series }: { series: PriceSeries }) {
       <div className="mt-4 border-t border-rule">
         <div className="grid grid-cols-[minmax(0,1fr)_6rem] gap-3 py-1.5 text-[11.5px] tracking-[0.05em] text-muted uppercase">
           <span>Date</span>
-          <span className="text-right">Amount</span>
+          {/* "Each" where any count was disclosed, because then the figure is
+              the price of one; "Amount" otherwise, because then it is the line. */}
+          <span className="text-right">
+            {series.points.some((p) => countOf(p)) ? "Each" : "Amount"}
+          </span>
         </div>
-        {series.points.map((point, i) => (
-          <div
-            key={`${point.date}-${i}`}
-            className="grid grid-cols-[minmax(0,1fr)_6rem] gap-3 border-t border-rule py-1.5"
-          >
-            <span className="num text-[12.5px]">{point.date}</span>
-            <span className="num text-right text-[12.5px]">
-              {money(point.paid_amt)}
-              {point.multiple_of ? (
-                <span className="ml-1.5 text-faint">×{point.multiple_of}?</span>
-              ) : null}
-            </span>
-          </div>
-        ))}
+        {series.points.map((point, i) => {
+          const count = countOf(point);
+          return (
+            <div
+              key={`${point.date}-${i}`}
+              className="grid grid-cols-[minmax(0,1fr)_6rem] gap-3 border-t border-rule py-1.5"
+            >
+              <span className="num text-[12.5px]">
+                {point.date}
+                {/* With the date, not the amount: the amount column is a fixed
+                    measure of aligned numerals and a prefix wrapped it. */}
+                {count ? (
+                  <span className="ml-1.5 text-faint">{count} bought</span>
+                ) : null}
+              </span>
+              <span className="num text-right text-[12.5px]">
+                {money(point.unit_paid)}
+                {/* A suspected multiple only where no count was disclosed: the
+                    response already said how many, so guessing is redundant. */}
+                {point.multiple_of && !count ? (
+                  <span className="ml-1.5 text-faint">
+                    ×{point.multiple_of}?
+                  </span>
+                ) : null}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

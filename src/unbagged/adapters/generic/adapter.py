@@ -154,6 +154,11 @@ class GenericAdapter:
         warnings = WarningCollector()
         documents = extract_all(bundle.documents)
         if not documents:
+            refused = _spreadsheet_refusals(bundle)
+            if refused:
+                # The reader's own reason, not a guess at one: a workbook it
+                # refused was told it looked like a scanned PDF.
+                raise AdapterError(" ".join(refused))
             raise AdapterError(
                 "None of the uploaded files could be read as text. A scanned PDF "
                 "with no text layer looks like this, and OCR is out of scope."
@@ -239,3 +244,27 @@ class GenericAdapter:
 
 
 adapter = GenericAdapter()
+
+
+def _spreadsheet_refusals(bundle: SourceBundle) -> list[str]:
+    """Why each spreadsheet in the bundle could not be read, in its reader's words.
+
+    Asked only of spreadsheets: those are the documents whose reader refuses
+    with a reason worth showing — a cell budget, a damaged package, a password
+    — and the scanned-PDF message above is a wrong guess for every one of them.
+    """
+    from pathlib import Path
+
+    from unbagged.extraction import ExtractionError, classify
+
+    reasons = []
+    for document in bundle.documents:
+        if not document.path or not Path(document.path).is_file():
+            continue
+        if classify(document, Path(document.path)) not in ("xlsx", "spreadsheetml"):
+            continue
+        try:
+            extract(document)
+        except ExtractionError as exc:
+            reasons.append(str(exc))
+    return reasons

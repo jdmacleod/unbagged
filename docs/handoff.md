@@ -87,7 +87,7 @@ publish packages immediately.
                   |
           [ Adapter registry ]  <- sniff() picks the adapter
                   |
-      Kroger | Safeway | H Mart | generic-fallback
+      Kroger | Albertsons | H Mart | generic-fallback
                   |
           [ Canonical SQLite store ]
                   |
@@ -243,17 +243,20 @@ Derived from one real report (report ID redacted here; do not record real IDs in
   and their source is undisclosed. This classification is the most interesting output the
   tool produces; get it right.
 
-### Safeway and H Mart
+### Albertsons and H Mart
 
-Not yet received. Create stub adapters that `sniff()` to 0.0 and raise
-`NotImplementedError` on parse, plus a `NOTES.md` recording expectations:
+Both have now been received, and both expectations once recorded here were wrong. Each
+adapter's `NOTES.md` is the record of what actually arrived; read it rather than this.
 
-- **Safeway (Albertsons):** historically returns a zip of CSVs plus a separate categories
-  letter. Expect the statutory disclosure sections to arrive as prose, not data — the
-  disclosure parser will need light NLP or manual entry support.
-- **H Mart:** small enough that a PDF letter or a non-response is likely. Build the
-  generic-fallback adapter to handle "a letter with no structured data" gracefully, since
-  that is itself a compliance finding.
+- **Albertsons** (once stubbed as `safeway`; the response covers every Albertsons
+  Companies banner): a report PDF of key/value tables and an `.xlsx` workbook of line
+  items with quantities and an inferred-attribute sheet — not a zip of CSVs, and no
+  prose answering the categories. See `adapters/albertsons/NOTES.md`.
+- **H Mart:** a SpreadsheetML points statement, later joined by receipt screen captures —
+  not a PDF letter. See `adapters/hmart/NOTES.md`.
+
+The generic fallback still handles "a letter with no structured data", since that is
+itself a compliance finding.
 
 ---
 

@@ -212,6 +212,10 @@ def timeline(
                t.channel, t.tender_type, t.total_pre_discount,
                t.source_document_id, t.page, t.locator,
                COUNT(i.id) AS item_count,
+               -- How many lines disclose a shelf price at all. Zero is a whole
+               -- retailer's shape (Albertsons gives only what was paid), and
+               -- then there is no shelf total and no saving to state.
+               COUNT(i.retail_amt) AS shelf_lines,
                -- Shelf and paid are summed over the SAME lines. Written as two
                -- independent SUMs, a line with a loyalty amount and no retail
                -- amount landed in `paid_total` and not in `shelf_total`, so the
@@ -281,6 +285,22 @@ def _settle(basket: dict[str, Any]) -> dict[str, Any]:
         basket["stated_pre_discount_delta"] = None
         return basket
 
+    # Read once and removed: a count of lines with a shelf price is how this
+    # function decides, not a figure, and it left in every timeline row and
+    # every basket detail before it was taken out here.
+    if not basket.pop("shelf_lines", basket.get("item_count")):
+        # Lines, and not one of them with a shelf price. The stand-in rule
+        # above would make the shelf total the paid total and the saving
+        # zero, which reads as "bought at full price": a claim about the
+        # basket the response never made. Whatever markdowns it had are
+        # already inside the paid amounts, undisclosed. Null renders as the
+        # em dash, which means exactly "not disclosed".
+        basket["shelf_total"] = None
+        basket["paid_total"] = round(paid, 2)
+        basket["saved_total"] = None
+        basket["stated_pre_discount_delta"] = None
+        return basket
+
     basket["shelf_total"] = round(shelf, 2)
     basket["paid_total"] = round(paid, 2)
     basket["saved_total"] = round(shelf - paid, 2)
@@ -318,8 +338,16 @@ def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
         SELECT COUNT(DISTINCT t.id) AS basket_count,
                MIN(t.occurred_at) AS first_visit,
                MAX(t.occurred_at) AS last_visit,
-               COALESCE(SUM(CASE WHEN i.retail_amt IS NOT NULL THEN i.retail_amt END), 0)
-                   AS total_shelf,
+               -- Only whether there is any figure at all: the shelf total and
+               -- saving shown come from `_shelved_totals`, over the baskets
+               -- that state them. Summing `retail_amt` alone while
+               -- `total_paid` summed every line once put the two over
+               -- different lines, and their difference was not a saving: on a
+               -- response with no shelf prices it was minus everything paid.
+               COALESCE(SUM(
+                   CASE WHEN i.retail_amt IS NOT NULL OR i.loyalty_amt IS NOT NULL
+                        THEN COALESCE(i.retail_amt, i.loyalty_amt) END
+               ), 0) AS total_shelf,
                -- See the same COALESCE in timeline(): loyalty_amt is the price
                -- paid, and a line without one cost its shelf price.
                COALESCE(SUM(COALESCE(i.loyalty_amt, i.retail_amt)), 0) AS total_paid,
@@ -343,15 +371,19 @@ def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
                -- `product_index` has always refused to let one create an entry
                -- for something you gave back. This counted three products the
                -- page under it did not list.
+               --
+               -- All three judged by `PURCHASE_AMOUNT`, the amount the two
+               -- views judge a line by, so a response with no shelf price is
+               -- counted here exactly as it is listed there.
                COUNT(DISTINCT CASE
-                   WHEN i.retail_amt > 0
+                   WHEN {PURCHASE_AMOUNT} > 0
                    THEN {PRODUCT_KEY}
                END) AS distinct_products,
-               SUM(CASE WHEN i.retail_amt = 0 THEN 1 ELSE 0 END) AS zero_value_lines,
-               SUM(CASE WHEN i.retail_amt < 0 THEN 1 ELSE 0 END) AS negative_lines
+               SUM(CASE WHEN {PURCHASE_AMOUNT} = 0 THEN 1 ELSE 0 END) AS zero_value_lines,
+               SUM(CASE WHEN {PURCHASE_AMOUNT} < 0 THEN 1 ELSE 0 END) AS negative_lines
         FROM txn t LEFT JOIN txn_item i ON i.txn_id = t.id
         WHERE t.request_id = ?
-        """,  # noqa: S608 - PRODUCT_KEY is a module literal, never caller input
+        """,  # noqa: S608 - module literals, never caller input
         (request_id,),
     ).fetchone()
     result = dict(row)
@@ -415,9 +447,19 @@ def stats(conn: sqlite3.Connection, request_id: int) -> dict[str, Any]:
         # rather than an em dash above a chart drawn from real numbers.
         result["total_paid"] = across_visits
     else:
-        result["total_shelf"] = round(result["total_shelf"], 2)
         result["total_paid"] = round(result["total_paid"], 2)
-        result["total_saved"] = round(result["total_shelf"] - result["total_paid"], 2)
+        # Shelf and saving over the baskets that state them, and only those: a
+        # basket with no shelf price on any line shows neither (see `_settle`),
+        # so a header that counted it would not be the sum of the rows under
+        # it. With no such basket at all — the Albertsons shape — there is no
+        # shelf total and no saving to state, and zero would be a claim.
+        shelved = _shelved_totals(conn, request_id)
+        if shelved is None:
+            result["total_shelf"] = None
+            result["total_saved"] = None
+        else:
+            result["total_shelf"] = round(shelved[0], 2)
+            result["total_saved"] = round(shelved[0] - shelved[1], 2)
         if result["itemised_count"] < result["basket_count"]:
             # A PARTLY itemised response, and the same reasoning as the branch
             # above, reached from the other side. `total_paid` is summed from
@@ -500,8 +542,15 @@ def transaction_detail(conn: sqlite3.Connection, txn_id: int) -> dict[str, Any] 
     basket["items"] = items
     basket["item_count"] = len(items)
     basket["lines_disclosed"] = basket_lines_disclosed(len(items))
-    basket["shelf_total"] = sum(i["retail_amt"] or 0 for i in items)
+    # The basket rows' stand-in rule, in Python: a line's shelf amount, or its
+    # paid amount where no shelf price was disclosed. `retail_amt or 0` made a
+    # line with no shelf price count as free on the shelf, so a basket of them
+    # showed a negative saving the size of the whole basket.
+    basket["shelf_total"] = sum(
+        (i["retail_amt"] if i["retail_amt"] is not None else i["paid_amt"]) or 0 for i in items
+    )
     basket["paid_total"] = sum(i["paid_amt"] or 0 for i in items)
+    basket["shelf_lines"] = sum(1 for i in items if i["retail_amt"] is not None)
     _settle(basket)
     return basket
 
@@ -601,6 +650,11 @@ def compliance(conn: sqlite3.Connection) -> dict[str, Any]:
         row["absent_count"] = sum(
             1 for c in row["cells"].values() if c.get("status") == DisclosureStatus.ABSENT
         )
+        # Counted apart from absent and apart from answered. A category nobody
+        # assessed is neither, and counting it as answered put "addressed every
+        # category" over a workbook uploaded without the report that answers
+        # them.
+        row["unassessed_count"] = sum(1 for c in row["cells"].values() if c.get("status") is None)
         row["follow_ups"] = _rows(
             conn,
             "SELECT id, kind, description, resolved FROM follow_up WHERE request_id = ?"
@@ -683,12 +737,26 @@ def compare(conn: sqlite3.Connection) -> dict[str, Any]:
         # files, and nothing here needs to know which retailer it is looking at.
         # An unregistered id answers False, which keeps the old behaviour.
         parsed_by = registry.get(request["retailer_id"])
+        # Also None when any category went unassessed: a count of what the
+        # retailer did not address is only a count over what was looked at,
+        # and a workbook uploaded without its report showed 0 beside Kroger.
+        # Over the categories the enum names, as Compliance counts them: a row
+        # for any other string is not one of the eight, and counted it made
+        # seven assessed read as all of them.
+        known = tuple(c.value for c in DisclosureCategory)
+        among = f"category IN ({', '.join('?' * len(known))})"
+        assessed = conn.execute(
+            f"SELECT COUNT(DISTINCT category) c FROM disclosure WHERE request_id = ? AND {among}",  # noqa: S608 - placeholders only
+            (request_id, *known),
+        ).fetchone()["c"]
         request["absent_disclosures"] = (
             None
-            if parsed_by is not None and is_fallback(parsed_by)
+            if (parsed_by is not None and is_fallback(parsed_by))
+            or assessed < len(DisclosureCategory)
             else conn.execute(
-                "SELECT COUNT(*) c FROM disclosure WHERE request_id = ? AND status = ?",
-                (request_id, DisclosureStatus.ABSENT.value),
+                "SELECT COUNT(DISTINCT category) c FROM disclosure"  # noqa: S608 - placeholders only
+                f" WHERE request_id = ? AND status = ? AND {among}",
+                (request_id, DisclosureStatus.ABSENT.value, *known),
             ).fetchone()["c"]
         )
     return {"requests": requests, "comparable": len(requests) > 1}
@@ -711,29 +779,37 @@ def price_history(
     A personal inflation series, which two years of itemised baskets contains
     for free — but only for the products whose amounts are actually a price.
 
-    **A line carries an amount, never a quantity and never a weight.** Two cans
-    of tomatoes bought together arrive as one line at twice the price of one
-    can, and chicken thighs sold by weight arrive at a different amount every
-    trip for reasons that have nothing to do with the price changing. Charting
-    those as a price series reports a two-can trip as a 100% rise. So each
-    product is classified by the shape of its own amounts, and the ones the
-    response cannot price are named rather than drawn.
+    **Most responses give a line an amount, never a quantity and never a
+    weight.** Two cans of tomatoes bought together arrive as one line at twice
+    the price of one can, and chicken thighs sold by weight arrive at a
+    different amount every trip for reasons that have nothing to do with the
+    price changing. Charting those as a price series reports a two-can trip as a
+    100% rise. So each product is classified by the shape of its own amounts,
+    and the ones the response cannot price are named rather than drawn.
 
     Classification is stated as suspicion, never as fact. The response does not
     say, and neither should the app.
+
+    **Where a response does state a quantity** (Albertsons), the series is read
+    per unit: the line amount divided by how many. That is the response's own
+    statement rather than a guess, so a two-can line plots at one can's price
+    instead of being set aside as a suspected multiple. Weight is still not
+    disclosed as a quantity — a weighed line carries a quantity of one — so a
+    per-pound product is still found by its shape.
     """
+    measures = _quantities_are_measures(conn, request_id)
     rows = _rows(
         conn,
         f"""
         SELECT {PRODUCT_KEY} AS product_key,
-               i.upc, i.description_raw, i.retail_amt, i.loyalty_amt,
+               i.upc, i.description_raw, i.retail_amt, i.loyalty_amt, i.quantity,
                substr(t.occurred_at, 1, 10) AS on_date
         FROM txn_item i JOIN txn t ON t.id = i.txn_id
         WHERE t.request_id = ?
           AND {PRODUCT_KEY} IS NOT NULL
-          AND i.retail_amt > 0
+          AND {PURCHASE_AMOUNT} > 0
         ORDER BY t.occurred_at, i.id
-        """,  # noqa: S608 - PRODUCT_KEY is a module literal, never caller input
+        """,  # noqa: S608 - module literals, never caller input
         (request_id,),
     )
 
@@ -752,12 +828,31 @@ def price_history(
         retail = row["retail_amt"]
         # loyalty_amt is the price paid. No loyalty price means the shelf price.
         paid = retail if row["loyalty_amt"] is None else row["loyalty_amt"]
+        quantity = row["quantity"]
+        count = None if measures else _count(quantity)
         entry["points"].append(
             {
                 "date": row["on_date"],
+                # The line as disclosed: what the whole line cost.
+                #
+                # None where the response disclosed no shelf price — not the
+                # paid amount standing in for one. A shelf line drawn from paid
+                # amounts would show every markdown as the shelf price falling.
                 "retail_amt": retail,
                 "paid_amt": paid,
-                "saved_amt": round(retail - paid, 2),
+                "saved_amt": None if retail is None else round(retail - paid, 2),
+                # What one of them cost, where the response says how many. A
+                # line of two at $2.50 is $1.25 each, which is a fact the
+                # response states, so the price is read from it rather than
+                # guessed at by `_price_shape`. Where no quantity is disclosed
+                # these are the line amounts, unchanged.
+                "quantity": quantity,
+                # How many the line was for, where the response states a count:
+                # what the chart divides by and the page shows. Decided here, not
+                # re-derived in the browser, so the two cannot disagree.
+                "count": count,
+                "unit_retail": _per_unit(retail, count),
+                "unit_paid": _per_unit(paid, count),
             }
         )
 
@@ -801,7 +896,11 @@ def price_history(
 
         points.sort(key=lambda p: p["date"])
 
-        shape = _price_shape([p["retail_amt"] for p in points])
+        # Classified on the shelf amount where there is one, because that is
+        # the figure a markdown does not move. Where there is none, the paid
+        # amount is all the response gives, and it is what the shape reads.
+        amounts = [_unit_amount_of(p) for p in points]
+        shape = _price_shape(amounts)
         for point, multiple in zip(points, shape["multiples"], strict=True):
             point["multiple_of"] = multiple
 
@@ -816,7 +915,7 @@ def price_history(
         singles = [p for p, m in zip(points, shape["multiples"], strict=True) if not m]
         change = None
         if shape["kind"] == "unit" and len(singles) >= 2:
-            first, last = singles[0]["paid_amt"], singles[-1]["paid_amt"]
+            first, last = singles[0]["unit_paid"], singles[-1]["unit_paid"]
             change = round((last - first) / first * 100, 1) if first else None
 
         products.append(
@@ -845,10 +944,14 @@ def price_history(
                 "priceable": shape["kind"] == "unit",
                 "first_seen": points[0]["date"],
                 "last_seen": points[-1]["date"],
-                "first_price": singles[0]["paid_amt"] if singles else points[0]["paid_amt"],
-                "last_price": singles[-1]["paid_amt"] if singles else points[-1]["paid_amt"],
-                "min_price": min(p["retail_amt"] for p in points),
-                "max_price": max(p["retail_amt"] for p in points),
+                "first_price": singles[0]["unit_paid"] if singles else points[0]["unit_paid"],
+                "last_price": singles[-1]["unit_paid"] if singles else points[-1]["unit_paid"],
+                "min_price": min(amounts),
+                "max_price": max(amounts),
+                # Whether a shelf price was disclosed for every point. The
+                # chart draws the shelf line only then, and says why not
+                # otherwise.
+                "shelf_disclosed": all(p["retail_amt"] is not None for p in points),
                 "change_pct": change,
                 "points": points,
             }
@@ -884,6 +987,89 @@ def price_history(
         "lines_disclosed": request_lines_disclosed(conn, request_id),
         "products": products[:limit],
     }
+
+
+def _shelved_totals(conn: sqlite3.Connection, request_id: int) -> tuple[float, float] | None:
+    """(shelf, paid) summed over the baskets with a shelf price on any line.
+
+    The same per-line stand-in the basket rows use, so this is the sum of the
+    rows that show a shelf total. None when no basket has one.
+    """
+    row = conn.execute(
+        """
+        SELECT COUNT(*) AS baskets, COALESCE(SUM(shelf), 0) AS shelf,
+               COALESCE(SUM(paid), 0) AS paid
+        FROM (
+            SELECT SUM(CASE WHEN i.retail_amt IS NOT NULL OR i.loyalty_amt IS NOT NULL
+                            THEN COALESCE(i.retail_amt, i.loyalty_amt) END) AS shelf,
+                   SUM(CASE WHEN i.retail_amt IS NOT NULL OR i.loyalty_amt IS NOT NULL
+                            THEN COALESCE(i.loyalty_amt, i.retail_amt) END) AS paid
+            FROM txn t JOIN txn_item i ON i.txn_id = t.id
+            WHERE t.request_id = ?
+            GROUP BY t.id
+            HAVING COUNT(i.retail_amt) > 0
+        )
+        """,
+        (request_id,),
+    ).fetchone()
+    return None if not row["baskets"] else (row["shelf"], row["paid"])
+
+
+def _quantities_are_measures(conn: sqlite3.Connection, request_id: int) -> bool:
+    """Does this response keep a measure, not a count, in `quantity`?
+
+    Decided for the whole response, because one line cannot tell: H Mart keeps
+    a receipt's weight there, and a weight of exactly 2.00 lb is the same
+    number as two items. Any fractional quantity in the response shows the
+    field holds measures, and then nothing in it is divided as a count.
+    Albertsons' `QTY` is always whole.
+    """
+    row = conn.execute(
+        "SELECT EXISTS (SELECT 1 FROM txn_item i JOIN txn t ON t.id = i.txn_id"
+        " WHERE t.request_id = ? AND i.quantity IS NOT NULL"
+        # The same tolerance `_count` uses: a whole number stored with float
+        # noise is still a count, and one such line switched every count in
+        # the response off.
+        " AND ABS(i.quantity - ROUND(i.quantity)) > 1e-9) AS fractional",
+        (request_id,),
+    ).fetchone()
+    return bool(row["fractional"])
+
+
+def _count(quantity: float | None) -> int | None:
+    """A disclosed quantity as a count of two or more, or None.
+
+    One is no different from no count at all, and a fraction is not a count.
+    """
+    if quantity is None or quantity < 2:
+        return None
+    count = round(quantity)
+    return count if abs(quantity - count) <= 1e-9 else None
+
+
+def _per_unit(amount: float | None, count: int | None) -> float | None:
+    """A line amount divided by its count, or the amount unchanged.
+
+    `count` comes from `_count`, so it is a whole number of two or more or
+    None — Kroger states none, and a measure is never one. Rounded to a
+    hundredth of a cent so `4.5 / 3` does not arrive as 1.4999999999999998,
+    while a fraction of a cent the retailer itself disclosed survives.
+    """
+    if amount is None or not count:
+        return amount
+    return round(amount / count, 4)
+
+
+def _unit_amount_of(point: dict[str, Any]) -> float:
+    """The per-unit amount a point is judged by: shelf where disclosed, else paid.
+
+    The Python half of `PURCHASE_AMOUNT`, and it has to agree with it: a point
+    reaches here only because that expression was positive, and dividing a
+    positive amount by a positive quantity keeps it positive.
+    """
+    if point["unit_retail"] is not None:
+        return point["unit_retail"]
+    return point["unit_paid"]
 
 
 # Two amounts within this of each other are treated as the same price. Prices
@@ -1118,6 +1304,15 @@ def _tier(purchases: int) -> int:
 #: was showing nothing and letting them conclude nothing was disclosed.
 PRODUCT_KEY = "COALESCE(NULLIF(i.upc, ''), NULLIF(i.description_raw, ''))"
 
+#: The amount a purchase is judged by: the shelf price where the retailer
+#: disclosed one, and what was paid where it disclosed only that. Albertsons
+#: discloses only the paid amount, so filtering on `retail_amt > 0` alone left
+#: its Products and Prices pages empty over a full itemised history. Kroger and
+#: H Mart disclose a shelf amount on every line, so for them this is the same
+#: predicate it always was. Both views use it, so they cannot disagree about
+#: what counts as a purchase.
+PURCHASE_AMOUNT = "COALESCE(i.retail_amt, i.loyalty_amt)"
+
 #: A price the retailer printed into the name field, e.g. `$0.05 CRV DEPOSIT`.
 #:
 #: **The currency symbol is required, and that is the whole point.** A rule that
@@ -1332,8 +1527,8 @@ def product_index(
     answers "what do I buy most" precisely.
 
     **What counts as a purchase.** The same predicate `price_history` uses: a
-    line with a positive amount, keyed by `PRODUCT_KEY` — the UPC the retailer
-    disclosed, or the name it printed where it disclosed none. It used to require
+    line with a positive `PURCHASE_AMOUNT`, keyed by `PRODUCT_KEY` — the UPC the
+    retailer disclosed, or the name it printed where it disclosed none. It used to require
     a UPC, which silently dropped every product of a retailer that publishes no
     codes. That excludes the export's zero-value
     placeholder rows, which name no product, and the negative lines, which are
@@ -1352,10 +1547,10 @@ def product_index(
         FROM txn_item i JOIN txn t ON t.id = i.txn_id
         WHERE t.request_id = ?
           AND {PRODUCT_KEY} IS NOT NULL
-          AND i.retail_amt > 0
+          AND {PURCHASE_AMOUNT} > 0
         GROUP BY {PRODUCT_KEY},
                  i.upc, i.description_raw
-        """,  # noqa: S608 - PRODUCT_KEY is a module literal, never caller input
+        """,  # noqa: S608 - module literals, never caller input
         (request_id,),
     )
 

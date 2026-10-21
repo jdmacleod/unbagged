@@ -1,6 +1,6 @@
 """Structure-preserving skeletons for bug reports.
 
-Someone whose Safeway report will not parse needs to show a maintainer the *shape*
+Someone whose report will not parse needs to show a maintainer the *shape*
 of the file without sending their groceries to the internet. This module reduces a
 report to that shape:
 
@@ -153,14 +153,23 @@ def skeleton_spreadsheet(text: str) -> dict[str, Any]:
     """
     from unbagged.extraction import read_tables
 
-    read = read_tables(text)
+    return skeleton_tables(read_tables(text).tables, fmt="spreadsheetml")
+
+
+def skeleton_tables(tables, *, fmt: str) -> dict[str, Any]:
+    """The shape of some read sheets, whichever reader produced them."""
     sheets = []
-    for table in read.tables:
+    for table in tables:
         # Not row 0: the observed export puts a single-cell banner above the
         # header, so taking the first row reports the sheet's title as its
         # column names. The header is the first row that is actually a row of
         # columns.
-        head_at = next((i for i, row in enumerate(table.rows[:4]) if len(row) > 1), 0)
+        # Counted by cells with something in them: an `.xlsx` writes a merged
+        # title's covered cells as empty ones, so its banner row is as wide as
+        # the header beneath it.
+        head_at = next(
+            (i for i, row in enumerate(table.rows[:4]) if sum(1 for c in row.cells if c) > 1), 0
+        )
         header = table.rows[head_at].cells if table.rows else ()
         body = table.rows[head_at + 1 :]
         sheets.append(
@@ -176,7 +185,7 @@ def skeleton_spreadsheet(text: str) -> dict[str, Any]:
                 "cell_types": sorted({_leaf_kind(cell) for row in body for cell in row.cells}),
             }
         )
-    return {"format": "spreadsheetml", "sheets": sheets}
+    return {"format": fmt, "sheets": sheets}
 
 
 def _leaf_kind(cell: str | None) -> str:
@@ -238,6 +247,17 @@ def sanitize_file(path: Path) -> dict[str, Any]:
         raise FileNotFoundError(f"no such file: {path}")
     if path.is_dir():
         raise IsADirectoryError(f"{path} is a directory; pass one report file")
+    from unbagged.extraction import looks_like_xlsx, read_workbook
+
+    # By content: a workbook is a zip, and read as text it was deflate noise
+    # with nothing a maintainer could use — while the advice everywhere is to
+    # send this tool's output rather than the workbook itself.
+    if looks_like_xlsx(path):
+        return {
+            "source_bytes": path.stat().st_size,
+            "source_suffix": path.suffix.lower(),
+            **skeleton_tables(read_workbook(path).tables, fmt="xlsx"),
+        }
     if path.suffix.lower() in {".pdf", ".zip"}:
         raise ValueError(
             f"{path.suffix} input is not supported yet — extract the text or the "

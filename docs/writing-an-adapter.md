@@ -199,7 +199,8 @@ supplemental-request path, and a refusal on verification grounds.
 ## When the response is a table, not text
 
 `extraction.py` hands you one of two things. A PDF or a text file arrives as
-`pages`; a spreadsheet arrives as `tables`, and `text` renders those on demand so
+`pages`; a spreadsheet — the XML kind or an `.xlsx` workbook, which read into
+the same shape — arrives as `tables`, and `text` renders those on demand so
 code that only wants words never has to know the difference. There is a third
 classification, `image`, and it is the one shape that never arrives through
 `extract()` at all — see the next section.
@@ -230,6 +231,11 @@ your own has to.
 **Map columns by header name, never by position.** A column that moves then
 makes your `sniff()` decline, which is loud. Reading the next column along is
 silent, and silence is how a rounded value ends up in a money field.
+
+**A date may be a number.** An `.xlsx` stores a date as a day count and shows
+it through a format the reader does not apply, so a date column arrives as
+`45000`, not as a date. `Table.date1904` says which epoch to count from; the
+Albertsons adapter's `_occurred_on` is a worked example.
 
 **`page` may be None.** A spreadsheet has no printed pages, so `Cite` falls back
 to the locator. Do not invent a `1`; a cell reference is a better citation than a

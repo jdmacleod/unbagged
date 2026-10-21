@@ -364,3 +364,89 @@ class TestHMartBasketsAreComposedNotDivided:
         impossible = sum(Decimal(shelf) for _name, shelf in composer.CAPTURE_PRODUCTS) * 2
         with pytest.raises(ValueError, match="could not compose"):
             composer._compose_basket(random.Random(0), impossible, 9)
+
+
+class TestAlbertsonsShape:
+    """The Albertsons generator against the proportions it records in `TARGETS`.
+
+    Tolerances are sampling noise on about 170 baskets, not slack: a composer
+    change that moves a figure outside them has made the fixture unlike a real
+    grocery history, which is how a whole view can be tuned against a shape the
+    format never has. That happened here once already: a fixture with no
+    weighed lines worth the name, and a markdown spread across every eighth
+    basket rather than every fortieth.
+    """
+
+    @pytest.fixture(scope="class")
+    def generator(self):
+        from pathlib import Path
+
+        from tools import make_fixtures
+
+        return make_fixtures.load(Path("src/unbagged/adapters/albertsons/fixtures/generate.py"))
+
+    @pytest.fixture(scope="class")
+    def lines(self, generator):
+        return [line for basket in generator.build()["baskets"] for line in basket["lines"]]
+
+    def test_basket_sizes_are_heavy_tailed(self, generator):
+        sizes = sorted(len(b["lines"]) for b in generator.build()["baskets"])
+        targets = generator.TARGETS
+        assert abs(statistics.median(sizes) - targets["lines_per_basket_median"]) <= 2
+        assert abs(sizes[9 * len(sizes) // 10] - targets["lines_per_basket_p90"]) <= 6
+
+    def test_quantities_split_as_targeted(self, generator, lines):
+        for quantity, share in generator.TARGETS["quantity_share"].items():
+            observed = sum(1 for line in lines if line[3] == quantity) / len(lines)
+            assert abs(observed - share) <= 0.05, quantity
+
+    def test_weighed_lines_are_common_and_spread_across_baskets(self, generator):
+        baskets = generator.build()["baskets"]
+        lines = [line for basket in baskets for line in basket["lines"]]
+        targets = generator.TARGETS
+        weighed = sum(1 for line in lines if line[4] > 0) / len(lines)
+        with_weighed = sum(1 for b in baskets if any(line[4] > 0 for line in b["lines"]))
+        assert abs(weighed - targets["weighed_line_share"]) <= 0.03
+        assert abs(with_weighed / len(baskets) - targets["baskets_with_weighed_share"]) <= 0.08
+
+    def test_a_spread_markdown_is_rare(self, generator):
+        """Fractions of a cent come from an allocated markdown and nothing else:
+        a weighed line is rounded to the cent at the register."""
+        baskets = generator.build()["baskets"]
+        allocated = sum(
+            1
+            for b in baskets
+            if any(
+                line[5] > 0 and round(line[5], 2) != line[5] and len(repr(line[5])) <= 8
+                for line in b["lines"]
+            )
+        )
+        assert allocated >= 1, "the fixture must carry at least one allocated markdown"
+        assert allocated / len(baskets) <= generator.TARGETS["allocated_markdown_basket_share"] * 3
+
+    def test_markdowns_and_coupons_stay_rare(self, generator, lines):
+        negative = sum(1 for line in lines if line[5] < 0) / len(lines)
+        zero = sum(1 for line in lines if line[5] == 0) / len(lines)
+        assert 0 < negative <= generator.TARGETS["negative_line_share"] * 2
+        assert 0 < zero <= generator.TARGETS["zero_line_share"] * 3
+
+    def test_two_stores_dominate(self, generator):
+        """Averaged over seeds, because one seed is too noisy to test.
+
+        Basket sizes are heavy-tailed, so a handful of long baskets moves a
+        store's share of LINES by several points: across 40 seeds the top share
+        has a standard deviation near 0.04. One seed tested at a tolerance wide
+        enough to hold would hold almost anything, so the composer's average is
+        what is held to the target shares.
+        """
+        averages = [0.0, 0.0, 0.0]
+        seeds = range(10)
+        for seed in seeds:
+            shares: Counter = Counter()
+            for basket in generator.build(seed)["baskets"]:
+                shares[basket["store"]] += len(basket["lines"])
+            total = sum(shares.values())
+            for rank, (_store, count) in enumerate(shares.most_common(3)):
+                averages[rank] += count / total / len(seeds)
+        for got, want in zip(averages, generator.TARGETS["top_store_line_shares"], strict=True):
+            assert abs(got - want) <= 0.03

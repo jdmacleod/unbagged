@@ -10,7 +10,7 @@ its own container on a scratch data directory, ingests every adapter's synthetic
 fixture, captures, and deletes the directory. A developer's own instance on :8420
 is bind-mounted to ./data and is exactly what must not be photographed.
 
-Both retailers are ingested, not just Kroger. Compare has nothing to show until a
+Every retailer is ingested, not just Kroger. Compare has nothing to show until a
 second response exists, so with one fixture loaded its screenshot was of an empty
 state — which is why the README had none.
 
@@ -24,6 +24,7 @@ import mimetypes
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -33,6 +34,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 KROGER_FIXTURE = REPO_ROOT / "src/unbagged/adapters/kroger/fixtures/synthetic_report.txt"
 HMART_DIR = REPO_ROOT / "src/unbagged/adapters/hmart/fixtures"
 HMART_FIXTURE = HMART_DIR / "synthetic_history.xls"
+ALBERTSONS_DIR = REPO_ROOT / "src/unbagged/adapters/albertsons/fixtures"
+ALBERTSONS_REPORT = ALBERTSONS_DIR / "synthetic_report.txt"
+#: Not committed: an `.xlsx` is a zip the PII scanner cannot read, so the
+#: generator builds it on demand. `main` writes it here, in a temporary
+#: directory of its own, for the length of the run.
+ALBERTSONS_WORKBOOK_NAME = "synthetic_details.xlsx"
 
 #: One upload per retailer, in the order the requests are numbered. The H Mart
 #: upload carries its receipt captures alongside the statement, because they
@@ -42,6 +49,22 @@ UPLOADS = (
     ("kroger", (KROGER_FIXTURE,)),
     ("hmart", (HMART_FIXTURE, *sorted(HMART_DIR.glob("Transaction_*.png")))),
 )
+
+
+def albertsons_upload(directory: Path) -> tuple[str, tuple[Path, ...]]:
+    """The Albertsons response: the committed report and a freshly built workbook.
+
+    Third, so requests 1 and 2 stay Kroger and H Mart and only Compare changes.
+    """
+    sys.path.insert(0, str(REPO_ROOT))
+    from tools import make_fixtures
+
+    generator = make_fixtures.load(ALBERTSONS_DIR / "generate.py")
+    workbook = directory / ALBERTSONS_WORKBOOK_NAME
+    workbook.write_bytes(generator.build_workbook())
+    return ("albertsons", (ALBERTSONS_REPORT, workbook))
+
+
 OUT_DIR = REPO_ROOT / "docs" / "screenshots"
 SCRATCH = REPO_ROOT / ".screenshot-data"
 
@@ -182,7 +205,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.parse_args()
 
-    for _retailer, paths in UPLOADS:
+    # The generator too: the workbook is built from it after the container
+    # starts, and a missing one would fail there rather than here.
+    preflight = ("albertsons", (ALBERTSONS_REPORT, ALBERTSONS_DIR / "generate.py"))
+    for _retailer, paths in (*UPLOADS, preflight):
         for path in paths:
             if not path.is_file():
                 raise SystemExit(f"make_screenshots: no fixture at {path}")
@@ -210,9 +236,10 @@ def main() -> int:
     )
     try:
         wait_for_health()
-        for retailer, paths in UPLOADS:
-            print(f"make_screenshots: ingesting {retailer} ({len(paths)} file(s))")
-            upload_fixture(retailer, paths)
+        with tempfile.TemporaryDirectory() as built:
+            for retailer, paths in (*UPLOADS, albertsons_upload(Path(built))):
+                print(f"make_screenshots: ingesting {retailer} ({len(paths)} file(s))")
+                upload_fixture(retailer, paths)
         written = capture()
     finally:
         docker("rm", "-f", name, check=False)

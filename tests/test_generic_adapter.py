@@ -8,7 +8,6 @@ import pytest
 import unbagged.adapters  # noqa: F401  (registers everything)
 from unbagged.adapters.generic.adapter import GenericAdapter
 from unbagged.adapters.registry import registry
-from unbagged.adapters.safeway.adapter import SafewayAdapter
 from unbagged.models import (
     AdapterError,
     DisclosureCategory,
@@ -142,34 +141,10 @@ class TestGenericParse:
             GenericAdapter().parse(SourceBundle(documents=(missing,)))
 
 
-class TestStubs:
-    # H Mart left this list when its adapter was written. Safeway is the only
-    # stub now, and the shape of these tests is what a stub has to satisfy.
-    @pytest.mark.parametrize("adapter", [SafewayAdapter()])
-    def test_a_stub_never_claims_a_bundle(self, adapter, tmp_path):
-        # Winning a sniff() it cannot honour would take the response away from
-        # the fallback, which can at least record what is missing.
-        outcome = adapter.sniff(bundle(tmp_path, LETTER))
-        assert outcome.confidence == 0.0
-
-    @pytest.mark.parametrize("adapter", [SafewayAdapter()])
-    def test_a_stub_says_why_it_declined(self, adapter, tmp_path):
-        # "Nobody has written this yet" and "this is not that retailer" are
-        # different facts. A bare zero reports them identically; the reason is
-        # what keeps them apart.
-        outcome = adapter.sniff(bundle(tmp_path, LETTER))
-        assert "has not been written yet" in outcome.reason
-
-    @pytest.mark.parametrize("adapter", [SafewayAdapter()])
-    def test_a_stub_explains_itself_when_called_directly(self, adapter, tmp_path):
-        with pytest.raises(AdapterError, match="not been written yet"):
-            adapter.parse(bundle(tmp_path, LETTER))
-
-    @pytest.mark.parametrize("adapter", [SafewayAdapter()])
-    def test_a_stub_declares_schema_version_zero(self, adapter):
-        # 0 means "no format observed yet"; the first real parse bumps it to 1.
-        assert adapter.schema_version == 0
-
+class TestEveryAdapter:
+    # TestStubs lived here while an adapter was still a stub. H Mart left that
+    # list when its adapter was written, and Albertsons (once Safeway) when a
+    # real response arrived, so there is no stub left to hold to its rules.
     def test_every_adapter_ships_notes(self):
         root = Path(__file__).parent.parent / "src" / "unbagged" / "adapters"
         for adapter in registry.all():
@@ -212,7 +187,7 @@ class TestAuthoringGuide:
         by an `if` is the abstraction leaking.
         """
         core = Path(__file__).parent.parent / "src" / "unbagged"
-        retailers = {"kroger", "safeway", "hmart"}
+        retailers = {"kroger", "albertsons", "safeway", "hmart"}
         for module in (
             "views.py",
             "api.py",
@@ -243,3 +218,25 @@ class TestAuthoringGuide:
                     assert node.value.lower() not in retailers, (
                         f"{module} has a live reference to {node.value!r}"
                     )
+
+
+class TestARefusedWorkbookSaysWhy:
+    """Found by /review's smoke probe: a workbook the reader refused reached
+    the person as "a scanned PDF with no text layer looks like this", while the
+    real reason sat in a server log."""
+
+    def test_the_readers_reason_reaches_the_person(self, tmp_path, monkeypatch):
+        from tools import make_fixtures
+
+        from unbagged import extraction
+
+        generator = make_fixtures.load(
+            Path("src/unbagged/adapters/albertsons/fixtures/generate.py")
+        )
+        path = tmp_path / "details.xlsx"
+        path.write_bytes(generator.build_workbook())
+        monkeypatch.setattr(extraction, "MAX_WORKBOOK_CELLS", 100)
+        document = SourceDocument("details.xlsx", "0" * 64, path=str(path))
+        with pytest.raises(AdapterError, match="cells") as raised:
+            GenericAdapter().parse(SourceBundle(documents=(document,)))
+        assert "scanned PDF" not in str(raised.value)

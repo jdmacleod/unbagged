@@ -656,6 +656,16 @@ class TestPriceHistory:
         assert len(product["points"]) == product["purchases"]
         assert product["first_seen"] <= product["last_seen"]
 
+    def test_without_a_quantity_the_unit_is_the_line(self, client, uploaded):
+        """Kroger discloses no quantity, so per-unit pricing must change nothing:
+        the plotted amount is the line amount exactly, not rounded or divided."""
+        data = client.get(f"/api/requests/{uploaded['request_id']}/price-history").json()
+        points = [point for product in data["products"] for point in product["points"]]
+        assert points
+        assert all(point["quantity"] is None for point in points)
+        assert all(point["unit_paid"] == point["paid_amt"] for point in points)
+        assert all(point["unit_retail"] == point["retail_amt"] for point in points)
+
     def test_one_line_is_one_purchase(self, client, uploaded):
         """Deliberately replaces a test that asserted the opposite.
 
