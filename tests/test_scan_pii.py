@@ -220,7 +220,7 @@ class TestOpaqueFixtures:
         [
             "src/unbagged/adapters/kroger/fixtures/report.pdf",
             "src/unbagged/adapters/kroger/fixtures/export.zip",
-            "src/unbagged/adapters/safeway/fixtures/response.xlsx",
+            "src/unbagged/adapters/albertsons/fixtures/response.xlsx",
             "tests/fixtures/hand-written.pdf",
         ],
     )

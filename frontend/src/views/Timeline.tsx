@@ -297,6 +297,9 @@ function TimelineBody({
                   // child too, and would take a row of its own.
                   monthKey={first ? month : null}
                   open={open === basket.id}
+                  // Null when no basket in the response states a saving, which
+                  // is a response that discloses no shelf price at all.
+                  showSaving={stats.total_saved !== null}
                   onToggle={() =>
                     setOpen(open === basket.id ? null : basket.id)
                   }
@@ -1073,6 +1076,7 @@ function BasketRow({
   open,
   onToggle,
   hues,
+  showSaving,
 }: {
   basket: Basket;
   month: string;
@@ -1082,6 +1086,10 @@ function BasketRow({
   onToggle: () => void;
   /** Resolved once for the response; a row does a map read, not a derivation. */
   hues: Map<string, number>;
+  /** False when the response states no saving anywhere. The column is then
+   *  left out rather than drawn as a dash on every row — the rule `hasCodes`
+   *  follows in the line items below. */
+  showSaving: boolean;
 }) {
   // Nothing was disclosed to reveal, so the row is a row rather than a
   // control, and no request is made for contents that do not exist.
@@ -1205,9 +1213,11 @@ function BasketRow({
             </span>
             {/* w-16 below sm: the widest amount here is about 53px of Iosevka,
                 so 80px was reserving space this row cannot spare on a phone. */}
-            <span className="num w-16 shrink-0 text-right text-muted md:w-20">
-              {saving(basket.saved_total)}
-            </span>
+            {showSaving && (
+              <span className="num w-16 shrink-0 text-right text-muted md:w-20">
+                {saving(basket.saved_total)}
+              </span>
+            )}
             <span className="num w-16 shrink-0 text-right font-semibold md:w-20">
               {/* The stated total when no lines were disclosed: it is the only
                   real money in a response like that, and an em dash here would
@@ -1258,6 +1268,10 @@ function LineItems({ detail }: { detail: BasketDetail }) {
   // version of the same nothing. The 2026-09-10 row's reasoning excludes a
   // wholly undisclosed column from the question rather than tabulating it.
   const hasCodes = detail.items.some((item) => item.upc !== null);
+  // The same rule for the shelf price. A response that gives only what each
+  // line cost — Albertsons — has no shelf column and no saving to show, and a
+  // dash in both on every line is that nothing, filled in. Said once instead.
+  const hasShelf = detail.items.some((item) => item.retail_amt !== null);
   return (
     <div className="scroll-x">
       <table className="w-full min-w-[34rem] text-[12.5px]">
@@ -1265,9 +1279,13 @@ function LineItems({ detail }: { detail: BasketDetail }) {
           <tr className="text-left">
             <th className="py-1.5 font-medium">Description</th>
             {hasCodes && <th className="py-1.5 font-medium">UPC</th>}
-            <th className="py-1.5 text-right font-medium">Shelf</th>
+            {hasShelf && (
+              <th className="py-1.5 text-right font-medium">Shelf</th>
+            )}
             <th className="py-1.5 text-right font-medium">You paid</th>
-            <th className="py-1.5 text-right font-medium">Saved</th>
+            {hasShelf && (
+              <th className="py-1.5 text-right font-medium">Saved</th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -1303,9 +1321,11 @@ function LineItems({ detail }: { detail: BasketDetail }) {
                     )}
                   </td>
                 )}
-                <td className="num py-1.5 text-right">
-                  {money(item.retail_amt)}
-                </td>
+                {hasShelf && (
+                  <td className="num py-1.5 text-right">
+                    {money(item.retail_amt)}
+                  </td>
+                )}
                 <td className="num py-1.5 text-right font-semibold">
                   {money(item.paid_amt)}
                 </td>
@@ -1313,30 +1333,46 @@ function LineItems({ detail }: { detail: BasketDetail }) {
                     retailer did not say. Most lines are full price, and a column
                     of zeros reads as broken — but the dash now means absence and
                     nothing else, so a disclosed zero may not borrow it. */}
-                <td className="num py-1.5 text-right text-muted">
-                  {saving(item.saved_amt)}
-                </td>
+                {hasShelf && (
+                  <td className="num py-1.5 text-right text-muted">
+                    {saving(item.saved_amt)}
+                  </td>
+                )}
               </tr>
             );
           })}
         </tbody>
         <tfoot className="border-t border-line font-semibold">
           <tr>
-            <td className="py-1.5" colSpan={2}>
+            {/* Spans the description and, where there is one, the code. It
+                spanned two columns whatever the header had, so a basket with
+                no codes put every total one column to the right of its head. */}
+            <td className="py-1.5" colSpan={hasCodes ? 2 : 1}>
               {number(detail.item_count)} lines
             </td>
-            <td className="num py-1.5 text-right">
-              {money(detail.shelf_total)}
-            </td>
+            {hasShelf && (
+              <td className="num py-1.5 text-right">
+                {money(detail.shelf_total)}
+              </td>
+            )}
             <td className="num py-1.5 text-right">
               {money(detail.paid_total)}
             </td>
-            <td className="num py-1.5 text-right">
-              {saving(detail.saved_total)}
-            </td>
+            {hasShelf && (
+              <td className="num py-1.5 text-right">
+                {saving(detail.saved_total)}
+              </td>
+            )}
           </tr>
         </tfoot>
       </table>
+
+      {hasShelf || (
+        <p className="mt-2 max-w-[62ch] text-[11.5px] text-muted">
+          This response gives what each line cost after markdowns and no shelf
+          price, so there is no saving to show.
+        </p>
+      )}
 
       {/* The retailer's own arithmetic, checked rather than assumed. Silent
           while it agrees; the disagreement is the whole reason to show it. */}

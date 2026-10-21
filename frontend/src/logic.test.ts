@@ -5,7 +5,7 @@ import {
   fillMonths,
   monthIndex,
 } from "./views/Timeline";
-import { scale } from "./views/PriceHistory";
+import { countOf, scale, tip } from "./views/PriceHistory";
 import { gaugeWidth, scopeNote } from "./views/Profile";
 import { draftRows } from "./views/Compliance";
 import { rowsFor } from "./views/Compare";
@@ -51,8 +51,45 @@ const point = (date: string, retail: number, paid = retail): PricePoint =>
     retail_amt: retail,
     paid_amt: paid,
     saved_amt: 0,
+    quantity: null,
+    count: null,
+    unit_retail: retail,
+    unit_paid: paid,
     multiple_of: null,
   }) as PricePoint;
+
+describe("countOf and tip", () => {
+  // The quantity a line was for, where the response says. A weight is not a
+  // count: H Mart keeps 0.57 lb in the same field, and it must not print as
+  // "0.57 ×" or be divided by.
+  // `count` is the API's decision, made for the whole response.
+  const at = (quantity: number | null, paid: number, unit = paid) =>
+    ({
+      ...point("2024-06-01", paid),
+      retail_amt: null,
+      unit_retail: null,
+      saved_amt: null,
+      quantity,
+      count: quantity !== null && quantity >= 2 && Number.isInteger(quantity) ? quantity : null,
+      unit_paid: unit,
+    }) as PricePoint;
+
+  it("shows the count the API decided, and no count where it decided none", () => {
+    expect(countOf(at(3, 4.5, 1.5))).toBe(3);
+    expect(countOf(at(1, 2))).toBeNull();
+    expect(countOf(at(0.57, 1.49))).toBeNull();
+  });
+
+  it("says the count and the price of one, and no saving it was not given", () => {
+    const text = tip(at(3, 4.5, 1.5));
+    expect(text).toContain("3 at $1.50 each, $4.50 paid");
+    expect(text).not.toContain("off");
+  });
+
+  it("says only what was paid for a weighed line", () => {
+    expect(tip(at(0.57, 1.49))).toBe("2024-06-01 · $1.49 paid");
+  });
+});
 
 describe("scale", () => {
   it("places points by date, not by position in the array", () => {
@@ -81,6 +118,38 @@ describe("scale", () => {
     expect(Number.isFinite(s.y(3.11))).toBe(true);
     expect(s.lo).toBe(3.11);
     expect(s.hi).toBe(3.11);
+  });
+
+  it("does not read a missing shelf price as zero", () => {
+    // Albertsons discloses only what was paid. A null in the range would pull
+    // the axis floor down to $0 and flatten the line against the top.
+    const paidOnly = (date: string, paid: number): PricePoint =>
+      ({
+        ...point(date, paid),
+        retail_amt: null,
+        unit_retail: null,
+        saved_amt: null,
+      }) as PricePoint;
+    const s = scale([
+      paidOnly("2024-01-01", 3.5),
+      paidOnly("2024-06-01", 4.25),
+    ]);
+    expect(s.lo).toBe(3.5);
+    expect(s.hi).toBe(4.25);
+  });
+
+  it("scales by the price of one, where the response says how many", () => {
+    // A line of three at $4.50 is $1.50 each. Scaling on the line amount
+    // would stretch the axis to $4.50 and squash every single-item point.
+    const three = {
+      ...point("2024-06-01", 4.5),
+      quantity: 3,
+      count: 3,
+      unit_retail: 1.5,
+      unit_paid: 1.5,
+    } as PricePoint;
+    const s = scale([point("2024-01-01", 1.45), three]);
+    expect(s.hi).toBe(1.5);
   });
 
   it("leaves the extremes off the edge", () => {

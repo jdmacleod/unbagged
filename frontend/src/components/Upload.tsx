@@ -230,6 +230,9 @@ export function Upload({
           // accepts anything and the server still explains what it could not
           // read.
           //
+          // `.xlsx` is here because one retailer answers with a workbook beside
+          // its report PDF, and `extraction.read_workbook` reads it directly.
+          //
           // Images are here because a response can arrive as screen captures of
           // a receipt viewer, which is what one store could supply. `.zip` is
           // here because that is how such a folder arrives: `ingest` expands an
@@ -237,8 +240,9 @@ export function Upload({
           // citation, so the reader no longer has to unpack it and select every
           // file by hand — which cost a visit if they missed one.
           accept={
-            ".pdf,.txt,.text,.json,.csv,.md,.xls,.png,.jpg,.jpeg,.webp,.gif,.zip," +
-            "application/pdf,text/plain,application/zip,image/*"
+            ".pdf,.txt,.text,.json,.csv,.md,.xls,.xlsx,.png,.jpg,.jpeg,.webp,.gif,.zip," +
+            "application/pdf,text/plain,application/zip,image/*," +
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           }
           disabled={busy}
           className="hidden"
@@ -250,8 +254,8 @@ export function Upload({
           <>
             <span className="font-medium">Drop it here</span>
             <span className="mt-1 block text-muted">
-              PDF, text, a spreadsheet export — the XML kind, not an Excel
-              workbook — or screen captures of a receipt. Or click to choose.
+              PDF, text, an Excel workbook or spreadsheet export, or screen
+              captures of a receipt. Or click to choose.
             </span>
             {/* What happens next, and roughly how long. A long report is tens
                 of seconds of text extraction, and a reader with no estimate

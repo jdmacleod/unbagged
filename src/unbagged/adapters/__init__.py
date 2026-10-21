@@ -9,10 +9,10 @@ Adding a retailer means adding a package here and one line below.
 """
 
 from unbagged.adapters import (  # noqa: F401  (each import registers its adapter)
+    albertsons,
     generic,
     hmart,
     kroger,
-    safeway,
 )
 from unbagged.adapters.registry import registry
 

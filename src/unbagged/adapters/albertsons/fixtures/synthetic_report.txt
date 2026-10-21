@@ -1,0 +1,70 @@
+RReeqquueesstt ddeettaaiillss
+RReeqquueesstt rreeff IIDD R7P7WLVJFC RReeqquueesstt ttyyppee Request for personal information
+DDaattee ssuubbmmiitttteedd 03/02/2026 09:15 AM SSuubbjjeecctt ttyyppee Consumer
+FFiirrsstt nnaammee Morgan LLaasstt nnaammee Thistlewaite
+IInnssttrruuccttiioonnss
+AA GGuuiiddee ttoo YYoouurr DDaattaa
+This file sets out the personal data we hold about you under several headings, each of
+which stands for one of the categories of data collected (for instance, contact details
+and purchases).
+Some information is exempt from access requests and is not included here. Exempt
+information includes health information held by our pharmacy. We also do not include
+information that would reveal another person's data, such as support conversations or
+email exchanges with us.
+WWhhaatt iiff II HHaavvee QQuueessttiioonnss
+• By email via this address: privacy@example.com
+• By phone at (800) 555-0100 (select option 2)
+• Online through our Contact Form at this address: https://example.com/privacy
+• Via Customer Support Center for general inquiries at (800) 555-0199
+DDeettaaiilleedd RReeppoorrtt
+LLooyyaallttyy SSttoorree VViissiittss DDeettaaiillss [[cccc::4433661188338833220000221144]]
+Card_first_store_used_id 4417
+Card_first_visit_dt 2017-05-08
+Card_last_store_used_id 4302
+Card_last_visit_dt 2021-11-15
+Card_nbr 43618383200214
+Customer_id 34f8f0c6-ff98-4321-8191-d5f60ca0e06a
+LLooyyaallttyy PPrrooffiillee DDeettaaiillss [[cccc:: 4433661188338833220000221144]]
+Address 8200 LARKSPUR HOLLOW WAY
+Alternate_id_txt 730-000-0776437153199
+Customer_first_used_store_nbr 4417
+Customer_first_visit_dt 2017-05-08
+Customer_id 34f8f0c6-ff98-4321-8191-d5f60ca0e06a
+Customer_last_used_store_nbr 4302
+1 / 2
+Customer_last_visit_dt 2021-11-15
+Customer_most_spend_store_nbr 4417
+Customer_most_used_store_nbr 4417
+First_nm AVERY
+Formatted_nm I/ss
+Head_household_ind True
+Household_id 776437153199
+Last_nm THISTLEWAITE
+Loyalty_program_card_nbr 43618383200214
+Maiden_nm I/ss
+Mail_allowed_ind True
+Middle_nm R
+Nick_nm I/ss
+Phone 3105550142
+Postal_zone_cd 99999-0101
+State_cd CA
+PPrreeffeerreennccee DDeettaaiillss
+preference_cd:MAIL-OFFERS
+os_cust_id:7300000776437153199
+Customer Preference 1
+first_eff_ts:2023-08-03T10:22:41.518000+00:00
+last_eff_ts:9999-12-31T08:00:00+00:00
+preference_cd:PROMO-ALL
+os_cust_id:7300000776437153199
+Customer Preference 2
+first_eff_ts:2023-08-03T10:22:41.518000+00:00
+last_eff_ts:9999-12-31T08:00:00+00:00
+LLooyyaallttyy EEaarrnn BBuurrnn DDeettaaiillss [[hhhh::777766443377115533119999]]
+Burn_points 0
+Earn_points 3
+Household_id 776437153199
+Last_update_ts 2024-06-14T17:40:09.311000
+Loyalty_program_cd SUMMER_GAME_2024_01
+Reward_origin_cd GROCERY
+Transaction_id 43023665657072044
+2 / 2

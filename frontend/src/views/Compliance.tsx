@@ -58,7 +58,8 @@ function Retailer({
   categories: string[];
 }) {
   const [showLetter, setShowLetter] = useState(false);
-  const answered = categories.length - row.absent_count;
+  const assessed = categories.length - row.unassessed_count;
+  const answered = assessed - row.absent_count;
 
   // missing_category follow-ups restate the absent categories one for one, and
   // the list above already is that list. Showing both says everything twice,
@@ -97,14 +98,23 @@ function Retailer({
           </span>
           <div className="min-w-0 flex-1">
             <h2 className="font-serif text-[17px] font-semibold">
-              {row.absent_count === 0
-                ? `${row.display_name} addressed every category`
-                : `of ${categories.length} categories went unanswered`}
+              {row.absent_count > 0
+                ? `of ${assessed} categories went unanswered`
+                : row.unassessed_count > 0
+                  ? `went unanswered, of the ${assessed} that could be assessed`
+                  : `${row.display_name} addressed every category`}
             </h2>
             <p className="mt-0.5 max-w-[62ch] text-muted">
-              {row.display_name} answered {answered} of {categories.length}. An
-              absence here is not a blank: it is a record that the category was
-              asked about and not addressed.
+              {row.display_name} answered {answered} of {assessed}. An absence
+              here is not a blank: it is a record that the category was asked
+              about and not addressed.
+              {row.unassessed_count > 0 && (
+                <>
+                  {" "}
+                  {row.unassessed_count} could not be assessed from what was
+                  uploaded, and are counted neither way.
+                </>
+              )}
             </p>
           </div>
         </div>

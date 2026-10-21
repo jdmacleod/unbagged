@@ -18,7 +18,7 @@ import random
 
 import pytest
 
-from unbagged.views import _price_shape
+from unbagged.views import _count, _per_unit, _price_shape
 
 
 def kinds(*amounts: float) -> str:
@@ -196,3 +196,29 @@ class TestScoredAgainstGroundTruth:
             amounts, true = self._series(rng, kind, 12)
             assert _price_shape(amounts)["kind"] in {"weight", "multiple", "unit"}
             assert len(_price_shape(amounts)["multiples"]) == len(amounts)
+
+
+class TestPerUnit:
+    """A disclosed count divides the line; anything else leaves it alone."""
+
+    def test_a_line_of_several_is_divided(self):
+        assert _per_unit(4.5, _count(3)) == 1.5
+
+    def test_no_count_leaves_the_line_amount(self):
+        # Kroger: the line is the only unit there is.
+        assert _per_unit(4.5, _count(None)) == 4.5
+
+    def test_zero_one_and_a_fraction_are_not_counts(self):
+        assert _count(0) is None
+        assert _count(1) is None
+        assert _count(0.57) is None
+        assert _count(2.5) is None
+
+    def test_float_noise_in_a_count_is_still_that_count(self):
+        assert _count(3.0000000000000004) == 3
+
+    def test_no_amount_stays_no_amount(self):
+        assert _per_unit(None, 2) is None
+
+    def test_a_disclosed_fraction_of_a_cent_survives(self):
+        assert _per_unit(1.8341, None) == 1.8341

@@ -2,8 +2,8 @@
 
 Adapters work on what this module hands them, not on file formats. This is the
 boundary: it turns a stored document into pages of text, or into sheets of
-placed cells, and nothing more. It knows about PDFs, plain text and
-SpreadsheetML; it knows nothing about any retailer.
+placed cells, and nothing more. It knows about PDFs, plain text, SpreadsheetML
+2003 and the `.xlsx` kind of workbook; it knows nothing about any retailer.
 
 Page fidelity matters more than it looks. Provenance has to answer "which page of
 this 48-page PDF", because that is the question of someone holding a printout, so
@@ -26,11 +26,15 @@ it had to change anyway.
 from __future__ import annotations
 
 import logging
+import posixpath
 import re
 import xml.etree.ElementTree as ET
-from collections.abc import Container
+import zipfile
+import zlib
+from collections.abc import Container, Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from xml.parsers import expat
 
 from unbagged.models import SourceDocument
 
@@ -86,6 +90,74 @@ IMAGE_MAGIC_BYTES = 16
 #: under an `.xls` extension.
 SS = "urn:schemas-microsoft-com:office:spreadsheet"
 
+#: The `.xlsx` kind: Office Open XML, a zip of XML parts. Unrelated to `SS`
+#: above despite the shared word — Excel's 2003 XML format and its 2007 zip
+#: format have nothing else in common, and a reader of one reads none of the
+#: other. Albertsons answers with this kind.
+XLSX = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+XLSX_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+PACKAGE_REL = "http://schemas.openxmlformats.org/package/2006/relationships"
+XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+#: What one workbook's XML may inflate to while it is read.
+#:
+#: The same reasoning as `ingest.MAX_ARCHIVE_BYTES`, because a workbook IS an
+#: archive: the upload cap bounds compressed bytes, which is the wrong end of a
+#: decompression bomb. 64 MB is what the XML kind of spreadsheet may be on
+#: upload, so the two readers hold at most the same, and a real transaction
+#: sheet of many years' line items is a few megabytes.
+MAX_WORKBOOK_BYTES = 64 * 1024 * 1024
+
+#: Excel's last column is XFD, the 16,384th. A cell naming one past it is not a
+#: spreadsheet, and both readers pad a row out to the column a cell names — so
+#: an uncapped reference let one 25-byte cell cost an 18,000-slot row.
+MAX_COLUMN = 16_384
+
+#: How many cell slots one workbook may place, padding included.
+#:
+#: The byte cap bounds the XML; it does not bound what the XML asks for. A row
+#: of one cell at column XFD is a few bytes and 16,384 slots, so memory follows
+#: the slots, and the slots are what is budgeted. Every row is charged at least
+#: one, so a sheet of empty rows is budgeted too: ten million `<row/>` elements
+#: are 60 MB of XML, under the byte cap, and measured 2.9 GB resident before
+#: they were. A real response's sheets place tens of thousands of cells.
+MAX_WORKBOOK_CELLS = 2_000_000
+
+#: How many elements one row may hold, at any depth beneath it.
+#:
+#: Counting a row's cells is not enough, because a cell is a tree: a `Data`
+#: holding a million empty children is one cell, and measured 1.9 GB before
+#: everything under a row was counted. The bound is generous — a full-width row
+#: of rich-text cells with a run and its properties each — and a real
+#: response's rows hold a few dozen.
+MAX_ROW_ELEMENTS = 16 * MAX_COLUMN
+
+#: How deeply elements may nest. A real sheet is eight deep at most — a run's
+#: properties inside a run inside an inline string inside a cell — and a cell
+#: whose text is a thousand nested tags is not a spreadsheet.
+MAX_DEPTH = 64
+
+#: The parts read whole rather than streamed — relationships and the workbook
+#: part — are a few KB in any real file, so they get a cap of their own rather
+#: than the whole workbook's allowance each.
+MAX_STRUCTURE_BYTES = 1024 * 1024
+
+#: The namespace of a workbook saved as "Strict Open XML Spreadsheet". Same
+#: shape, different names; this reader knows the transitional ones only.
+XLSX_STRICT = "http://purl.oclc.org/ooxml/spreadsheetml/main"
+
+#: What a damaged or unsupported zip raises from inside `zipfile`. Narrower than
+#: this, a corrupt deflate stream escaped as `zlib.error` and failed the whole
+#: upload rather than costing the one file, against `extract_all`'s contract.
+_ZIP_ERRORS = (
+    zipfile.BadZipFile,
+    RuntimeError,
+    OSError,
+    zlib.error,
+    EOFError,
+    NotImplementedError,
+)
+
 #: Fed to the pull parser one piece at a time. Nothing turns on the size; it is
 #: large enough that the loop is not the cost and small enough to stop early.
 CHUNK_BYTES = 64 * 1024
@@ -104,12 +176,9 @@ CHUNK_BYTES = 64 * 1024
 #: costs 2.4 ms against 3.7 s for a full parse.
 SNIFF_BUDGET_BYTES = 256 * 1024
 
-#: A DOCTYPE must precede the root element, so the prolog is the whole search.
-#: Deliberately not a scan of the entire document: that would undo the bounded
-#: read it sits next to.
+#: How much of a file's head is read to decide what kind of file it is.
 PROLOG_BYTES = 4096
 
-_DOCTYPE = re.compile(r"<!(?:DOCTYPE|ENTITY)\b", re.IGNORECASE)
 _XML_PROLOG = re.compile(r"^\s*<\?xml\b", re.IGNORECASE)
 
 
@@ -234,6 +303,11 @@ class Table:
     declared_columns: int | None = None
     #: True when the read stopped on a bound rather than at the end of the sheet.
     truncated: bool = False
+    #: The workbook counts date serials from 1904 rather than 1900. Only an
+    #: `.xlsx` can say so, and it matters to anything reading a date column: a
+    #: serial is a day count, and the same count lands four years apart under
+    #: the two epochs with nothing in the cell to tell them apart.
+    date1904: bool = False
 
     def locator(self, row: int, column: int) -> str:
         """An A1 cell reference, qualified by sheet: `Workbook!D14`.
@@ -278,22 +352,129 @@ def looks_like_spreadsheetml(text: str) -> bool:
     return bool(_XML_PROLOG.match(head)) and SS in head
 
 
-def _refuse_doctype(text: str) -> None:
-    """Refuse a document type declaration before the parser ever sees one.
+DECLARATION_MESSAGE = (
+    "This file carries a document type declaration, which a retailer export "
+    "does not. It has not been read."
+)
 
-    Measured on this project's Python 3.12: external entities are already
-    refused by the parser, but internal entity expansion is not — a few lines of
-    declaration expand to gigabytes and take the container with them. A retailer
-    export carries no DTD, so this cannot refuse a real file.
 
-    Only the prolog is scanned, because a DOCTYPE must precede the root element
-    and scanning the whole document would undo the bounded read beside it.
+class _DeclarationGuard:
+    """Refuse a document type declaration, as the parser sees it.
+
+    Internal entity expansion is what a declaration buys an attacker, and a
+    retailer export carries none, so any declaration is refused outright.
+
+    This used to be a regular expression over the first 4 KB, decoded as UTF-8.
+    Both halves of that were wrong and both were demonstrated: a part encoded
+    as UTF-16 decoded to noise the expression never matched, and a comment
+    longer than the window pushed the declaration past it — yet the parser
+    behind it read both and expanded the entity. So the question is put to an
+    expat parser, which decodes the bytes the way the reading parser will and
+    reports a declaration wherever in the prolog it sits.
+
+    It stops at the root element, because a declaration cannot follow one, so
+    it costs only the prolog however large the document is. Fed the same chunks
+    as the reading parser and ahead of it, so nothing reaches that parser until
+    the guard has seen it.
+
+    **Reparse deferral is switched off.** Expat 2.6+ holds back a large token
+    that spans chunks until more input arrives, and the first version of this
+    guard was never fed a final chunk: a prolog comment past ~131 KB left the
+    declaration behind it unread by the guard and read by the parser at
+    `close()`, which expanded an entity into a cell. With deferral off the guard
+    parses every byte it is given, and `close()` feeds it the end anyway.
     """
-    if _DOCTYPE.search(text[:PROLOG_BYTES]):
-        raise ExtractionError(
-            "This file carries a document type declaration, which a retailer "
-            "export does not. It has not been read."
-        )
+
+    def __init__(self) -> None:
+        self._parser = expat.ParserCreate()
+        if hasattr(self._parser, "SetReparseDeferralEnabled"):
+            self._parser.SetReparseDeferralEnabled(False)
+        self._parser.StartDoctypeDeclHandler = self._refuse
+        self._parser.EntityDeclHandler = self._refuse
+        self._parser.StartElementHandler = self._root
+        self._done = False
+
+    @staticmethod
+    def _refuse(*_args: object) -> None:
+        raise ExtractionError(DECLARATION_MESSAGE)
+
+    def _root(self, *_args: object) -> None:
+        self._done = True
+
+    def feed(self, data: bytes | str, final: bool = False) -> None:
+        if self._done:
+            return
+        try:
+            self._parser.Parse(data, final)
+        except (LookupError, ValueError) as exc:
+            # A declared encoding expat cannot decode: an unknown name, a
+            # multi-byte codec, or one that is not a text encoding at all. The
+            # reading parser raises the same, and neither is a ParseError, so
+            # unhandled it failed the whole upload rather than this one file.
+            raise ExtractionError(_encoding_message()) from exc
+        except expat.ExpatError:
+            # Malformed before the root. The reading parser fails on the same
+            # bytes and says so in its own words; nothing past this point can
+            # reach it, so there is nothing left to guard.
+            self._done = True
+
+    def close(self) -> None:
+        """The end of the input: anything still held is parsed now."""
+        self.feed(b"", final=True)
+
+
+class _Tree:
+    """The open elements of one streamed document, kept to what a row needs.
+
+    Pull parsing does not by itself bound memory: the parser still builds the
+    tree, and every element it has ended stays attached to its parent. So:
+
+    * **Every element at `row_depth` or above is detached once it ends** and
+      the caller has had it — rows, and anything a document puts beside them.
+      Detaching only rows left everything else in place, and each row's removal
+      then scanned past it all: 1.2 MB of rows among other elements took 109 s.
+      Detached as they end, an element is always its parent's only child.
+    * **Everything beneath `row_depth` is counted**, against `MAX_ROW_ELEMENTS`
+      per element at that depth, and nesting against `MAX_DEPTH`. That subtree
+      is held until its row ends, because the row is read whole.
+    * **A row's direct children are counted against `MAX_COLUMN`** as they
+      start, with the message that names columns, because that is the limit a
+      person can recognise.
+
+    So memory follows one row, not the sheet. The consequence is the one
+    `read_tables` states: the caller must take what it needs from an element
+    while it holds it.
+    """
+
+    def __init__(self, row_depth: int) -> None:
+        self.open: list[ET.Element] = []
+        self.row_depth = row_depth
+        self.children = 0
+        self.elements = 0
+
+    def start(self, element: ET.Element) -> None:
+        depth = len(self.open) + 1
+        if depth > MAX_DEPTH:
+            raise ExtractionError(_too_deep_message())
+        if depth == self.row_depth:
+            self.children = self.elements = 0
+        elif depth > self.row_depth:
+            self.elements += 1
+            if self.elements > MAX_ROW_ELEMENTS:
+                raise ExtractionError(_too_many_elements_message())
+            if depth == self.row_depth + 1:
+                self.children += 1
+                if self.children > MAX_COLUMN:
+                    raise ExtractionError(_past_last_column_message())
+        self.open.append(element)
+
+    def end(self) -> None:
+        self.open.pop()
+
+    def release(self, element: ET.Element) -> None:
+        """Detach an element that has ended, once the caller is done with it."""
+        if self.open and len(self.open) < self.row_depth:
+            self.open[-1].remove(element)
 
 
 def read_tables(
@@ -320,10 +501,10 @@ def read_tables(
     attribute, is taken on `start` because by the time its `end` arrives every
     row it should have labelled has already gone past.
     """
-    _refuse_doctype(source)
-
+    guard = _DeclarationGuard()
     parser = ET.XMLPullParser(events=("start", "end"))
     tables: list[Table] = []
+    cells_placed = 0
     name = ""
     rows: list[Row] = []
     row_number = 0
@@ -336,6 +517,9 @@ def read_tables(
     #: Numbers rather than elements: every row is cleared as it is consumed, so
     #: nothing that outlives a row may be a reference into the tree.
     spans: dict[int, int] = {}
+    #: Rows sit at depth 4: Workbook, Worksheet, Table, Row. Cleared but
+    #: attached, two million `<Row/>` measured 468 MB; see `_Tree`.
+    tree = _Tree(row_depth=4)
 
     def flush() -> None:
         nonlocal rows, in_sheet, declared_rows, declared_columns
@@ -352,47 +536,60 @@ def read_tables(
         rows, in_sheet = [], False
         declared_rows = declared_columns = None
 
+    def consume() -> bool:
+        """Handle every event the parser has ready. True when a bound is hit."""
+        nonlocal name, row_number, spans, in_sheet, declared_rows, declared_columns
+        nonlocal cells_placed
+        for event, element in parser.read_events():
+            tag = element.tag.rpartition("}")[2]
+            if event == "start":
+                tree.start(element)
+                if tag == "Worksheet":
+                    flush()
+                    in_sheet = True
+                    name = element.get(f"{{{SS}}}Name") or ""
+                    row_number = 0
+                    # A span cannot reach out of the sheet it was written in.
+                    spans = {}
+                elif tag == "Table":
+                    declared_rows = _as_int(element.get(f"{{{SS}}}ExpandedRowCount"))
+                    declared_columns = _as_int(element.get(f"{{{SS}}}ExpandedColumnCount"))
+                continue
+            tree.end()
+            if tag == "Row":
+                row_number = _as_int(element.get(f"{{{SS}}}Index")) or (row_number + 1)
+                # Dropped as they expire, which also makes `spans` the set of
+                # columns blocked in THIS row. Keyed on the last row a span
+                # covers rather than a countdown, because `ss:Index` on a Row
+                # skips rows and a countdown would hold a span open across the
+                # gap.
+                spans = {column: last for column, last in spans.items() if last >= row_number}
+                cells, opened = _cells_of(element, spans.keys())
+                cells_placed += max(1, len(cells))
+                if cells_placed > MAX_WORKBOOK_CELLS:
+                    raise ExtractionError(_too_many_cells_message())
+                for column, down in opened.items():
+                    spans[column] = row_number + down
+                rows.append(Row(cells=cells, number=row_number))
+                element.clear()
+                tree.release(element)
+                if max_rows is not None and len(rows) >= max_rows:
+                    return True
+                continue
+            if tag == "Worksheet":
+                element.clear()
+            tree.release(element)
+        return False
+
     stopping = False
     try:
         for start in range(0, len(source), CHUNK_BYTES):
             chunk = source[start : start + CHUNK_BYTES]
+            guard.feed(chunk)
             parser.feed(chunk)
             consumed += len(chunk)
-            for event, element in parser.read_events():
-                tag = element.tag.rpartition("}")[2]
-                if event == "start":
-                    if tag == "Worksheet":
-                        flush()
-                        in_sheet = True
-                        name = element.get(f"{{{SS}}}Name") or ""
-                        row_number = 0
-                        # A span cannot reach out of the sheet it was written in.
-                        spans = {}
-                    elif tag == "Table":
-                        declared_rows = _as_int(element.get(f"{{{SS}}}ExpandedRowCount"))
-                        declared_columns = _as_int(element.get(f"{{{SS}}}ExpandedColumnCount"))
-                elif event == "end":
-                    if tag == "Row":
-                        row_number = _as_int(element.get(f"{{{SS}}}Index")) or (row_number + 1)
-                        # Dropped as they expire, which also makes `spans` the
-                        # set of columns blocked in THIS row. Keyed on the last
-                        # row a span covers rather than a countdown, because
-                        # `ss:Index` on a Row skips rows and a countdown would
-                        # hold a span open across the gap.
-                        spans = {
-                            column: last for column, last in spans.items() if last >= row_number
-                        }
-                        cells, opened = _cells_of(element, spans.keys())
-                        for column, down in opened.items():
-                            spans[column] = row_number + down
-                        rows.append(Row(cells=cells, number=row_number))
-                        element.clear()
-                        if max_rows is not None and len(rows) >= max_rows:
-                            stopping = True
-                            break
-                    elif tag == "Worksheet":
-                        element.clear()
-            if stopping:
+            if consume():
+                stopping = True
                 break
             if (
                 budget_bytes is not None
@@ -409,7 +606,13 @@ def read_tables(
             # tree actually finished, and it is the only thing that catches a
             # download that ended half way through. Skipped when the read
             # stopped on a bound, where an unfinished tree is the intent.
+            #
+            # And its events are read: a parser can hold back a large token
+            # until the end, and what it releases at close() — a whole sheet,
+            # once — was being dropped without a word.
+            guard.close()
             parser.close()
+            stopping = consume()
     except ET.ParseError as exc:
         raise ExtractionError(_malformed_message(source, exc)) from exc
 
@@ -488,6 +691,8 @@ def _cells_of(
             # lands in the span's column and everything after it follows.
             while column in blocked:
                 column += 1
+        if column > MAX_COLUMN:
+            raise ExtractionError(_past_last_column_message())
         while len(placed) < column - 1:
             placed.append(None)
         data = cell.find(f"{{{SS}}}Data")
@@ -503,6 +708,498 @@ def _cells_of(
                 opened[held] = down
         column += across
     return tuple(placed), opened
+
+
+# --------------------------------------------------------------------------
+# The `.xlsx` kind
+# --------------------------------------------------------------------------
+
+
+class _Shared(int):
+    """A cell that holds an index into the shared-string table, not a value.
+
+    A subclass rather than a bare int so the resolving pass cannot mistake a
+    number for a reference: every `t="s"` cell is one of these, every numeric
+    cell is a `str`, and the two never meet.
+    """
+
+
+def looks_like_xlsx(path: Path) -> bool:
+    """A zip that is a spreadsheet package, decided by what it declares.
+
+    The package names its own main part, and a workbook's main part is a
+    workbook. A `.docx` is the same kind of zip with a different main part, so
+    this is what keeps a letter from being read as an empty spreadsheet.
+    """
+    if not looks_like_zip(path):
+        return False
+    try:
+        with zipfile.ZipFile(path) as package:
+            return _workbook_part(package) is not None
+    except (*_ZIP_ERRORS, KeyError, ExtractionError):
+        return False
+
+
+def _workbook_part(package: zipfile.ZipFile) -> tuple[str, ET.Element] | None:
+    """The workbook part's path and its parsed root, or None if there is none.
+
+    Read from the package's own relationships: almost always `xl/workbook.xml`,
+    and the fallback says so, but the package is entitled to put it elsewhere.
+    The root comes back with the path so the part is parsed once per read, not
+    once to recognise it and again to use it.
+    """
+    names = set(package.namelist())
+    candidates = []
+    if "_rels/.rels" in names:
+        root = _parse_part(package, "_rels/.rels")
+        for rel in root.iter(f"{{{PACKAGE_REL}}}Relationship"):
+            if rel.get("Type", "").endswith("/officeDocument"):
+                candidates.append(rel.get("Target", "").lstrip("/"))
+    candidates.append("xl/workbook.xml")
+    for name in candidates:
+        if name in names:
+            workbook = _parse_part(package, name)
+            if workbook.tag in (f"{{{XLSX}}}workbook", f"{{{XLSX_STRICT}}}workbook"):
+                return name, workbook
+    return None
+
+
+def _read_part(package: zipfile.ZipFile, name: str) -> bytes:
+    """One structural part, whole, refused past `MAX_STRUCTURE_BYTES`.
+
+    For relationships and the workbook part, which are a few KB and are needed
+    whole. The sheets and the string table are streamed; see `_stream_part`.
+    """
+    try:
+        with package.open(name) as handle:
+            data = handle.read(MAX_STRUCTURE_BYTES + 1)
+    except _ZIP_ERRORS as exc:
+        raise ExtractionError(_package_message(exc)) from exc
+    if len(data) > MAX_STRUCTURE_BYTES:
+        raise ExtractionError(
+            f"This workbook's {name} is too large for the part it is, which is a "
+            "few kilobytes in any real workbook. It has not been read."
+        )
+    return data
+
+
+def _parse_part(package: zipfile.ZipFile, name: str) -> ET.Element:
+    data = _read_part(package, name)
+    guard = _DeclarationGuard()
+    guard.feed(data, final=True)
+    try:
+        # The guard has refused any declaration, which is the whole of the
+        # attack S314 is about here: see `_DeclarationGuard`.
+        return ET.fromstring(data)  # noqa: S314
+    except ET.ParseError as exc:
+        raise ExtractionError(f"This workbook is damaged: {name} is not readable ({exc}).") from exc
+
+
+def _stream_part(
+    package: zipfile.ZipFile, name: str, spent: list[int], *, row_depth: int
+) -> Iterator[ET.Element]:
+    """Each element of one part as it ends, inflation charged to `spent`.
+
+    `spent` is a one-element list so every part read in one workbook shares a
+    single allowance — the cap has to hold across the workbook, not per part,
+    or a bomb split over twenty sheets is twenty times the cap.
+
+    Elements at `row_depth` and above are detached once the caller has had
+    them, and everything beneath is budgeted; see `_Tree`. Clearing a row is
+    not enough on its own: the emptied element stays attached to its parent,
+    and a few million of them under `sheetData` are gigabytes from a capped
+    byte count.
+
+    A generator so the caller can stop early: a bounded read that has its rows
+    closes this, and nothing past them is inflated at all.
+    """
+    guard = _DeclarationGuard()
+    parser = ET.XMLPullParser(events=("start", "end"))
+    tree = _Tree(row_depth)
+    try:
+        with package.open(name) as handle:
+            while chunk := handle.read(CHUNK_BYTES):
+                spent[0] += len(chunk)
+                if spent[0] > MAX_WORKBOOK_BYTES:
+                    raise ExtractionError(_too_large_message())
+                guard.feed(chunk)
+                parser.feed(chunk)
+                yield from _ended(parser, tree)
+        guard.close()
+        parser.close()
+        yield from _ended(parser, tree)
+    except _ZIP_ERRORS as exc:
+        raise ExtractionError(_package_message(exc)) from exc
+    except ET.ParseError as exc:
+        raise ExtractionError(f"This workbook is damaged: {name} is not readable ({exc}).") from exc
+
+
+def _ended(parser: ET.XMLPullParser, tree: _Tree) -> Iterator[ET.Element]:
+    """End events, each detached once the caller has had it."""
+    for event, element in parser.read_events():
+        if event == "start":
+            tree.start(element)
+            continue
+        tree.end()
+        yield element
+        tree.release(element)
+
+
+def _package_message(exc: Exception) -> str:
+    """RuntimeError is what `zipfile` raises for an encrypted member."""
+    if isinstance(exc, RuntimeError):
+        return (
+            "This workbook is password protected. Open it in Excel, remove the "
+            "password, save it, and upload it again."
+        )
+    return (
+        f"This workbook could not be opened ({exc}). If it was downloaded, the "
+        "download may be incomplete — download it again and re-upload."
+    )
+
+
+def _past_last_column_message() -> str:
+    return (
+        "This spreadsheet names a column past the last one a spreadsheet can "
+        "have, which no real export does. It has not been read."
+    )
+
+
+def _too_many_elements_message() -> str:
+    return (
+        f"One row of this spreadsheet holds more than {MAX_ROW_ELEMENTS:,} elements, "
+        "far more than any real row. It has not been read."
+    )
+
+
+def _too_deep_message() -> str:
+    return (
+        f"This spreadsheet's markup is nested more than {MAX_DEPTH} deep, which no "
+        "real spreadsheet is. It has not been read."
+    )
+
+
+def _encoding_message() -> str:
+    return (
+        "This file declares a text encoding that cannot be read here. Open it in "
+        "the program that made it, save it again, and re-upload that."
+    )
+
+
+def _too_many_cells_message() -> str:
+    return (
+        f"This spreadsheet places more than {MAX_WORKBOOK_CELLS:,} cells, far more "
+        "than a right-to-know response holds. It has not been read."
+    )
+
+
+def _too_large_message() -> str:
+    return (
+        f"This workbook inflates to more than {MAX_WORKBOOK_BYTES // (1024 * 1024)} MB "
+        "of spreadsheet once it is opened, which is far more than a right-to-know "
+        "response holds. It has not been read."
+    )
+
+
+_A1 = re.compile(r"^([A-Z]{1,3})(\d+)$")
+
+
+def _column_index(letters: str) -> int:
+    """A -> 1, Z -> 26, AA -> 27. The inverse of `column_letter`."""
+    index = 0
+    for letter in letters:
+        index = index * 26 + (ord(letter) - ord("A") + 1)
+    return index
+
+
+def _dimension(ref: str | None) -> tuple[int | None, int | None]:
+    """`A1:J9131` -> (9131 rows, 10 columns). What the sheet says of its size."""
+    if not ref:
+        return None, None
+    corner = _A1.match(ref.rpartition(":")[2].replace("$", ""))
+    if not corner:
+        return None, None
+    # `_as_int`, not `int`: a reference of thousands of digits raised past
+    # Python's integer-string limit, and a ValueError cost the whole upload.
+    return _as_int(corner.group(2)), _column_index(corner.group(1))
+
+
+def _text_of(element: ET.Element) -> str:
+    """The text of a string item: its `t`, or its rich-text runs' `t`s.
+
+    Deliberately not `itertext()`. A string item may carry `rPh` phonetic runs —
+    furigana for the cell's text — and their `t` children are not the value;
+    gathering the whole subtree would append them to it.
+    """
+    parts = [element.findtext(f"{{{XLSX}}}t") or ""]
+    parts += [run.findtext(f"{{{XLSX}}}t") or "" for run in element.iterfind(f"{{{XLSX}}}r")]
+    return "".join(parts)
+
+
+def _cell_value(cell: ET.Element) -> str | _Shared | None:
+    """What one `c` element holds, as the sheet wrote it.
+
+    Numbers come back as the text of `v`, unparsed: `1.1500000000000001` stays
+    that, and so does a date serial. What a number MEANS — a date, a price, an
+    identifier — is the adapter's to decide, because only the adapter knows
+    which column it is in. A formatted display value is never produced here.
+    """
+    kind = cell.get("t")
+    if kind == "inlineStr":
+        inline = cell.find(f"{{{XLSX}}}is")
+        return None if inline is None else _text_of(inline)
+    value = cell.findtext(f"{{{XLSX}}}v")
+    if value is None:
+        return None
+    if kind == "s":
+        try:
+            index = int(value)
+        except ValueError:
+            return None
+        if index < 0:
+            # Python would read -1 as "the last string", which is a real value
+            # from somewhere else in the sheet arriving with no warning.
+            raise ExtractionError(
+                "This workbook is damaged: a cell refers to a string by a negative position."
+            )
+        return _Shared(index)
+    if kind == "b":
+        return "TRUE" if value.strip() == "1" else "FALSE"
+    return value
+
+
+def read_workbook(
+    path: Path,
+    *,
+    max_rows: int | None = None,
+    budget_bytes: int | None = None,
+) -> TableRead:
+    """Read an `.xlsx` into placed cells, with the same bounds `read_tables` has.
+
+    The two readers return the same thing so an adapter never needs to know
+    which kind of spreadsheet it was handed. Where they differ is underneath:
+
+    * **Cells are placed by their own reference.** Every `c` carries `r="D14"`,
+      which names its column outright, so a skipped cell cannot shift the ones
+      after it the way an omitted SpreadsheetML cell can. A cell without `r` is
+      legal and takes the next column, which is the same rule `ss:Index`
+      leaves behind.
+    * **A merged region needs nothing.** Its covered cells are written as empty
+      `c` elements, not left out, so they hold their columns themselves.
+    * **Strings live in one table for the whole workbook.** A cell holds an
+      index into it, and the table is read after the sheets — only as far as
+      the highest index any read row needs, which for a bounded read is a few
+      entries at the front.
+
+    `max_rows` stops after that many rows of the sheet being read, and ends the
+    read there, exactly as `read_tables` does. `budget_bytes` bounds what a
+    bounded read may inflate; the hard `MAX_WORKBOOK_BYTES` bounds every read.
+    """
+    try:
+        package = zipfile.ZipFile(path)
+    except _ZIP_ERRORS as exc:
+        raise ExtractionError(_package_message(exc)) from exc
+
+    with package:
+        found = _workbook_part(package)
+        if found is None:
+            raise ExtractionError("This file is a zip, but not a workbook.")
+        workbook_name, workbook = found
+        if workbook.tag == f"{{{XLSX_STRICT}}}workbook":
+            raise ExtractionError(
+                "This workbook was saved as Strict Open XML Spreadsheet, which this "
+                "does not read. Open it in Excel and save it as Excel Workbook "
+                "(.xlsx), then upload that."
+            )
+        properties = workbook.find(f"{{{XLSX}}}workbookPr")
+        date1904 = properties is not None and properties.get("date1904") in ("1", "true")
+
+        targets, strings_name = _workbook_relationships(package, workbook_name)
+        spent = [0]
+        raw_tables: list[tuple[str, list[tuple[int, list]], int | None, int | None, bool]] = []
+        stopping = spent_budget = False
+        cells_placed = 0
+
+        for sheet in workbook.iter(f"{{{XLSX}}}sheet"):
+            target = targets.get(sheet.get(f"{{{XLSX_REL}}}id") or "")
+            if target is None:
+                # A chartsheet, or a relationship the package does not carry.
+                # Neither has rows to read.
+                continue
+            rows: list[tuple[int, list]] = []
+            declared_rows = declared_columns = None
+            row_number = 0
+            # Rows sit at depth 3: worksheet, sheetData, row.
+            events = _stream_part(package, target, spent, row_depth=3)
+            try:
+                for element in events:
+                    if budget_bytes is not None and spent[0] >= budget_bytes:
+                        # Checked on every event, not only on rows: a preamble
+                        # that never reaches a row is the case the budget is for.
+                        spent_budget = stopping = True
+                        break
+                    tag = element.tag.rpartition("}")[2]
+                    if tag == "dimension":
+                        declared_rows, declared_columns = _dimension(element.get("ref"))
+                    elif tag == "row":
+                        row_number = _as_int(element.get("r")) or (row_number + 1)
+                        cells = _xlsx_cells(element)
+                        cells_placed += max(1, len(cells))
+                        if cells_placed > MAX_WORKBOOK_CELLS:
+                            raise ExtractionError(_too_many_cells_message())
+                        element.clear()
+                        if not cells:
+                            # A row with no cells says nothing an adapter can
+                            # read, and no number is lost: every row kept
+                            # carries its own.
+                            continue
+                        rows.append((row_number, cells))
+                        if max_rows is not None and len(rows) >= max_rows:
+                            stopping = True
+                            break
+                    elif tag == "sheetData":
+                        element.clear()
+            finally:
+                events.close()
+            raw_tables.append(
+                (sheet.get("name") or "", rows, declared_rows, declared_columns, stopping)
+            )
+            if stopping:
+                break
+
+        needed = max(
+            (
+                cell
+                for _name, rows, *_rest in raw_tables
+                for _number, cells in rows
+                for cell in cells
+                if isinstance(cell, _Shared)
+            ),
+            default=-1,
+        )
+        strings: list[str] = []
+        if needed >= 0:
+            found_strings = _shared_strings(package, strings_name, needed, spent, budget_bytes)
+            if found_strings is None:
+                # A bounded read that spent its budget in the string table: the
+                # same answer as one that spent it before reaching a row.
+                return TableRead(tables=(), spent_budget=True)
+            strings = found_strings
+
+    tables = []
+    for name, rows, declared_rows, declared_columns, truncated in raw_tables:
+        placed = []
+        for number, cells in rows:
+            resolved = []
+            for cell in cells:
+                if isinstance(cell, _Shared):
+                    if not 0 <= cell < len(strings):
+                        raise ExtractionError(
+                            "This workbook is damaged: a cell refers to a string "
+                            "the workbook does not contain."
+                        )
+                    resolved.append(strings[cell])
+                else:
+                    resolved.append(cell)
+            placed.append(Row(cells=tuple(resolved), number=number))
+        tables.append(
+            Table(
+                name=name,
+                rows=tuple(placed),
+                declared_rows=declared_rows,
+                declared_columns=declared_columns,
+                truncated=truncated,
+                date1904=date1904,
+            )
+        )
+    return TableRead(tables=tuple(tables), spent_budget=spent_budget)
+
+
+def _workbook_relationships(
+    package: zipfile.ZipFile, workbook_name: str
+) -> tuple[dict[str, str], str | None]:
+    """Each worksheet's part, by relationship id, and the shared-string part.
+
+    Targets are relative to the workbook part's own folder, so they are joined
+    against it rather than assumed to live in `xl/`.
+    """
+    folder, _, leaf = workbook_name.rpartition("/")
+    rels_name = f"{folder}/_rels/{leaf}.rels" if folder else f"_rels/{leaf}.rels"
+    names = set(package.namelist())
+    sheets: dict[str, str] = {}
+    strings: str | None = None
+    if rels_name not in names:
+        return sheets, strings
+    for rel in _parse_part(package, rels_name).iter(f"{{{PACKAGE_REL}}}Relationship"):
+        target = rel.get("Target", "")
+        if target.startswith("/"):
+            resolved = target.lstrip("/")
+        else:
+            resolved = posixpath.normpath(posixpath.join(folder, target))
+        if resolved not in names:
+            continue
+        kind = rel.get("Type", "")
+        if kind.endswith("/worksheet"):
+            sheets[rel.get("Id", "")] = resolved
+        elif kind.endswith("/sharedStrings"):
+            strings = resolved
+    return sheets, strings
+
+
+def _xlsx_cells(row: ET.Element) -> list:
+    """Place a row's cells at the columns their references name."""
+    placed: list = []
+    column = 0
+    for cell in row.iterfind(f"{{{XLSX}}}c"):
+        ref = _A1.match(cell.get("r") or "")
+        column = _column_index(ref.group(1)) if ref else column + 1
+        if column > MAX_COLUMN:
+            raise ExtractionError(_past_last_column_message())
+        while len(placed) < column - 1:
+            placed.append(None)
+        value = _cell_value(cell)
+        if len(placed) == column - 1:
+            placed.append(value)
+        else:
+            # A reference to a column already filled — out of order, or twice.
+            # The later one wins, which is what Excel shows.
+            placed[column - 1] = value
+    return placed
+
+
+def _shared_strings(
+    package: zipfile.ZipFile,
+    name: str | None,
+    needed: int,
+    spent: list[int],
+    budget_bytes: int | None,
+) -> list[str] | None:
+    """The shared-string table, read only as far as index `needed`.
+
+    None when a bounded read spends its budget first. The table is in order of
+    first use in any workbook Excel wrote, so the strings a sniff needs are at
+    the front — but a tool that orders it otherwise could put one at the end of
+    a large table, and a sniff is not entitled to read all of it.
+    """
+    if name is None:
+        raise ExtractionError(
+            "This workbook is damaged: its cells refer to a string table it does not contain."
+        )
+    strings: list[str] = []
+    # String items sit at depth 2: sst, si.
+    events = _stream_part(package, name, spent, row_depth=2)
+    try:
+        for element in events:
+            if budget_bytes is not None and spent[0] >= budget_bytes:
+                return None
+            if element.tag == f"{{{XLSX}}}si":
+                strings.append(_text_of(element))
+                element.clear()
+                if len(strings) > needed:
+                    break
+    finally:
+        events.close()
+    return strings
 
 
 def looks_like_pdf(path: Path) -> bool:
@@ -591,6 +1288,16 @@ def extract_spreadsheet(path: Path, max_rows: int | None = None) -> tuple[tuple[
     return read.tables, read.spent_budget
 
 
+def extract_workbook(path: Path, max_rows: int | None = None) -> tuple[tuple[Table, ...], bool]:
+    """Read an `.xlsx` into sheets, bounded the same way `extract_spreadsheet` is."""
+    read = read_workbook(
+        path,
+        max_rows=max_rows,
+        budget_bytes=SNIFF_BUDGET_BYTES if max_rows is not None else None,
+    )
+    return read.tables, read.spent_budget
+
+
 @dataclass(frozen=True)
 class DocumentFacts:
     """What a document is, without reading what it says.
@@ -619,6 +1326,12 @@ def classify(document: SourceDocument, path: Path) -> str:
     asked. An archive never reaches `extract()` in the ordinary case — `ingest`
     expands one into its members before a bundle is built — so this exists for
     the case that slips past: a member that is itself an archive.
+
+    `xlsx` is decided by the package's own declaration and before any suffix
+    check, for the reason every content check here is: a workbook that reached
+    this tool through a mail client may be called anything. A zip that does not
+    declare a workbook — a damaged download, a `.docx` — falls through to the
+    suffix and is answered from there.
     """
     suffix = path.suffix.lower()
     if suffix == ".pdf" or looks_like_pdf(path):
@@ -627,6 +1340,8 @@ def classify(document: SourceDocument, path: Path) -> str:
         return "spreadsheetml"
     if looks_like_image(path):
         return "image"
+    if looks_like_xlsx(path):
+        return "xlsx"
     if suffix in TEXT_SUFFIXES or document.media_type == "text/plain":
         return "text"
     if suffix in {".xls", ".xlsx"}:
@@ -662,6 +1377,8 @@ def probe(document: SourceDocument) -> DocumentFacts | None:
                 return DocumentFacts("application/pdf", len(pdf.pages))
         if kind == "spreadsheetml":
             return DocumentFacts("application/vnd.ms-excel", None)
+        if kind == "xlsx":
+            return DocumentFacts(XLSX_MEDIA_TYPE, None)
         if kind == "image":
             # One capture is one page. Not None: a page count of None means the
             # format has no pages to count, which is true of a spreadsheet and
@@ -703,10 +1420,16 @@ def extract(document: SourceDocument, max_pages: int | None = None) -> Extracted
     if kind == "pdf":
         pages = extract_pdf(path, max_pages)
         media_type = "application/pdf"
-    elif kind == "spreadsheetml":
+    elif kind in ("spreadsheetml", "xlsx"):
         # Routed by content, never by suffix: `.xls` covers two unrelated
-        # formats and only one of them is this one.
-        tables, spent = extract_spreadsheet(path, max_pages)
+        # formats and only one of them is the XML kind. The two readers return
+        # the same sheets, so nothing past this point knows which ran.
+        if kind == "xlsx":
+            tables, spent = extract_workbook(path, max_pages)
+            media_type = XLSX_MEDIA_TYPE
+        else:
+            tables, spent = extract_spreadsheet(path, max_pages)
+            media_type = "application/vnd.ms-excel"
         if not spent and not any(table.rows for table in tables):
             # Guarded on `spent`, because a bounded read that gave up before
             # reaching a row also has no rows — and reporting that as an empty
@@ -720,7 +1443,7 @@ def extract(document: SourceDocument, max_pages: int | None = None) -> Extracted
         return ExtractedDocument(
             pages=(),
             filename=document.original_filename,
-            media_type="application/vnd.ms-excel",
+            media_type=media_type,
             document_id=document.id,
             tables=tables,
             spent_budget=spent,
@@ -743,12 +1466,22 @@ def extract(document: SourceDocument, max_pages: int | None = None) -> Extracted
             "is not something this can identify."
         )
     elif kind == "binary_workbook":
-        # Reached only when the content check above said no, so this is a real
-        # binary workbook rather than the XML kind.
+        # Reached only when the content checks above said no: a binary BIFF
+        # `.xls`, or a `.xlsx` whose package will not open or declares no
+        # workbook. `.xlsx` itself is read — see `read_workbook`.
+        if suffix == ".xlsx" and _head_bytes(path).startswith(OLE_MAGIC):
+            # Excel saves a password-protected .xlsx inside an OLE container,
+            # not a zip. "Download it again" is advice that cannot work for it.
+            raise ExtractionError(
+                f"{document.original_filename} is password protected. Open it in "
+                "Excel, remove the password, save it as Excel Workbook (.xlsx), "
+                "and upload that."
+            )
         raise ExtractionError(
-            f"{document.original_filename} is an Excel workbook. The export this "
-            "reads is the XML kind: in Excel choose Save As and pick XML "
-            "Spreadsheet 2003, or export CSV."
+            f"{document.original_filename} is an Excel workbook this cannot open. "
+            "An .xlsx workbook is read directly, so if this is one it may be "
+            "damaged — download it again. An older .xls is not: in Excel choose "
+            "Save As and pick Excel Workbook (.xlsx) or XML Spreadsheet 2003."
         )
     elif kind == "archive":
         # Reached only for an archive INSIDE an archive: `ingest` expands the
@@ -762,8 +1495,8 @@ def extract(document: SourceDocument, max_pages: int | None = None) -> Extracted
     else:
         raise ExtractionError(
             f"{document.original_filename} is a {suffix or 'typeless'} file. "
-            "Supported inputs are PDF, text, images, the XML kind of spreadsheet "
-            "export, and a zip of those."
+            "Supported inputs are PDF, text, images, .xlsx, the XML kind of "
+            "spreadsheet export, and a zip of those."
         )
 
     if not any(page.strip() for page in pages):
@@ -777,6 +1510,19 @@ def extract(document: SourceDocument, max_pages: int | None = None) -> Extracted
         media_type=media_type,
         document_id=document.id,
     )
+
+
+#: The container Excel uses for a password-protected workbook and for an old
+#: binary `.xls` alike.
+OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+
+
+def _head_bytes(path: Path) -> bytes:
+    try:
+        with path.open("rb") as handle:
+            return handle.read(len(OLE_MAGIC))
+    except OSError:
+        return b""
 
 
 def _head(path: Path) -> str:

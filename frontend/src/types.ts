@@ -38,8 +38,10 @@ export type Basket = {
    *  about the response, not a parse that came up short. Every line-derived
    *  figure on this basket is null when it is false. */
   lines_disclosed: boolean;
-  /** Summed `retail_amt`: the shelf amount, before loyalty pricing. */
-  shelf_total: number;
+  /** Summed `retail_amt`: the shelf amount, before loyalty pricing. Null when
+   *  no line in the basket disclosed a shelf price (Albertsons), because a
+   *  total made of paid amounts would claim a full-price basket. */
+  shelf_total: number | null;
   /** Summed `loyalty_amt`, which is the price the line cost — NOT a discount to
    *  subtract. Most lines carry a loyalty price equal to the shelf price. */
   /** Null when no lines were disclosed: zero would say the basket cost
@@ -164,6 +166,9 @@ export type DisclosureCell = {
 export type ComplianceRow = RequestMeta & {
   cells: Record<string, DisclosureCell>;
   absent_count: number;
+  /** Categories nobody assessed, which are neither answered nor absent: a
+   *  workbook uploaded without the report that answers them. */
+  unassessed_count: number;
   follow_ups: {
     id: number;
     kind: string;
@@ -210,9 +215,23 @@ export type Compare = { requests: CompareRow[]; comparable: boolean };
  *  is the only trace of quantity a response without a quantity field leaves. */
 export type PricePoint = {
   date: string;
-  retail_amt: number;
+  /** The shelf price, or null where the response disclosed only what was paid
+   *  (Albertsons). Never filled in from `paid_amt`. */
+  retail_amt: number | null;
   paid_amt: number;
-  saved_amt: number;
+  /** Null when there is no shelf price to have saved against. */
+  saved_amt: number | null;
+  /** How many the line was for, where the response says (Albertsons). Null
+   *  where it does not, which is Kroger and H Mart. */
+  quantity: number | null;
+  /** How many the line was for: a whole number of two or more, decided by the
+   *  API for the whole response (H Mart keeps a weight in `quantity`, and a
+   *  weight is never a count). Null otherwise. */
+  count: number | null;
+  /** The line amounts divided by `count`, or the line amounts unchanged
+   *  where there is none. These are what the chart plots. */
+  unit_retail: number | null;
+  unit_paid: number;
   /** 2 or more when this amount is a near-exact multiple of the product's
    *  ordinary price, which is consistent with buying more than one. Null when
    *  it looks like a single item. A suspicion, never a disclosed fact. */
@@ -251,6 +270,9 @@ export type PriceSeries = {
   last_price: number;
   min_price: number;
   max_price: number;
+  /** A shelf price was disclosed for every point. When false the chart draws
+   *  only what was paid, and says why. */
+  shelf_disclosed: boolean;
   /** Null unless the product is priceable, and computed only from amounts that
    *  look like a single item. */
   change_pct: number | null;
