@@ -148,6 +148,12 @@ deposit already was. No migration runs and nothing needs re-reading.
 
 ### Changed
 
+- **One name printed under two codes no longer reads as a duplicate.** Where
+  a retailer used the same name for two different product codes, Products
+  showed the name twice with nothing to tell them apart. Each now carries its
+  code beside it, small and in the monospaced face; the name itself is
+  unchanged (#98).
+
 - **A bag fee is a charge, not a product.** Products now sets a carrier-bag fee
   aside and counts it under the headline, as it does a container deposit or a
   tax row, instead of listing it as something you bought. Which kinds of line

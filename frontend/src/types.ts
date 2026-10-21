@@ -341,6 +341,9 @@ export interface IndexEntry {
    *  punctuation taken off. Where cleaning it would read the same as another
    *  row's, it is left exactly as printed instead. */
   description: string;
+  /** Another entry shows this same name: the retailer printed one name under
+   *  two codes (#98). The page sets the code beside the name, never in it. */
+  shares_name: boolean;
   /** The spelling the retailer actually printed. What to MATCH on — the
    *  timeline searches `description_raw`, and this does not depend on the
    *  cleaned label happening to remain a substring of it. Never rendered:

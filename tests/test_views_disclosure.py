@@ -556,6 +556,31 @@ class TestWhatTheIndexCallsAProduct:
         assert [p["description"] for p in index["products"]] == ["SOURDOUGH BOULE"]
         assert index["set_aside"] == 1
 
+    def test_two_codes_printed_under_one_name_are_marked(self, conn):
+        """Issue #98. The retailer prints one name across two codes; they are two
+        products, and nothing on screen said why the name appeared twice. The
+        entries say so, and only those entries: the page sets the code beside
+        them rather than in the name."""
+        request_id = self._bought(
+            conn,
+            [
+                ("BANANAS EA", "00001000001", 0.47),
+                ("BANANAS EA", "00001000901", 0.49),
+                ("SOURDOUGH BOULE", None, 5.00),
+            ],
+        )
+
+        products = views.product_index(conn, request_id)["products"]
+
+        assert {p["description"]: p["shares_name"] for p in products} == {
+            "BANANAS EA": True,
+            "SOURDOUGH BOULE": False,
+        }
+        assert sorted(p["upc"] for p in products if p["shares_name"]) == [
+            "00001000001",
+            "00001000901",
+        ]
+
     def test_a_drink_carrying_the_same_word_is_still_a_product(self, conn):
         """The expensive mistake. These carry codes and are bought repeatedly;
         matching the word rather than the whole name deletes real purchases.

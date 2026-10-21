@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import itertools
 import sqlite3
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
 from statistics import median
 from typing import Any
@@ -1581,21 +1581,20 @@ def product_index(
             }
         )
 
-    # Where cleaning would make two rows read identically, neither is cleaned.
-    #
-    # Two entries are two products — they have different keys, so the retailer
-    # distinguished them somehow — and an alphabetical list showing one name
-    # twice with different counts reads as double-counting. The alternative was
-    # appending the code to the label, which the 2026-09-15 decisions row
-    # forbids in the mirror case: a code and a name are different kinds of thing
-    # and neither belongs in the other's slot. It would also reach the
-    # downloadable index poster, which sets `description` in the serif.
-    collisions = defaultdict(int)
-    for product in products:
-        collisions[product["description"]] += 1
+    # Where cleaning would make two rows read identically, neither is cleaned:
+    # two keys are two products, and one name twice reads as double-counting.
+    # Where the retailer itself printed one name under two codes, uncleaning
+    # cannot help, so `shares_name` tells the page to set each code beside its
+    # entry (#98). Never IN the name: the 2026-09-15 decisions row keeps a code
+    # and a name out of each other's slot, and `description` is also what the
+    # downloadable poster sets in the serif.
+    collisions = Counter(p["description"] for p in products)
     for product in products:
         if collisions[product["description"]] > 1:
             product["description"] = product["match_name"]
+    remaining = Counter(p["description"] for p in products)
+    for product in products:
+        product["shares_name"] = remaining[product["description"]] > 1
 
     total_products = len(products)
     bought_once_total = sum(1 for p in products if p["purchases"] == 1)
