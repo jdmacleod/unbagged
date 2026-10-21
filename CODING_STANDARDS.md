@@ -199,6 +199,13 @@ restructure the code.
   `@types/node` major until the Node runtime moves.
 - The runtime is hash-locked (`docker/requirements.txt`, `make lock-check`); the UI
   installs from `package-lock.json` with `npm ci`.
+- **No dependency may bring telemetry into the app.** FastAPI is held below 0.142
+  (pyproject, the lock, and `dependabot.yml`), because 0.142 made
+  `opentelemetry-api` a hard dependency. Revisit it deliberately, not through a
+  routine bump.
+- A grouped Dependabot update edits pins only. When a bump adds a new transitive
+  dependency, the hashed lock is incomplete and the image build fails; regenerate
+  it with `make lock` rather than adding the package by hand.
 - Every pre-commit hook rev and every action SHA is pinned. Bump hook revs with
   `pre-commit autoupdate` in a pull request of their own, since a linter upgrade can
   change what passes.
