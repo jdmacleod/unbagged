@@ -258,6 +258,14 @@ class TestFindings:
         assert "exempt" in withheld.description
         assert "another person" in withheld.description
 
+    def test_the_quote_stops_where_the_contact_list_starts(self, parsed):
+        """Found by /devex-review on 2026-10-22. The bullets after the paragraph
+        carried no capital to split on, so the whole contact list was quoted as
+        part of the withheld-information sentence."""
+        (withheld,) = [f for f in parsed.follow_ups if "withheld" in f.description]
+        assert "•" not in withheld.description
+        assert "By email" not in withheld.description
+
     def test_each_finding_is_also_a_question_for_the_retailer(self, parsed):
         """Issue #37. All three are things to ask the privacy office, and were
         dropped from the letter for want of a way to say so. Each carries a

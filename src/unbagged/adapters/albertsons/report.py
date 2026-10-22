@@ -267,9 +267,15 @@ def sentences(report: Report) -> list[str]:
     The prose wraps across lines, so it is joined before it is split. A split
     needs a full stop AND a capital after it, which keeps `(e.g., address` and
     `(i.e., PHI` whole.
+
+    A bullet is a boundary too, and is dropped. The contact list follows the
+    paragraph on what was withheld with nothing but a bullet after its last
+    full stop, so without this every way to reach the privacy office was
+    quoted as part of that sentence.
     """
     text = " ".join(report.prose)
-    return [s.strip() for s in re.split(r"(?<=[.!?])\s+(?=[A-Z])", text) if s.strip()]
+    parts = re.split(r"(?<=[.!?])\s+(?=[A-Z])|\s*•\s*", text)
+    return [s.strip() for s in parts if s.strip()]
 
 
 def quote(report: Report, pattern: re.Pattern[str]) -> str | None:

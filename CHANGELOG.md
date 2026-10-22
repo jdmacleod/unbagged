@@ -31,6 +31,26 @@ from a specific response. See `CONTRIBUTING.md`.
   trying the app before a retailer response arrives, without committing a binary
   fixture or writing into user data.
 
+### Fixed
+
+- Compliance said a retailer "answered 2 of 8" when both of those answers were
+  partial. It now says how many were answered only in part.
+- Compliance listed a question the draft letter asks under the same heading as a
+  note that was only ever for the reader, with nothing to say which the letter
+  would carry. Notes about the response now sit apart, and the questions say
+  the draft asks them. The note above a draft that asks questions now says so,
+  and a Kroger response's earlier-period follow-up no longer says that request
+  has to be made separately, beside the draft that makes it.
+- An Albertsons response's sentence on what it withheld was quoted together with
+  the contact list printed after it. The quote now stops where the list begins.
+  A response loaded before this keeps the longer quote until it is uploaded
+  again.
+- A Products index too large for one page said only how many of its products it
+  was showing. The cap is alphabetical, so the end of the alphabet was missing
+  from the page, its letter rail and its list of products bought and not since,
+  and nothing said so. It now names where the index stops and, where it would
+  fit, the filter that brings everything bought more than once onto one page.
+
 ## [0.19.0] - 2026-10-22
 
 A new retailer, and a new kind of spreadsheet read.
