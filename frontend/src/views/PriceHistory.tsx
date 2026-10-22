@@ -202,13 +202,16 @@ function PriceBody({
  * format in the exact place the reader most needed it to be right.
  */
 function QuantityNote({ quantityDisclosed }: { quantityDisclosed: boolean }) {
-  // A response that says how many still does not say what a weighed item
-  // weighed, so the weight half of this note stays true for it.
+  // The weight half is about this view, not the response. The one response
+  // that discloses quantities also discloses what a weighed item weighed, and
+  // this view does not use it; saying the response left it out blamed the
+  // retailer for a gap that is ours (ISSUE-002, /qa 2026-10-22).
   return quantityDisclosed ? (
     <p className="max-w-[62ch] text-muted">
-      This response says how many of each item you bought, so a price here is the price of one. It
-      does not say what a weighed item weighed, so a per-pound item reads as whatever it weighed
-      that day. That is not a price change. Where the amounts give it away, this view says so.
+      This response says how many of each item you bought, so a price here is the price of one. A
+      weighed item is priced by the line rather than by the pound, so it reads as whatever it
+      weighed that day. That is not a price change. Where the amounts give it away, this view says
+      so.
     </p>
   ) : (
     <p className="max-w-[62ch] text-muted">
