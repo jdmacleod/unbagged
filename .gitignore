@@ -12,6 +12,7 @@
 /data/
 /data.bak-*/
 /output/
+/.sample-albertsons/
 *.sqlite
 *.sqlite3
 *.db

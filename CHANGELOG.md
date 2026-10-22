@@ -25,6 +25,12 @@ from a specific response. See `CONTRIBUTING.md`.
 
 ## [Unreleased]
 
+### Added
+
+- `make sample-albertsons` builds a synthetic report and purchase workbook for
+  trying the app before a retailer response arrives, without committing a binary
+  fixture or writing into user data.
+
 ## [0.19.0] - 2026-10-22
 
 A new retailer, and a new kind of spreadsheet read.

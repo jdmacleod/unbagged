@@ -148,6 +148,10 @@ fixtures:  ## Regenerate synthetic fixtures
 fixtures-check:  ## Fail if a committed fixture is not generator output
 	$(PY) -m tools.make_fixtures --check
 
+.PHONY: sample-albertsons
+sample-albertsons:  ## Build the synthetic Albertsons report and purchase workbook
+	$(PY) -m tools.make_sample_albertsons
+
 lock:  ## Regenerate docker/requirements.txt (needs Docker; runs on linux/amd64)
 	$(PY) -m tools.make_lock
 
