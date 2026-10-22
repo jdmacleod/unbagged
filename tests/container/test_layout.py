@@ -517,3 +517,42 @@ class TestIndexExport:
                 assert ref not in svg, f"the saved index references {ref}"
         finally:
             page.close()
+
+
+# Regression: ISSUE-001 — Products' word cloud broke names inside words
+# Found by /qa on 2026-10-22
+# Report: .gstack/qa-reports/run-20261022T003324Z/qa-report-127.0.0.1-2026-10-22.md
+MIDWORD_BREAKS = """() => {
+  const broken = [];
+  for (const a of document.querySelectorAll("ul li > a")) {
+    const node = [...a.childNodes].find((n) => n.nodeType === Node.TEXT_NODE);
+    if (!node) continue;
+    for (const m of node.textContent.matchAll(/[^\\s\\u00a0]+/g)) {
+      const r = document.createRange();
+      r.setStart(node, m.index);
+      r.setEnd(node, m.index + m[0].length);
+      if (new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size > 1) {
+        broken.push(`${node.textContent.trim()} :: ${m[0]}`);
+      }
+    }
+  }
+  return broken;
+}"""
+
+
+class TestTheIndexNeverBreaksAWord:
+    """Each name was joined with non-breaking spaces, so a name wider than the
+    column was one unbreakable run and `overflow-wrap: anywhere` cut it at any
+    letter: `DELI TUR / KEY` at desktop width, thirteen names at 375px. A word
+    is never split; a name too wide for the column wraps between its words."""
+
+    @pytest.mark.parametrize("width", [375, 1280])
+    def test_no_word_is_split_across_lines(self, browser, seeded_app, width):
+        page = browser.new_page(viewport={"width": width, "height": 900})
+        try:
+            page.goto(f"{seeded_app}/?tab=products&r=1", wait_until="networkidle")
+            page.wait_for_selector("ul li > a")
+            broken = page.evaluate(MIDWORD_BREAKS)
+            assert not broken, f"{len(broken)} words split at {width}px, e.g. {broken[:3]}"
+        finally:
+            page.close()

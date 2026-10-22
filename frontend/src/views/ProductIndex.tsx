@@ -452,12 +452,15 @@ function Block({
 }) {
   let lastLetter = "";
   return (
-    // `overflow-wrap: anywhere` is the safety net, not the normal path. Each
-    // name is joined with non-breaking spaces so it never splits across lines —
-    // a product name broken in half is unreadable in a field of several hundred
-    // — and `anywhere` only engages if a single name is wider than the whole
-    // measure, at which point wrapping beats scrolling the page sideways. That
-    // is the "wrap or cap" the edge-case table asked for, resolved as wrap.
+    // Each name is an inline-block, so it moves to the next line whole rather
+    // than splitting across two — a name broken in half is unreadable in a
+    // field of several hundred. A name wider than the whole measure, which a
+    // long one at the top size is, wraps inside its own block between its
+    // words. It was joined with non-breaking spaces instead, which made it one
+    // unbreakable run, and the safety net below then cut it at any letter:
+    // `DELI TUR / KEY` (ISSUE-001, /qa 2026-10-22). `overflow-wrap: anywhere`
+    // remains for a single WORD wider than the measure, where wrapping beats
+    // scrolling the page sideways: the "wrap or cap" of the edge-case table.
     <ul className="leading-[1.35] [overflow-wrap:anywhere]">
       {products.map((entry) => {
         const letter = initial(entry);
@@ -486,11 +489,11 @@ function Block({
               // items is a literal space, and a space is set at the *parent's*
               // 13px — next to a 48px name that reads as no gap at all, and two
               // large neighbours ran together into "BANANAS 3LBBANANAS 5LB".
-              className={`mr-[0.3em] hover:text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+              className={`mr-[0.3em] inline-block max-w-full hover:text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
                 TIER_CLASS[entry.tier] ?? TIER_CLASS[1]
               }`}
             >
-              {entry.description.replace(/ /g, "\u00a0")}
+              {entry.description}
               {/* Two codes under one printed name: the code tells them apart,
                   set beside the name in the mono stack and never inside it
                   (#98; DESIGN.md, the 2026-10-21 row). */}
