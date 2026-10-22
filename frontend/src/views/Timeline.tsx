@@ -250,7 +250,7 @@ function TimelineBody({
               <p className="mb-4 max-w-[62ch] text-muted">
                 This retailer disclosed what <em>all</em> of these visits cost and what was in{" "}
                 {number(stats.itemised_count)} of the {number(stats.basket_count)}. The rows that do
-                not open are the ones it itemised nothing for. What was disclosed, and what was not,
+                not open are the ones it itemized nothing for. What was disclosed, and what was not,
                 is recorded as a finding in the <strong>Compliance</strong> view.
               </p>
             ) : null

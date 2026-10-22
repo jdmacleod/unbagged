@@ -175,3 +175,29 @@ class TestWhenTheEngineIsNotThere:
         with pytest.raises(tr_words.OcrUnavailable) as excinfo:
             tr_words.read(b"")
         assert "install" in str(excinfo.value).lower()
+
+
+class TestTheEngineIsAskedItsVersionOnce:
+    """Issue #84: the version was read by spawning `tesseract --version` once
+    per capture, and a response that arrives as a folder of captures paid for
+    it every time. It cannot change while the process runs."""
+
+    def test_two_reads_spawn_one_process(self, monkeypatch):
+        calls = []
+
+        class Done:
+            stdout = "tesseract 5.5.0\n"
+
+        def run(*args, **kwargs):
+            calls.append(args)
+            return Done()
+
+        monkeypatch.setattr(tr_words, "available", lambda: True)
+        monkeypatch.setattr(tr_words.subprocess, "run", run)
+        tr_words.version.cache_clear()
+        try:
+            assert tr_words.version() == "tesseract 5.5.0"
+            assert tr_words.version() == "tesseract 5.5.0"
+            assert len(calls) == 1
+        finally:
+            tr_words.version.cache_clear()
