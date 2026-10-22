@@ -169,16 +169,28 @@ class TestCompareCounts:
         assert row["identifier_count"] == 1, "a disclosed fact, whatever the grade"
         assert row["inference_count"] is None, "on the same column, at the same time"
 
-    def test_a_genuine_zero_survives_provided(self, conn):
-        """The gate must not swallow real zeros.
+    def test_a_zero_identifier_count_survives_provided(self, conn):
+        """The gate must not swallow real zeros where the grade earns them."""
+        request_id = _save(conn, DisclosureStatus.PROVIDED, purchases=3)
+        assert _row(conn, request_id)["identifier_count"] == 0
 
-        A retailer that answered the category in full and holds no inferences
-        said something, and the app has to be able to report it.
-        """
+    def test_an_inference_zero_is_never_claimed(self, conn):
+        """Issue #69. SPECIFIC_PIECES is one grade over identifiers, purchases
+        and inferences together, so PROVIDED cannot say the inferences were
+        answered: a response graded so that has no inference section rendered
+        "Inferred attributes 0". No grade earns that zero, so none is shown."""
         request_id = _save(conn, DisclosureStatus.PROVIDED, purchases=3)
         row = _row(conn, request_id)
-        assert row["inference_count"] == 0
-        assert row["identifier_count"] == 0
+        assert row["inference_count"] is None
+        assert row["appended_inference_count"] is None
+
+    def test_none_bought_from_elsewhere_is_a_fact_about_what_was_disclosed(self, conn):
+        """The subset's zero stays: of the inferences the response DID list, none
+        came from elsewhere. That is read off its rows, not assumed."""
+        request_id = _save(conn, DisclosureStatus.PROVIDED, purchases=3, inferences=2)
+        row = _row(conn, request_id)
+        assert row["inference_count"] == 2
+        assert row["appended_inference_count"] == 0
 
     def test_counts_render_even_when_purchases_were_not_disclosed(self, conn):
         """A response can hold identifiers and no baskets.

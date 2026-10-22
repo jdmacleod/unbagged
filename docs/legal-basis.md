@@ -36,6 +36,16 @@ returns two years of itemised baskets has satisfied § 1798.110(a)(5) and usuall
 nothing else. A matrix that is green in this column and red in every other one is
 the common shape, not an anomaly — which is exactly why the other columns exist.
 
+**Its grade does not speak for inferences.** Inferences drawn to build a profile
+are personal information (§ 1798.140(v)(1)(K)), so they fall inside the specific
+pieces rather than in a column of their own, and one grade covers them together
+with identifiers and purchases. A response can answer the category in full on
+its baskets and say nothing at all about inferences. So the app never reports
+that a retailer holds *zero* inferences: a count it found is shown, and no count
+is shown as absence rather than as 0 (#69). The statute gives no separate
+demand to grade, and inventing one would put a column in the matrix that the
+law does not.
+
 **`SOLD_OR_SHARED` and `DISCLOSED_FOR_BUSINESS_PURPOSE` are separate columns
 because the statute separates them.** "Sold or shared" carries the cross-context
 behavioural advertising meaning added by the CPRA; "disclosed for a business
