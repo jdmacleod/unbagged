@@ -48,3 +48,12 @@ class TestSetAsideIsReachable:
     def test_a_stray_bracket_is_cleaned_not_counted(self, index):
         """The leading-punctuation path: the product stays, under a clean name."""
         assert not [p for p in index["products"] if p["description"].startswith("(")]
+
+
+class TestOneNameTwoCodes:
+    """Issue #98, from the fixture the screenshots are taken from."""
+
+    def test_both_entries_are_marked_and_nothing_else_is(self, index):
+        marked = [p for p in index["products"] if p["shares_name"]]
+        assert {p["description"] for p in marked} == {"BANANAS EA"}
+        assert len({p["upc"] for p in marked}) == 2

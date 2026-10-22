@@ -74,6 +74,13 @@ DEPOSIT_SHARE = 0.08
 #: cleaner also documents (`(CHINESE BROCCOLI`). The code still identifies it;
 #: only the label is cleaned (#104).
 STRAY_PUNCTUATION_SHARE = 0.03
+#: One printed name under two codes, as #98 measured on a real response: the
+#: retailer distinguishes two products the name does not. Some of the visits
+#: that buy the popular product ring it under a second code, so Products has to
+#: say why the name appears twice.
+TWIN_DESCRIPTION = "BANANAS EA"
+TWIN_UPC = "00001000901"
+TWIN_SHARE = 0.3
 UNDER_SHARE = 18 / 54
 
 #: Discount depths and their weights. The depths are invented; the two figures
@@ -674,7 +681,7 @@ def _pick(rng: random.Random, seen: set[str] | None = None) -> tuple[str, str, f
 
 
 def _deposits_and_strays(index: int, items: list[dict]) -> list[dict]:
-    """The label shapes Products has to set aside or clean (#104).
+    """The label shapes Products has to set aside, clean or tell apart (#104, #98).
 
     A stray bracket is added in place. A deposit line is returned rather than
     appended, for the caller to add after the basket is shuffled: the shuffle
@@ -699,6 +706,9 @@ def _deposits_and_strays(index: int, items: list[dict]) -> list[dict]:
         )
         if product is not None:
             product["purchasedescription"] = "(" + product["purchasedescription"]
+    for line in items:
+        if line["purchasedescription"] == TWIN_DESCRIPTION and rng.random() < TWIN_SHARE:
+            line["productupc"] = TWIN_UPC
     return deposits
 
 

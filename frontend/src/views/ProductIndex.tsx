@@ -491,6 +491,14 @@ function Block({
               }`}
             >
               {entry.description.replace(/ /g, "\u00a0")}
+              {/* Two codes under one printed name: the code tells them apart,
+                  set beside the name in the mono stack and never inside it
+                  (#98; DESIGN.md, the 2026-10-21 row). */}
+              {entry.shares_name && entry.upc && (
+                <span className="num ml-[0.3em] text-[11px] font-normal text-faint">
+                  {entry.upc}
+                </span>
+              )}
               {/* Size conveys nothing to a screen reader, so the count travels
                   in the accessible name instead. */}
               <span className="sr-only">
@@ -619,6 +627,9 @@ function Stopped({ entries, staleBefore }: { entries: IndexEntry[]; staleBefore:
           <li key={entry.key} className="flex items-baseline gap-4 border-b border-rule py-2">
             <span className="min-w-0 flex-1 truncate" title={entry.description}>
               {entry.description}
+              {entry.shares_name && entry.upc && (
+                <span className="num ml-2 text-[11px] text-faint">{entry.upc}</span>
+              )}
             </span>
             <span className="num shrink-0 text-[12.5px] text-muted">{entry.purchases}×</span>
             <span className="num w-24 shrink-0 text-right text-[12.5px] text-faint">
