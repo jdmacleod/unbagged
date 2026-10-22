@@ -434,9 +434,11 @@ class TestThroughTheApp:
         retailer discloses only what was paid, so the page was empty."""
         index = client.get(f"/api/requests/{uploaded}/product-index").json()
         # Every code that was ever sold at a positive amount: the predicate.
+        # Less the container deposits, which are charges and set aside (#140).
+        deposits = {upc for _d, upc, *_ in GENERATOR.DEPOSITS}
         bought = {
             upc for b in MODEL["baskets"] for _d, upc, _c, _q, _w, net in b["lines"] if net > 0
-        }
+        } - deposits
         assert index["product_count"] == len(bought)
         timeline = client.get(f"/api/requests/{uploaded}/timeline").json()
         # The headline and the page under it agree on what a product is.

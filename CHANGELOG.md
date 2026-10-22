@@ -25,11 +25,26 @@ from a specific response. See `CONTRIBUTING.md`.
 
 ## [Unreleased]
 
+**This can change what a response you have already loaded shows.** An
+Albertsons response's container deposits leave Products and Prices and are
+counted as set aside, so its product count goes down by the number of deposit
+entries it carried. Nothing needs uploading again for this.
+
 ### Added
 
 - `make sample-albertsons` builds a synthetic report and purchase workbook for
   trying the app before a retailer response arrives, without committing a binary
   fixture or writing into user data.
+
+### Changed
+
+- A container deposit that the register printed in shorthand (the charge word,
+  the container, a pack size and the register's codes) is now a charge, not a
+  product. Albertsons prints every deposit this way, so Products had listed all
+  of them, and the most common one was sized as one of the things bought most
+  often. The rule needs the register's codes at the end as well as the charge
+  word at the start, so a product whose name merely begins with the same word
+  is still listed.
 
 ### Fixed
 

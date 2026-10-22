@@ -173,6 +173,18 @@ TARGETS = {
 
 DEPARTMENTS = ("PRODUCE", "DELI", "MEAT", "SNACKS", "BAKERY PKG")
 
+#: Container deposits as the register rings them (#140): the charge word, the
+#: container, a pack size, then a redemption-rate code, a tax flag and the
+#: food-stamp flag. (description, UPC, category, amount, share of baskets.) The
+#: first is common enough to reach the top size tier, which is where a deposit
+#: listed as a product did the most damage.
+DEPOSITS = (
+    ("CRV SOFT DRINKS  6 PACK       R1 TAX  FS", "8810000601", 20, 0.30, 0.16),
+    ("CRV BEER 12 PACK              R1 TAX NFS", "8810001201", 20, 0.60, 0.05),
+    ("CRV GROCERY  SINGLE           R2 NTX  FS", "8810000102", 20, 0.10, 0.04),
+    ("DEPOSIT OR SOFT DRINKS  SINGLE        FS", "8810000199", 20, 0.10, 0.02),
+)
+
 # Words that print in place of a name the profile holds nothing for.
 PLACEHOLDER = "I/ss"
 
@@ -304,6 +316,7 @@ def build(seed: int = DEFAULT_SEED) -> dict:
         txn_id = _failing(rng, 13, store[:2])
         lines = _basket(rng)
         baskets.append({"day": day, "store": store, "txn_id": txn_id, "lines": lines})
+    _add_deposits(baskets, random.Random(f"deposits-{seed}"))
 
     return {
         "card": card,
@@ -316,6 +329,18 @@ def build(seed: int = DEFAULT_SEED) -> dict:
         "points_day": date(2024, 6, 14),
         "preference_day": date(2023, 8, 3),
     }
+
+
+def _add_deposits(baskets: list[dict], rng: random.Random) -> None:
+    """Ring container deposits into some baskets.
+
+    From a stream of their own, so adding them moved nothing the main stream
+    draws: every other line, total and identifier is as it was before #140.
+    """
+    for basket in baskets:
+        for description, upc, category, amount, share in DEPOSITS:
+            if rng.random() < share:
+                basket["lines"].append((description, upc, category, 1, 0, amount))
 
 
 def _basket(rng: random.Random) -> list[tuple[str, str, int, float, float, float]]:

@@ -23,6 +23,8 @@ other side, where matching the word `TENDER` alone deleted a real `GIFT CARD`
 purchase.
 """
 
+import pytest
+
 from unbagged.product_labels import NON_PRODUCT_WORDS, clean_label, is_non_product
 from unbagged.views import label_for
 
@@ -129,6 +131,39 @@ class TestIsNonProduct:
         keeps a bag of something on the list."""
         assert is_non_product("BARLEY TEA BAG") is False
         assert is_non_product("ICE BAG 10 LB") is False
+
+    @pytest.mark.parametrize(
+        "label",
+        [
+            "CRV SOFT DRINKS  6 PACK       R1 TAX  FS",
+            "CRV BEER 12 PACK              R1 TAX NFS",
+            "CRV GROCERY  SINGLE           R2 NTX  FS",
+            "DEPOSIT OR SOFT DRINKS  SINGLE        FS",
+            "deposit ny produce single fs",
+        ],
+    )
+    def test_a_deposit_in_register_shorthand_is_a_charge(self, label):
+        """Issue #140. Albertsons rings a deposit as the charge word, the
+        container, a pack size and the register's flags. None of those after
+        the first is vocabulary, so the whole-label rule listed every one."""
+        assert is_non_product(label) is True
+
+    @pytest.mark.parametrize(
+        "label",
+        [
+            # The leading word with no register tail: could be a brand.
+            "CRV SPARKLING WATER LEMON",
+            "DEPOSIT SOFT DRINKS 6 PACK",
+            # A tail with no leading charge word: a product sold by the pack.
+            "SPARKLING WATER LIME 12 PACK R1 TAX FS",
+            # The charge word mid-name, as the drink above carries it.
+            "COLA 12 PACK CRV R1 TAX FS",
+            # A size inside the category is not a container category.
+            "CRV 2 LITER SINGLE FS",
+        ],
+    )
+    def test_near_misses_of_the_register_shape_stay_products(self, label):
+        assert is_non_product(label) is False
 
     def test_every_word_in_the_vocabulary_is_refused_on_its_own(self):
         """Each token, so an edit to the constant cannot quietly drop one."""
