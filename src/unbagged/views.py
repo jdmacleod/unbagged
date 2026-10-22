@@ -1310,7 +1310,7 @@ PRODUCT_KEY = "COALESCE(NULLIF(i.upc, ''), NULLIF(i.description_raw, ''))"
 #: - **Zero amount**: a placeholder or a coupon marker; nothing was charged.
 #:   Not counted.
 #: - **Negative amount**: a return or a markdown; money given back. Not counted.
-#: - **Charge vocabulary, or a name with nothing readable left**: a real charge,
+#: - **A charge (`is_non_product`), or a name with nothing readable left**: a real charge,
 #:   but not a thing anybody chose (a deposit, a tax row, a bag fee). Counted,
 #:   as "set aside".
 #:

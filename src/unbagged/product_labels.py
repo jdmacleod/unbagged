@@ -65,6 +65,27 @@ def _strip_leading_punctuation(text: str) -> str:
 NON_PRODUCT_WORDS = frozenset({"CRV", "DEPOSIT", "DEP", "BOTTLE", "TAX", "FEE", "CARRYOUT", "BAG"})
 
 
+#: A container deposit printed as a register line rather than in words (#140).
+#:
+#: Albertsons rings a deposit as the charge word, then the container it is for,
+#: then the register's own codes: `CRV <CATEGORY> <N> PACK R1 TAX FS`,
+#: `DEPOSIT <ST> <CATEGORY> SINGLE FS`. The category and the codes are not
+#: charge vocabulary, so the whole-label rule above never fires on one, and
+#: every deposit was listed as something bought.
+#:
+#: **The leading word alone is not enough, so the tail is pinned too.** A
+#: product can open with a brand that collides with `CRV`, and this rule holds
+#: for every retailer. What no product name ends with is a pack size followed
+#: only by register flags: an optional redemption-rate code, an optional tax
+#: flag, and the food-stamp flag the register always prints last. The category
+#: between is the one free part, kept to letters, so a size or a price inside
+#: it is not a deposit.
+_REGISTER_DEPOSIT = re.compile(
+    r"^(?:CRV|DEPOSIT)(?:\s+[A-Z]+)+?\s+(?:SINGLE|\d+\s+PACK)"
+    r"(?:\s+R\d)?(?:\s+(?:TAX|NTX))?\s+N?FS$"
+)
+
+
 def clean_label(raw: str) -> str:
     """The name with the retailer's furniture taken off the front.
 
@@ -81,9 +102,12 @@ def clean_label(raw: str) -> str:
 def is_non_product(label: str) -> bool:
     """Is this line a charge rather than something bought?
 
-    True only when EVERY word is charge vocabulary (deposit, tax, bag fee). `CRV DEPOSIT` is
+    True when EVERY word is charge vocabulary (deposit, tax, bag fee): `CRV DEPOSIT` is
     the receipt charging you for a container; a drink whose name happens to end
-    in `CRV` is a drink.
+    in `CRV` is a drink. Also true for a deposit in register shorthand, which
+    carries codes rather than words (`_REGISTER_DEPOSIT`).
     """
     words = label.upper().split()
-    return bool(words) and all(word in NON_PRODUCT_WORDS for word in words)
+    if words and all(word in NON_PRODUCT_WORDS for word in words):
+        return True
+    return bool(_REGISTER_DEPOSIT.match(" ".join(words)))
