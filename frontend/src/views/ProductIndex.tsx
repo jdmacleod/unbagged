@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api } from "../api";
+import { useShowMore } from "../components/ShowMore";
 import { Aside, Empty, ErrorBox, Spine, Spinner } from "../components/ui";
 import { useAsync } from "../components/useAsync";
 import { canvasMeasure, downloadSvg, indexSvg } from "../export";
@@ -173,7 +174,6 @@ function IndexBody({
   }
 
   const letters = new Set(data.products.map(initial));
-  const stopped = data.products.filter((p) => p.stopped);
 
   return (
     <div className="space-y-8">
@@ -226,9 +226,7 @@ function IndexBody({
           </div>
 
           {data.truncated && (
-            <p className="mt-4 max-w-[62ch] text-[11.5px] text-faint">
-              {truncationNote(data, data.products.at(-1)?.description ?? null)}
-            </p>
+            <p className="mt-4 max-w-[62ch] text-[11.5px] text-faint">{truncationNote(data)}</p>
           )}
 
           {/* `tabIndex={-1}` is what makes the skip link a skip link. Without
@@ -241,12 +239,11 @@ function IndexBody({
         </Spine>
       )}
 
-      {/* On the API's count, not the visible list's. The list is drawn from the
-          capped index, so every stopped product can fall past the cut, and a
-          guard on the list hid the section that says so. Caught by review on
-          #142. */}
-      {data.stopped_count > 0 && (
-        <Stopped entries={stopped} total={data.stopped_count} staleBefore={data.stale_before} />
+      {/* From the API's own uncapped list, not filtered out of the capped
+          index: drawn from the page, it lost every stopped product the cap
+          left out (#141). */}
+      {data.stopped.length > 0 && (
+        <Stopped entries={data.stopped} staleBefore={data.stale_before} />
       )}
     </div>
   );
@@ -291,7 +288,8 @@ function SaveIndex({ data }: { data: Index }) {
       data.products.map((p) => ({ description: p.description, tier: p.tier })),
       {
         retailer: "Everything you bought",
-        productCount: data.product_count,
+        // What the file draws, which on a capped page is not every product.
+        productCount: data.products.length,
         coverage: coverage(),
       },
       canvasMeasure(),
@@ -311,34 +309,25 @@ function SaveIndex({ data }: { data: Index }) {
 /**
  * What a capped index says about the cap.
  *
- * The index is alphabetical and the cap takes the first `limit` entries, so a
- * capped page is missing the end of the alphabet, not a random sample. The old
- * note said only "Showing 2,000 of N", which left the reader to infer from
- * the rail that they had never bought anything after P. It names where the
- * page stops and, when it would fit, the filter that brings the whole of what
- * was bought more than once onto one page. Found by /devex-review on
- * 2026-10-22.
+ * The cap keeps the products bought most often and draws them alphabetically,
+ * so what is left out is the least-bought tail, never a run of the alphabet
+ * (#141). The note says how many went and how often the most-bought of them
+ * was bought, which is what makes the cut checkable, and that the search box
+ * still reaches them: it filters before the cap. "Save as an image" exports
+ * the page, so it says that too.
  */
 export function truncationNote(
-  data: Pick<Index, "limit" | "product_count" | "bought_once" | "min_purchases">,
-  lastShown: string | null,
+  data: Pick<Index, "limit" | "product_count" | "left_out" | "left_out_max_purchases">,
 ): string {
-  const stop = lastShown ? `, so the index stops at “${lastShown}”` : "";
-  const head = `Showing the first ${number(data.limit)} of ${number(data.product_count)} products, alphabetically${stop}.`;
-  const repeated = data.product_count - data.bought_once;
-  if (data.min_purchases <= 1 && repeated > 0 && repeated <= data.limit) {
-    return `${head} Set “Bought at least” to 2 to see all ${number(repeated)} you bought more than once.`;
-  }
-  return `${head} The rest are in the response; this page stops here so it stays readable.`;
-}
-
-/** What the Stopped list says when the capped index left some of them out,
- *  including all of them. */
-export function stoppedCutNote(shown: number, total: number): string {
-  const after = "come after the point where the index stops";
-  if (shown === 0)
-    return `None of the ${number(total)} fall within the index above; all of them ${after}.`;
-  return `Only the ${number(shown)} that fall within the index above are listed; the other ${number(total - shown)} ${after}.`;
+  const howOften =
+    data.left_out_max_purchases <= 1
+      ? "each bought once"
+      : `none bought more than ${number(data.left_out_max_purchases)} times`;
+  return (
+    `Showing the ${number(data.limit)} products bought most often, of ${number(data.product_count)}. ` +
+    `The other ${number(data.left_out)} (${howOften}) are left out so the page stays readable; ` +
+    `“Name contains” still finds any of them, and “Save as an image” saves what is shown.`
+  );
 }
 
 /** Did this response price its visits and itemise none of them?
@@ -654,54 +643,35 @@ function InlineLegend({ tiers }: { tiers: IndexTier[] }) {
  * seasonal product, a brand switch and an abandoned habit are indistinguishable
  * in this data, and the response does not say which.
  */
-function Stopped({
-  entries,
-  total,
-  staleBefore,
-}: {
-  entries: IndexEntry[];
-  /** Every stopped product the filters let through, not only the ones the
-   *  capped index carries. The list is drawn from the index, so on a capped
-   *  page it is short of this and has to say so. */
-  total: number;
-  staleBefore: string | null;
-}) {
-  const cut = total > entries.length;
+function Stopped({ entries, staleBefore }: { entries: IndexEntry[]; staleBefore: string | null }) {
+  // A long history stops buying hundreds of things, and this rendered every
+  // one of them at once. Sliced like the other long lists (#141).
+  const { visible, control } = useShowMore(entries);
   return (
-    <Spine
-      margin={
-        <Aside>
-          {cut
-            ? `${number(entries.length)} of ${number(total)}`
-            : `${number(entries.length)} of them`}
-        </Aside>
-      }
-    >
+    <Spine margin={<Aside>{number(entries.length)} of them</Aside>}>
       <h3 className="font-serif text-[17px] font-semibold">Bought more than once, and not since</h3>
       <p className="mt-0.5 mb-4 max-w-[62ch] text-muted">
         These stopped appearing after <span className="num">{staleBefore}</span>, while the coverage
         window kept running. The response gives dates, not reasons: a season ending, a brand
         switched and a habit dropped look identical here.
-        {cut && <> {stoppedCutNote(entries.length, total)}</>}
       </p>
-      {entries.length > 0 && (
-        <ul className="border-t border-rule">
-          {entries.map((entry) => (
-            <li key={entry.key} className="flex items-baseline gap-4 border-b border-rule py-2">
-              <span className="min-w-0 flex-1 truncate" title={entry.description}>
-                {entry.description}
-                {entry.shares_name && entry.upc && (
-                  <span className="num ml-2 text-[11px] text-faint">{entry.upc}</span>
-                )}
-              </span>
-              <span className="num shrink-0 text-[12.5px] text-muted">{entry.purchases}×</span>
-              <span className="num w-24 shrink-0 text-right text-[12.5px] text-faint">
-                {entry.last_seen}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+      <ul className="border-t border-rule">
+        {visible.map((entry) => (
+          <li key={entry.key} className="flex items-baseline gap-4 border-b border-rule py-2">
+            <span className="min-w-0 flex-1 truncate" title={entry.description}>
+              {entry.description}
+              {entry.shares_name && entry.upc && (
+                <span className="num ml-2 text-[11px] text-faint">{entry.upc}</span>
+              )}
+            </span>
+            <span className="num shrink-0 text-[12.5px] text-muted">{entry.purchases}×</span>
+            <span className="num w-24 shrink-0 text-right text-[12.5px] text-faint">
+              {entry.last_seen}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {control}
     </Spine>
   );
 }

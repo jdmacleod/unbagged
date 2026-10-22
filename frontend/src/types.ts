@@ -389,13 +389,19 @@ export interface ProductIndex {
   stale_before: string | null;
   stopped_count: number;
   tiers: IndexTier[];
-  /** True when `products` was cut to `limit`. Said on screen, never silent. */
+  /** True when `products` was cut to `limit`. Said on screen, never silent.
+   *  The cut keeps the most-bought and drops the least-bought tail (#141). */
   truncated: boolean;
+  /** How many products the cap left out, and the most any of them was bought. */
+  left_out: number;
+  left_out_max_purchases: number;
   /** False when the response disclosed basket totals and no contents, so
    *  "no products" is a fact about the response rather than about you. */
   lines_disclosed: boolean;
   limit: number;
   products: IndexEntry[];
+  /** Every stopped product the filters let through, uncapped, alphabetical. */
+  stopped: IndexEntry[];
 }
 
 /** One adapter the build knows about, and the reading it currently produces.
