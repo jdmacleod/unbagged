@@ -54,14 +54,16 @@ No migration runs and nothing needs re-reading. Not a PATCH.
 
 A new retailer, and a new kind of spreadsheet read.
 
-**This can change what a response you have already loaded shows, in four
+**This can change what a response you have already loaded shows, in five
 narrow cases.** Products and Prices now count a line with no shelf price by what
 was paid, so a Kroger line whose shelf amount could not be read but whose paid
 amount could is now listed where it was left out before. An H Mart response with
 no itemised visits no longer shows a saving column that was a dash on every
-row. An H Mart receipt's line-item totals now sit under their own headings. And
-a carrier-bag fee leaves Products and is counted as set aside, as a container
-deposit already was. No migration runs and nothing needs re-reading.
+row. An H Mart receipt's line-item totals now sit under their own headings. A
+carrier-bag fee leaves Products and is counted as set aside, as a container
+deposit already was. And Compare no longer shows zero inferred attributes for
+any response, so a 0 there becomes a dash. One migration runs, adding a column
+for the follow-up letter's questions; nothing needs re-reading.
 
 ### Added
 
@@ -157,6 +159,13 @@ deposit already was. No migration runs and nothing needs re-reading.
   states counts but not weights.
 
 ### Changed
+
+- **No response is said to hold zero inferences.** Compare showed "Inferred
+  attributes 0" for a response graded as answering its specific pieces in
+  full, though that grade also covers identifiers and purchases and says
+  nothing about inferences on its own. A zero now shows as absence everywhere,
+  and Profile's empty state says none were in the response rather than
+  "Nothing" (#69).
 
 - **One name printed under two codes no longer reads as a duplicate.** Where
   a retailer used the same name for two different product codes, Products

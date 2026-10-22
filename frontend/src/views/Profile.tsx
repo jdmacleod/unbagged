@@ -62,8 +62,8 @@ export function Profile({ requestId }: { requestId: number }) {
       {mine.length === 0 && bought.length === 0 && unclear.length === 0 && (
         <Movement
           heading="What they worked out about you"
-          blurb="Nothing. No scores computed from your baskets, nothing bought
-                 from anywhere else."
+          blurb="None in this response: no scores computed from your baskets, and
+                 nothing bought from anywhere else."
           count={0}
           marginalia={<Aside>none disclosed</Aside>}
         >

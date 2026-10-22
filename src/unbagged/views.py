@@ -104,11 +104,9 @@ def zero_is_claimable(conn: sqlite3.Connection, request_id: int) -> bool:
     `identifier_count` must stay 1 while `inference_count` becomes an em dash on
     the same column. So the caller applies this only when the count is zero.
 
-    Scope limit, tracked as #69: `SPECIFIC_PIECES` is one coarse grade covering
-    identifiers, transactions and inferences together, because the CCPA does not
-    enumerate inferences separately and `models.py` follows the statute. A
-    retailer graded `provided` whose response has no inference section still
-    renders a zero. This narrows the defect; it does not close the class.
+    Not for inferences (#69): `SPECIFIC_PIECES` is one grade over identifiers,
+    purchases and inferences together, as the statute is, so no grade can say
+    the inferences were answered. `compare()` never claims an inference zero.
     """
     row = conn.execute(
         "SELECT status FROM disclosure WHERE request_id = ? AND category = ?",
@@ -717,12 +715,14 @@ def compare(conn: sqlite3.Connection) -> dict[str, Any]:
         request["identifier_count"] = count(
             "SELECT COUNT(*) c FROM identity WHERE request_id = ?", (request_id,)
         )
+        # Never a zero (#69; see zero_is_claimable). Its subset's zero needs rows.
         request["inference_count"] = count(
-            "SELECT COUNT(*) c FROM inference WHERE request_id = ?", (request_id,)
+            "SELECT COUNT(*) c FROM inference WHERE request_id = ?", (request_id,), claimable=False
         )
         request["appended_inference_count"] = count(
             "SELECT COUNT(*) c FROM inference WHERE request_id = ? AND origin = ?",
             (request_id, InferenceOrigin.APPENDED_THIRD_PARTY.value),
+            claimable=zero_claimable and bool(request["inference_count"]),
         )
         # Gated on who parsed it, which is a departure from the comment this
         # replaces. What a retailer failed to address IS a real finding about
