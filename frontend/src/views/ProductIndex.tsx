@@ -40,8 +40,15 @@ export function ProductIndex({
   const [q, setQ] = useState("");
   const [minPurchases, setMinPurchases] = useState(1);
 
+  // The filters travel with the response they produced. `useAsync` keeps the
+  // previous data on screen while a new read is in flight, so the live inputs
+  // run ahead of the numbers for a moment; anything that describes the numbers
+  // has to use the filters that made them. Caught by review on #147.
   const index = useAsync(
-    () => api.productIndex(requestId, { q, min_purchases: minPurchases }),
+    () =>
+      api
+        .productIndex(requestId, { q, min_purchases: minPurchases })
+        .then((data) => ({ data, applied: { q, minPurchases } })),
     [requestId, q, minPurchases],
   );
 
@@ -50,7 +57,8 @@ export function ProductIndex({
 
   return (
     <IndexBody
-      data={index.data}
+      data={index.data.data}
+      applied={index.data.applied}
       q={q}
       setQ={setQ}
       minPurchases={minPurchases}
@@ -112,6 +120,7 @@ function tierRange(tiers: IndexTier[], tier: number): string {
 
 function IndexBody({
   data,
+  applied,
   q,
   setQ,
   minPurchases,
@@ -119,6 +128,8 @@ function IndexBody({
   onOpenProduct,
 }: {
   data: Index;
+  /** The filters `data` was read with, which can lag the inputs below. */
+  applied: { q: string; minPurchases: number };
   q: string;
   setQ: (v: string) => void;
   minPurchases: number;
@@ -180,6 +191,16 @@ function IndexBody({
       <Spine margin={<Aside>{number(data.total_products)} products</Aside>}>
         <Headline data={data} />
         <div className="mt-4">{filters}</div>
+        {/* The headline is about the response and does not move with the
+            filters, so the page has to say what they did. Before, the only
+            count of the filtered list was the screen-reader skip link, and a
+            reader raising "Bought at least" saw the list shrink under a number
+            that never changed. */}
+        {filteredNote(data, applied.q, applied.minPurchases) && (
+          <p className="num mt-2 text-[11.5px] text-faint" aria-live="polite">
+            {filteredNote(data, applied.q, applied.minPurchases)}
+          </p>
+        )}
       </Spine>
 
       {data.product_count === 0 ? (
@@ -189,12 +210,12 @@ function IndexBody({
                 against": no filter is set and the response still disclosed no
                 products. Falling through to the q branch printed
                 `No product name contains ""`. */}
-            {q && minPurchases > 1
-              ? `No product name contains “${q}” and was bought at least ${number(minPurchases)} times.`
-              : q
-                ? `No product name contains “${q}”.`
-                : minPurchases > 1
-                  ? `No product was bought at least ${number(minPurchases)} times.`
+            {applied.q && applied.minPurchases > 1
+              ? `No product name contains “${applied.q}” and was bought at least ${number(applied.minPurchases)} times.`
+              : applied.q
+                ? `No product name contains “${applied.q}”.`
+                : applied.minPurchases > 1
+                  ? `No product was bought at least ${number(applied.minPurchases)} times.`
                   : // A response that itemised nothing returns above, before
                     // the headline gets to count it, so reaching here with no
                     // filter set means the index is genuinely empty.
@@ -360,6 +381,41 @@ export function nothingWasItemised(data: {
   return data.total_products === 0 && !data.lines_disclosed;
 }
 
+/**
+ * What the filters did to the list, or null when none is set.
+ *
+ * The headline above stays a fact about the whole response on purpose, so this
+ * is where the filtered count goes. Found by /investigate on 2026-10-22.
+ *
+ * "Match", not "showing": past the cap the page lists fewer than match, and
+ * `truncationNote` is the sentence that says how many are shown. Caught by
+ * review on #147.
+ */
+export function filteredNote(
+  data: Pick<Index, "product_count" | "total_products">,
+  q: string,
+  minPurchases: number,
+): string | null {
+  const name = q.trim();
+  if (!name && minPurchases <= 1) return null;
+  const conditions = [
+    minPurchases > 1 ? `bought at least ${number(minPurchases)} times` : null,
+    name ? `with “${name}” in the name` : null,
+  ].filter(Boolean);
+  return `${number(data.product_count)} of ${number(data.total_products)} products match: those ${conditions.join(" and ")}.`;
+}
+
+/**
+ * "Most of what you bought, you bought once", said only when it is true of the
+ * response. It read "Most of this page is one trip", which a filter of two or
+ * more made false of the page it sat on: nothing bought once is shown then.
+ */
+export function oneTrip(data: Pick<Index, "bought_once_total" | "total_products">): string {
+  return data.bought_once_total * 2 > data.total_products
+    ? " Most of what you bought, you bought once."
+    : "";
+}
+
 function Headline({ data }: { data: Index }) {
   return (
     <div className="flex items-baseline gap-5">
@@ -376,7 +432,7 @@ function Headline({ data }: { data: Index }) {
               The window is on the Timeline, measured; it is not restated here
               where nothing checks it. */}
           Your groceries, in the retailer&rsquo;s own words. Size is how often you bought it, in
-          five steps. Most of this page is one trip.
+          five steps.{oneTrip(data)}
         </p>
         {/* Said out loud, because the count above moved. A deposit line and a
             tax row are charges the receipt made, not things anybody chose, and
