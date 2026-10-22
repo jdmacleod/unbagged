@@ -228,6 +228,15 @@ for the follow-up letter's questions; nothing needs re-reading.
 
 ### Fixed
 
+- **A long product name no longer breaks inside a word.** In Products, a name
+  too wide for the column was cut at any letter (`DELI TUR` / `KEY`); it now
+  wraps between its words, and a name that fits still moves to the next line
+  whole.
+- **Prices no longer says a response left out what it included.** Where a
+  response gives quantities, Prices said it did not say what a weighed item
+  weighed; the Albertsons response does, and it is this view that prices a
+  weighed item by the line. The note now says that instead.
+
 - **A basket with no product codes footed its totals one column to the right.**
   The line-item footer spanned two columns whether or not the code column was
   shown, so on a receipt that disclosed no codes every total sat under the
