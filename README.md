@@ -77,7 +77,9 @@ fails if a committed file is not what the generator produces. They reproduce the
 quirks of the real formats on purpose, including the ones that look like bugs — a
 basket whose lines do not add up to the total the retailer stated for it, and a
 receipt capture clipped so badly that nothing from it can be trusted. Every
-screenshot in this README comes from them.
+screenshot in this README comes from them and from a synthetic Albertsons response,
+whose workbook `make screenshots` builds on the fly rather than committing: an
+`.xlsx` is a zip the PII scanner cannot read.
 
 ### Running it
 
@@ -117,7 +119,8 @@ signed up for anything.
 
 **Compliance** — the eight CCPA/CPRA categories per retailer, with the answer quoted
 where there is one and a blank rule where there is not. "Draft a follow-up" writes a
-supplemental request naming what went unanswered; you read it and send it yourself.
+supplemental request naming what went unanswered, and asks any question the response
+itself raised for the retailer to answer; you read it and send it yourself.
 Where the eight categories come from and why each is graded as it is, with the
 citation for each, is [`docs/legal-basis.md`](docs/legal-basis.md).
 
@@ -137,7 +140,7 @@ listed with what their amounts look like, and no price change is claimed for the
 
 **Products** — the products you bought, set as a typographic index: alphabetical,
 sized by purchase count, with an A-Z rail. Clicking one opens the visits that
-contained it. Deposits, taxes and other receipt furniture are not products and are
+contained it. Deposits, taxes, fees and other receipt furniture are not products and are
 not listed; the page says how many entries it set aside rather than quietly
 shrinking the count. Under the index, a control saves the page as an SVG — text,
 not a rasterised screenshot, so it stays selectable and scales to a wall print. It
@@ -172,9 +175,9 @@ make test            # fast suite
 make test-frontend   # UI unit tests (vitest)
 make setup-browser   # once: without it the browser tests SKIP rather than run
 make test-container  # slow: builds and runs a real container (needs Docker + Chromium)
-make lint            # ruff check + ruff format --check, the two gates CI runs
+make lint            # ruff check and format check; Prettier and ESLint over the UI
 make fmt             # apply the formatters
-make check           # every hook over every file, plus the PII, fixture and lock checks
+make check           # every hook over every file, plus the PII, fixture, lock and size checks
 make screenshots     # regenerate docs/screenshots from the fixture
 make check-pii       # run this before every commit
 ```
