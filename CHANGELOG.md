@@ -25,6 +25,15 @@ from a specific response. See `CONTRIBUTING.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Raising "Bought at least" on Products shrank the list under a headline that
+  did not move, and nothing on the page said how many products were now shown.
+  The headline still describes the whole response; a line under the filters now
+  says how many of its products the filters left, and why. "Most of this page is
+  one trip" was false of a filtered page, and now reads "Most of what you
+  bought, you bought once", said only when it is true.
+
 ## [0.20.0] - 2026-10-22
 
 What a large Albertsons response looks like, read properly.

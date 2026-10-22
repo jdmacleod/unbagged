@@ -180,6 +180,16 @@ function IndexBody({
       <Spine margin={<Aside>{number(data.total_products)} products</Aside>}>
         <Headline data={data} />
         <div className="mt-4">{filters}</div>
+        {/* The headline is about the response and does not move with the
+            filters, so the page has to say what they did. Before, the only
+            count of the filtered list was the screen-reader skip link, and a
+            reader raising "Bought at least" saw the list shrink under a number
+            that never changed. */}
+        {filteredNote(data, q, minPurchases) && (
+          <p className="num mt-2 text-[11.5px] text-faint" aria-live="polite">
+            {filteredNote(data, q, minPurchases)}
+          </p>
+        )}
       </Spine>
 
       {data.product_count === 0 ? (
@@ -360,6 +370,37 @@ export function nothingWasItemised(data: {
   return data.total_products === 0 && !data.lines_disclosed;
 }
 
+/**
+ * What the filters did to the list, or null when none is set.
+ *
+ * The headline above stays a fact about the whole response on purpose, so this
+ * is where the filtered count goes. Found by /investigate on 2026-10-22.
+ */
+export function filteredNote(
+  data: Pick<Index, "product_count" | "total_products">,
+  q: string,
+  minPurchases: number,
+): string | null {
+  const name = q.trim();
+  if (!name && minPurchases <= 1) return null;
+  const conditions = [
+    minPurchases > 1 ? `bought at least ${number(minPurchases)} times` : null,
+    name ? `with “${name}” in the name` : null,
+  ].filter(Boolean);
+  return `Showing ${number(data.product_count)} of ${number(data.total_products)} products: those ${conditions.join(" and ")}.`;
+}
+
+/**
+ * "Most of what you bought, you bought once", said only when it is true of the
+ * response. It read "Most of this page is one trip", which a filter of two or
+ * more made false of the page it sat on: nothing bought once is shown then.
+ */
+export function oneTrip(data: Pick<Index, "bought_once_total" | "total_products">): string {
+  return data.bought_once_total * 2 > data.total_products
+    ? " Most of what you bought, you bought once."
+    : "";
+}
+
 function Headline({ data }: { data: Index }) {
   return (
     <div className="flex items-baseline gap-5">
@@ -376,7 +417,7 @@ function Headline({ data }: { data: Index }) {
               The window is on the Timeline, measured; it is not restated here
               where nothing checks it. */}
           Your groceries, in the retailer&rsquo;s own words. Size is how often you bought it, in
-          five steps. Most of this page is one trip.
+          five steps.{oneTrip(data)}
         </p>
         {/* Said out loud, because the count above moved. A deposit line and a
             tax row are charges the receipt made, not things anybody chose, and

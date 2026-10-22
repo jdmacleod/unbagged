@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { answeredInPart } from "./views/Compliance";
-import { truncationNote } from "./views/ProductIndex";
+import { filteredNote, oneTrip, truncationNote } from "./views/ProductIndex";
 
 // Found by /devex-review on 2026-10-22, against a response large enough to be
 // capped and one that answered two categories, both only in part.
@@ -42,5 +42,38 @@ describe("truncationNote", () => {
 
   it("points at the search, which reaches past the cap", () => {
     expect(truncationNote(capped)).toContain("“Name contains” still finds any of them");
+  });
+});
+
+// Found by /investigate on 2026-10-22: raising "Bought at least" shrank the list
+// under a headline that never moved, and nothing said how many were shown.
+describe("filteredNote", () => {
+  const data = { product_count: 1000, total_products: 3000 };
+
+  it("says nothing when no filter is set", () => {
+    expect(filteredNote(data, "", 1)).toBeNull();
+    expect(filteredNote(data, "   ", 1)).toBeNull();
+  });
+
+  it("states the filtered count against the whole response", () => {
+    expect(filteredNote(data, "", 2)).toBe(
+      "Showing 1,000 of 3,000 products: those bought at least 2 times.",
+    );
+  });
+
+  it("names both filters when both are set", () => {
+    expect(filteredNote(data, "tea", 3)).toBe(
+      "Showing 1,000 of 3,000 products: those bought at least 3 times and with “tea” in the name.",
+    );
+  });
+});
+
+describe("oneTrip", () => {
+  it("is said when most products were bought once", () => {
+    expect(oneTrip({ bought_once_total: 2000, total_products: 3000 })).toContain("bought once");
+  });
+
+  it("is not said when they were not", () => {
+    expect(oneTrip({ bought_once_total: 1000, total_products: 3000 })).toBe("");
   });
 });
