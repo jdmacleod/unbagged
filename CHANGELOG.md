@@ -32,6 +32,12 @@ entries it carried. A response with more products than Products shows on one
 page now shows a different set of them: the most-bought, not the start of the
 alphabet. Nothing needs uploading again for either.
 
+### Added
+
+- `make sample-albertsons` builds a synthetic report and purchase workbook for
+  trying the app before a retailer response arrives, without committing a binary
+  fixture or writing into user data.
+
 ### Changed
 
 - A container deposit that the register printed in shorthand (the charge word,

@@ -60,7 +60,7 @@ screen captures takes longer, because every image goes through OCR.
 Your database and uploads live in `./data`, on your disk. Back it up by copying
 that directory.
 
-**No response yet?** A request takes weeks to come back, so the repo ships two
+**No response yet?** A request takes weeks to come back, so the repo ships three
 synthetic ones you can drop in now to see what the views do:
 
 ```
@@ -71,6 +71,12 @@ src/unbagged/adapters/hmart/fixtures/          # the statement and its captures
 Drop the H Mart directory's files in together: the statement says what each visit
 cost and the captures say what was in it, and the app stores a basket only where
 the two agree.
+
+For Albertsons, run `make setup` once, then `make sample-albertsons`. This copies
+the synthetic report and generates its purchase workbook in `.sample-albertsons/`
+at the repository root, outside `data/`. Drop **both files together** into the app:
+the report alone does not contain the purchases. The command prints their paths;
+the scratch directory is excluded from Git and Docker's build context.
 
 They are generated, not anyone's shopping. `make fixtures` rebuilds them and CI
 fails if a committed file is not what the generator produces. They reproduce the
