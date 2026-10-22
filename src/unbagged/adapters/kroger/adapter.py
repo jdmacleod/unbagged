@@ -854,8 +854,8 @@ class KrogerAdapter:
                     description=(
                         "The report covers a limited window and directs the requester "
                         f"to contact the privacy office for data prior to "
-                        f"{supplemental.group(1)}. That supplemental request has to be "
-                        "made separately."
+                        f"{supplemental.group(1)}, so that earlier data has to be asked "
+                        "for."
                     ),
                 )
             )

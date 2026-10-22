@@ -413,13 +413,36 @@ def get_disclosures(conn: sqlite3.Connection, request_id: int) -> list[Disclosur
 
 
 def get_follow_ups(conn: sqlite3.Connection, request_id: int) -> list[FollowUpAction]:
+    return [action for _id, action in _follow_ups(conn, request_id)]
+
+
+def follow_up_rows(conn: sqlite3.Connection, request_id: int) -> list[dict]:
+    """The follow-ups as the Compliance view lists them, each saying whether the
+    draft letter carries it, so the page can tell a question it will ask from a
+    note to the reader."""
+    return [
+        {
+            "id": row_id,
+            "kind": str(action.kind),
+            "description": action.description,
+            "resolved": int(action.resolved),
+            "in_letter": action.in_letter,
+        }
+        for row_id, action in _follow_ups(conn, request_id)
+    ]
+
+
+def _follow_ups(conn: sqlite3.Connection, request_id: int) -> list[tuple[int, FollowUpAction]]:
     rows = conn.execute("SELECT * FROM follow_up WHERE request_id = ? ORDER BY id", (request_id,))
     return [
-        FollowUpAction(
-            kind=_enum(FollowUpKind, r["kind"]),
-            description=r["description"],
-            resolved=bool(r["resolved"]),
-            question=r["question"],
+        (
+            r["id"],
+            FollowUpAction(
+                kind=_enum(FollowUpKind, r["kind"]),
+                description=r["description"],
+                resolved=bool(r["resolved"]),
+                question=r["question"],
+            ),
         )
         for r in rows
     ]

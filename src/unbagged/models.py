@@ -258,6 +258,14 @@ class FollowUpAction:
     resolved: bool = False
     question: str | None = None
 
+    @property
+    def in_letter(self) -> bool:
+        """Does the follow-up letter carry this? A question for the retailer
+        does, and so does the earlier period a response offered; everything
+        else is a note to the reader. `letters.draft_follow_up` is the
+        authority, and a test holds this to it."""
+        return self.question is not None or self.kind is FollowUpKind.SUPPLEMENTAL_PERIOD
+
 
 @dataclass(frozen=True)
 class ParseWarning:

@@ -53,12 +53,18 @@ function Retailer({ row, categories }: { row: ComplianceRow; categories: string[
   const [showLetter, setShowLetter] = useState(false);
   const assessed = categories.length - row.unassessed_count;
   const answered = assessed - row.absent_count;
+  const inPart = categories.filter((c) => row.cells[c].status === "partial").length;
 
   // missing_category follow-ups restate the absent categories one for one, and
   // the list above already is that list. Showing both says everything twice,
   // and the letter says it a third time. These carry something the categories
   // do not.
   const extra = row.follow_ups.filter((f) => f.kind !== "missing_category");
+  // Split by who they are for. A question the draft puts to the retailer and a
+  // note meant only for the reader used to share one heading, "also worth
+  // asking", and nothing said which of them the letter would ask.
+  const asked = extra.filter((f) => f.in_letter);
+  const aboutIt = extra.filter((f) => !f.in_letter);
 
   // The adapter attaches the same explanatory note to every category it found
   // missing, because structurally it is the same fact each time: the report is
@@ -98,8 +104,9 @@ function Retailer({ row, categories }: { row: ComplianceRow; categories: string[
                   : `${row.display_name} addressed every category`}
             </h2>
             <p className="mt-0.5 max-w-[62ch] text-muted">
-              {row.display_name} answered {answered} of {assessed}. An absence here is not a blank:
-              it is a record that the category was asked about and not addressed.
+              {row.display_name} answered {answered} of {assessed}
+              {answeredInPart(answered, inPart)}. An absence here is not a blank: it is a record
+              that the category was asked about and not addressed.
               {row.unassessed_count > 0 && (
                 <>
                   {" "}
@@ -130,15 +137,18 @@ function Retailer({ row, categories }: { row: ComplianceRow; categories: string[
         )}
       </Spine>
 
-      {extra.length > 0 && (
+      {aboutIt.length > 0 && (
+        <Spine margin={<Aside>about this response</Aside>}>
+          <FollowUps items={aboutIt} />
+        </Spine>
+      )}
+
+      {asked.length > 0 && (
         <Spine margin={<Aside>also worth asking</Aside>}>
-          <ul className="space-y-2">
-            {extra.map((f) => (
-              <li key={f.id} className="max-w-[62ch] text-muted">
-                {f.description}
-              </li>
-            ))}
-          </ul>
+          <FollowUps items={asked} />
+          <p className="mt-2 max-w-[62ch] text-[11.5px] text-faint">
+            The draft follow-up below asks {asked.length === 1 ? "this" : "each of these"}.
+          </p>
         </Spine>
       )}
 
@@ -154,6 +164,30 @@ function Retailer({ row, categories }: { row: ComplianceRow; categories: string[
       </Spine>
     </section>
   );
+}
+
+function FollowUps({ items }: { items: ComplianceRow["follow_ups"] }) {
+  return (
+    <ul className="space-y-2">
+      {items.map((f) => (
+        <li key={f.id} className="max-w-[62ch] text-muted">
+          {f.description}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * How many of the answered categories were answered only in part, said after
+ * the count. "Answered 2 of 8" over two categories marked "answered in part"
+ * claimed more than the list beneath it. Found by /devex-review on 2026-10-22.
+ */
+export function answeredInPart(answered: number, inPart: number): string {
+  if (inPart === 0) return "";
+  if (inPart < answered) return `, ${inPart} of them only in part`;
+  if (answered === 1) return ", and only in part";
+  return answered === 2 ? ", both only in part" : `, all ${answered} only in part`;
 }
 
 /**

@@ -117,6 +117,15 @@ class TestQuestionsForTheRetailer:
         assert NOTE_FOR_THE_USER.description not in letter
         assert "I would also like to ask" not in letter
 
+    def test_the_note_says_the_draft_asks_questions_when_it_does(self):
+        """Found by /devex-review on 2026-10-22: the note said the letter only
+        reported what was missing, above a draft that also asked three questions."""
+        asking = draft_follow_up(META, all_absent(), [QUESTION])["note"]
+        plain = draft_follow_up(META, all_absent(), [NOTE_FOR_THE_USER])["note"]
+        assert "asks about what it left unclear" in asking
+        assert "asks" not in plain
+        assert "not legal advice" in asking
+
     @pytest.mark.parametrize("word", ACCUSATIONS)
     def test_a_letter_with_questions_never_accuses(self, word):
         letter = draft_follow_up(META, all_absent(), [QUESTION])["letter"]
