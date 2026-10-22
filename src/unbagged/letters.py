@@ -58,6 +58,15 @@ DISCLAIMER = (
     "does not assert that anyone broke the law, and it is not legal advice."
 )
 
+#: The same note for a draft that also asks the response's own questions. The
+#: plain one says the letter reports what was missing, which stops being the
+#: whole of it once a numbered list of questions follows.
+DISCLAIMER_WITH_QUESTIONS = (
+    "Read this before sending. It reports what the response did not contain and "
+    "asks about what it left unclear; it does not assert that anyone broke the "
+    "law, and it is not legal advice."
+)
+
 
 def _cite(category: DisclosureCategory) -> str:
     citation = CITATIONS.get(category)
@@ -134,5 +143,5 @@ def draft_follow_up(
         "letter": "\n".join(lines),
         "absent_categories": [str(d.category) for d in absent],
         "partial_categories": [str(d.category) for d in partial],
-        "note": DISCLAIMER,
+        "note": DISCLAIMER_WITH_QUESTIONS if questions else DISCLAIMER,
     }

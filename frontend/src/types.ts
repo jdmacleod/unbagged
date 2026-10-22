@@ -174,6 +174,10 @@ export type ComplianceRow = RequestMeta & {
     kind: string;
     description: string;
     resolved: number;
+    /** Whether the draft follow-up letter carries this: a question for the
+     *  retailer, or the earlier period the response offered. False for a note
+     *  meant only for the reader. */
+    in_letter: boolean;
   }[];
 };
 

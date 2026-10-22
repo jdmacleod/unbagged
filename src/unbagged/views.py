@@ -17,6 +17,7 @@ from collections.abc import Iterable, Mapping
 from statistics import median
 from typing import Any
 
+from unbagged import repository
 from unbagged.adapters.registry import is_fallback, registry
 from unbagged.models import DisclosureCategory, DisclosureStatus, InferenceOrigin
 from unbagged.product_labels import clean_label, is_non_product
@@ -654,12 +655,7 @@ def compliance(conn: sqlite3.Connection) -> dict[str, Any]:
         # category" over a workbook uploaded without the report that answers
         # them.
         row["unassessed_count"] = sum(1 for c in row["cells"].values() if c.get("status") is None)
-        row["follow_ups"] = _rows(
-            conn,
-            "SELECT id, kind, description, resolved FROM follow_up WHERE request_id = ?"
-            " ORDER BY id",
-            (request["id"],),
-        )
+        row["follow_ups"] = repository.follow_up_rows(conn, request["id"])
         rows.append(row)
     return {"categories": [c.value for c in DisclosureCategory], "rows": rows}
 
