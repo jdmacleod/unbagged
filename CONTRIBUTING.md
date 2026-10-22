@@ -196,7 +196,7 @@ photograph a real database even by accident. Your own instance on :8420 is
 bind-mounted to `./data` and is exactly what must not appear in a screenshot.
 The PII scanner cannot read a PNG, so this is the control that replaces it.
 
-It rewrites all five images every run, and the PNG bytes are not stable across
+It rewrites all six images every run, and the PNG bytes are not stable across
 runs even when nothing about the view changed. Compare the pixels before you
 commit — `ImageChops.difference(a, b).getbbox()` returning `None` means the only
 thing that moved was zlib, and the file should be left alone. Committing those
@@ -205,7 +205,8 @@ is churn that makes a real screenshot change hard to spot in a diff.
 ## Formatting, and git blame
 
 `ruff format` had never been run until issue #66, so one commit reformatted 64 of
-97 files. That commit is listed in `.git-blame-ignore-revs`. GitHub reads that file
+97 files. Prettier arrived the same way for the UI, in one formatting-only commit of
+its own. Both are listed in `.git-blame-ignore-revs`. GitHub reads that file
 automatically; your local checkout does not, until you tell it once:
 
 ```sh
@@ -214,8 +215,8 @@ git config blame.ignoreRevsFile .git-blame-ignore-revs
 
 Add a commit to that file only if it is purely mechanical — no logic, no renames.
 Anything a human had to decide belongs in a different commit, so that ignoring the
-mechanical one cannot hide a real change. That is why the #66 sweep is two commits
-rather than one.
+mechanical one cannot hide a real change. That is why each sweep is two commits
+rather than one: the tooling, then the reformat.
 
 ## Running the repo tooling
 
