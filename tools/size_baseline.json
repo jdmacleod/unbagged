@@ -1,12 +1,12 @@
 {
   "frontend/src/App.tsx": 913,
   "frontend/src/views/Timeline.tsx": 1310,
-  "src/unbagged/adapters/albertsons/adapter.py": 1033,
+  "src/unbagged/adapters/albertsons/adapter.py": 992,
   "src/unbagged/adapters/hmart/adapter.py": 1442,
   "src/unbagged/adapters/hmart/receipt.py": 1084,
   "src/unbagged/adapters/kroger/adapter.py": 889,
   "src/unbagged/extraction.py": 1560,
-  "src/unbagged/views.py": 1677,
+  "src/unbagged/views.py": 1676,
   "tests/test_api.py": 1319,
   "tests/test_hmart_adapter.py": 1501
 }

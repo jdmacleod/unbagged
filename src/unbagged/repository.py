@@ -254,8 +254,12 @@ def save_parse_result(
         )
 
         conn.executemany(
-            "INSERT INTO follow_up (request_id, kind, description, resolved) VALUES (?, ?, ?, ?)",
-            [(request_id, str(f.kind), f.description, int(f.resolved)) for f in result.follow_ups],
+            "INSERT INTO follow_up (request_id, kind, description, resolved, question)"
+            " VALUES (?, ?, ?, ?, ?)",
+            [
+                (request_id, str(f.kind), f.description, int(f.resolved), f.question)
+                for f in result.follow_ups
+            ],
         )
 
         conn.executemany(
@@ -415,6 +419,7 @@ def get_follow_ups(conn: sqlite3.Connection, request_id: int) -> list[FollowUpAc
             kind=_enum(FollowUpKind, r["kind"]),
             description=r["description"],
             resolved=bool(r["resolved"]),
+            question=r["question"],
         )
         for r in rows
     ]

@@ -228,7 +228,9 @@ class TestRequestIdsAreNeverReused:
         on a scratch copy before the runner was changed: three transactions in,
         zero out, and the migration reporting success.
         """
-        every = db.available_migrations()
+        # Pinned to 003, and to nothing after it: later migrations exist (004
+        # adds a column), and letting them run here would test them instead.
+        every = [(v, p) for v, p in db.available_migrations() if v <= 3]
         assert [v for v, _ in every][-1] == 3, "this test pins itself to 003"
 
         # Patched BEFORE the database is opened: `open_db` migrates on the way in,
@@ -278,3 +280,22 @@ class TestRequestIdsAreNeverReused:
     def test_the_database_carries_no_dangling_references(self, conn):
         _populate(conn)
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+class TestFollowUpsSayWhoTheyAreFor:
+    """Migration 004 (#37): a nullable column, so a follow-up stored before it
+    keeps its row and reads back as advice to the reader."""
+
+    def test_existing_follow_ups_survive_and_carry_no_question(self, tmp_path, monkeypatch):
+        every = db.available_migrations()
+        monkeypatch.setattr(db, "available_migrations", lambda: [m for m in every if m[0] <= 3])
+        with db.open_db(tmp_path / "upgrade.sqlite") as conn:
+            conn.execute("INSERT INTO request (retailer_id, display_name) VALUES ('x', 'X')")
+            conn.execute(
+                "INSERT INTO follow_up (request_id, kind, description, resolved)"
+                " VALUES (1, 'clarification', 'stored before 004', 0)"
+            )
+            monkeypatch.setattr(db, "available_migrations", lambda: every)
+            assert 4 in db.migrate(conn)
+            (row,) = conn.execute("SELECT description, question FROM follow_up").fetchall()
+            assert tuple(row) == ("stored before 004", None)

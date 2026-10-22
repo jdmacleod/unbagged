@@ -89,3 +89,35 @@ class TestDetails:
         disclosures = [Disclosure(c, DisclosureStatus.PROVIDED) for c in DisclosureCategory]
         letter = draft_follow_up(META, disclosures)["letter"]
         assert "no further questions" in letter
+
+
+QUESTION = FollowUpAction(
+    kind=FollowUpKind.CLARIFICATION,
+    description="For the reader: the profile is in another name.",
+    question="Please explain why this profile was returned for my request.",
+)
+NOTE_FOR_THE_USER = FollowUpAction(
+    kind=FollowUpKind.CLARIFICATION,
+    description="Consider contributing an adapter for this retailer.",
+)
+
+
+class TestQuestionsForTheRetailer:
+    """Issue #37. A follow-up says who it is for: one with a `question` has a
+    sentence to put to the retailer, and one without is advice to the reader.
+    Only the first reaches a letter addressed to the privacy office."""
+
+    def test_a_question_is_asked(self):
+        letter = draft_follow_up(META, all_absent(), [QUESTION])["letter"]
+        assert QUESTION.question in letter
+        assert QUESTION.description not in letter
+
+    def test_a_note_for_the_reader_never_reaches_the_letter(self):
+        letter = draft_follow_up(META, all_absent(), [NOTE_FOR_THE_USER])["letter"]
+        assert NOTE_FOR_THE_USER.description not in letter
+        assert "I would also like to ask" not in letter
+
+    @pytest.mark.parametrize("word", ACCUSATIONS)
+    def test_a_letter_with_questions_never_accuses(self, word):
+        letter = draft_follow_up(META, all_absent(), [QUESTION])["letter"]
+        assert word not in letter.lower()

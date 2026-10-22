@@ -258,6 +258,15 @@ class TestFindings:
         assert "exempt" in withheld.description
         assert "another person" in withheld.description
 
+    def test_each_finding_is_also_a_question_for_the_retailer(self, parsed):
+        """Issue #37. All three are things to ask the privacy office, and were
+        dropped from the letter for want of a way to say so. Each carries a
+        first-person question; the reader-facing description is unchanged."""
+        questions = [f.question for f in parsed.follow_ups if f.question]
+        assert len(questions) == 3
+        assert all("Please" in q for q in questions)
+        assert not any(f.question for f in parsed.follow_ups if f.kind.value == "missing_category")
+
     def test_the_request_details_are_read(self, parsed):
         assert parsed.request.report_reference == MODEL["reference"]
         assert parsed.request.submitted_at == "2026-03-02T09:15:00"
@@ -404,6 +413,14 @@ class TestThroughTheApp:
         assert response.status_code == 201, response.text
         return response.json()["request_id"]
 
+    def test_the_letter_asks_the_retailer_what_the_response_left_open(self, client, uploaded):
+        """Issue #37, end to end: the questions survive storage and reach the
+        draft, and the reader-facing wording does not."""
+        letter = client.get(f"/api/requests/{uploaded}/follow-up-letter").json()["letter"]
+        assert "I would also like to ask:" in letter
+        assert letter.count("  1. ") == letter.count("  3. ") == 1
+        assert "Ask whether" not in letter
+
     def test_products_lists_what_was_bought_with_no_shelf_price(self, client, uploaded):
         """Regression: Products counted only lines with a shelf price, and this
         retailer discloses only what was paid, so the page was empty."""
@@ -530,7 +547,7 @@ class TestThroughTheApp:
 
 
 class TestDates:
-    """Every branch of `_occurred_on`, with known answers. The fixture writes
+    """Every branch of `dates.occurred_on`, with known answers. The fixture writes
     whole 1900-epoch serials only, which left the rest unexercised."""
 
     @pytest.mark.parametrize(
@@ -554,9 +571,9 @@ class TestDates:
         ],
     )
     def test_known_answers(self, value, date1904, expected):
-        from unbagged.adapters.albertsons.adapter import _occurred_on
+        from unbagged.adapters.albertsons.dates import occurred_on
 
-        assert _occurred_on(value, date1904) == expected
+        assert occurred_on(value, date1904) == expected
 
     def test_an_impossible_date_costs_its_line_not_the_upload(self, tmp_path, report_text):
         serial = str((MODEL["baskets"][0]["day"] - GENERATOR.date(1899, 12, 30)).days)

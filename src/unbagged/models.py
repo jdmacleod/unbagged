@@ -243,9 +243,20 @@ class Disclosure:
 
 @dataclass(frozen=True)
 class FollowUpAction:
+    """Something worth doing next, and who it is said to.
+
+    `description` is written to the reader, in the app. `question` is the
+    sentence to put to the retailer, in the first person of the person who
+    made the request, and is what the follow-up letter asks. None means the
+    follow-up is for the reader only and never reaches a letter: advice such
+    as "consider contributing an adapter" addressed to a privacy office would
+    be tool-internal noise in someone's correspondence (#37).
+    """
+
     kind: FollowUpKind
     description: str
     resolved: bool = False
+    question: str | None = None
 
 
 @dataclass(frozen=True)
