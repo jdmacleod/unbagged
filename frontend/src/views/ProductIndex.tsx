@@ -241,7 +241,11 @@ function IndexBody({
         </Spine>
       )}
 
-      {stopped.length > 0 && (
+      {/* On the API's count, not the visible list's. The list is drawn from the
+          capped index, so every stopped product can fall past the cut, and a
+          guard on the list hid the section that says so. Caught by review on
+          #142. */}
+      {data.stopped_count > 0 && (
         <Stopped entries={stopped} total={data.stopped_count} staleBefore={data.stale_before} />
       )}
     </div>
@@ -309,7 +313,7 @@ function SaveIndex({ data }: { data: Index }) {
  *
  * The index is alphabetical and the cap takes the first `limit` entries, so a
  * capped page is missing the end of the alphabet, not a random sample. The old
- * note said only "Showing 2,000 of 3,109", which left the reader to infer from
+ * note said only "Showing 2,000 of N", which left the reader to infer from
  * the rail that they had never bought anything after P. It names where the
  * page stops and, when it would fit, the filter that brings the whole of what
  * was bought more than once onto one page. Found by /devex-review on
@@ -326,6 +330,15 @@ export function truncationNote(
     return `${head} Set “Bought at least” to 2 to see all ${number(repeated)} you bought more than once.`;
   }
   return `${head} The rest are in the response; this page stops here so it stays readable.`;
+}
+
+/** What the Stopped list says when the capped index left some of them out,
+ *  including all of them. */
+export function stoppedCutNote(shown: number, total: number): string {
+  const after = "come after the point where the index stops";
+  if (shown === 0)
+    return `None of the ${number(total)} fall within the index above; all of them ${after}.`;
+  return `Only the ${number(shown)} that fall within the index above are listed; the other ${number(total - shown)} ${after}.`;
 }
 
 /** Did this response price its visits and itemise none of them?
@@ -669,30 +682,26 @@ function Stopped({
         These stopped appearing after <span className="num">{staleBefore}</span>, while the coverage
         window kept running. The response gives dates, not reasons: a season ending, a brand
         switched and a habit dropped look identical here.
-        {cut && (
-          <>
-            {" "}
-            Only the {number(entries.length)} that fall within the index above are listed; the other{" "}
-            {number(total - entries.length)} come after the point where it stops.
-          </>
-        )}
+        {cut && <> {stoppedCutNote(entries.length, total)}</>}
       </p>
-      <ul className="border-t border-rule">
-        {entries.map((entry) => (
-          <li key={entry.key} className="flex items-baseline gap-4 border-b border-rule py-2">
-            <span className="min-w-0 flex-1 truncate" title={entry.description}>
-              {entry.description}
-              {entry.shares_name && entry.upc && (
-                <span className="num ml-2 text-[11px] text-faint">{entry.upc}</span>
-              )}
-            </span>
-            <span className="num shrink-0 text-[12.5px] text-muted">{entry.purchases}×</span>
-            <span className="num w-24 shrink-0 text-right text-[12.5px] text-faint">
-              {entry.last_seen}
-            </span>
-          </li>
-        ))}
-      </ul>
+      {entries.length > 0 && (
+        <ul className="border-t border-rule">
+          {entries.map((entry) => (
+            <li key={entry.key} className="flex items-baseline gap-4 border-b border-rule py-2">
+              <span className="min-w-0 flex-1 truncate" title={entry.description}>
+                {entry.description}
+                {entry.shares_name && entry.upc && (
+                  <span className="num ml-2 text-[11px] text-faint">{entry.upc}</span>
+                )}
+              </span>
+              <span className="num shrink-0 text-[12.5px] text-muted">{entry.purchases}×</span>
+              <span className="num w-24 shrink-0 text-right text-[12.5px] text-faint">
+                {entry.last_seen}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </Spine>
   );
 }
