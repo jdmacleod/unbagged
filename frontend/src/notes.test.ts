@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { answeredInPart } from "./views/Compliance";
-import { stoppedCutNote, truncationNote } from "./views/ProductIndex";
+import { truncationNote } from "./views/ProductIndex";
 
 // Found by /devex-review on 2026-10-22, against a response large enough to be
 // capped and one that answered two categories, both only in part.
@@ -22,44 +22,25 @@ describe("answeredInPart", () => {
 });
 
 describe("truncationNote", () => {
-  const capped = { limit: 2000, product_count: 3000, bought_once: 2000, min_purchases: 1 };
+  const capped = { limit: 2000, product_count: 3000, left_out: 1000, left_out_max_purchases: 1 };
 
-  it("names where the alphabetical index stops", () => {
-    expect(truncationNote(capped, "PEARS")).toContain(
-      "alphabetically, so the index stops at “PEARS”",
+  it("says the page keeps the most-bought, not a run of the alphabet", () => {
+    expect(truncationNote(capped)).toContain(
+      "Showing the 2,000 products bought most often, of 3,000.",
     );
   });
 
-  it("offers the filter that fits everything bought more than once", () => {
-    expect(truncationNote(capped, "PEARS")).toContain(
-      "Set “Bought at least” to 2 to see all 1,000 you bought more than once.",
+  it("says when only things bought once were left out", () => {
+    expect(truncationNote(capped)).toContain("The other 1,000 (each bought once) are left out");
+  });
+
+  it("says how often the most-bought of the left-out ones was bought", () => {
+    expect(truncationNote({ ...capped, left_out_max_purchases: 3 })).toContain(
+      "(none bought more than 3 times)",
     );
   });
 
-  it("does not offer the filter when it is already set", () => {
-    const note = truncationNote({ ...capped, min_purchases: 2 }, "PEARS");
-    expect(note).not.toContain("Bought at least");
-    expect(note).toContain("The rest are in the response");
-  });
-
-  it("does not offer the filter when the repeats alone overflow the page", () => {
-    const note = truncationNote({ ...capped, product_count: 5000, bought_once: 1000 }, null);
-    expect(note).not.toContain("Bought at least");
-    expect(note).not.toContain("stops at");
-  });
-});
-
-describe("stoppedCutNote", () => {
-  it("says how many of the stopped products the capped index carries", () => {
-    expect(stoppedCutNote(600, 900)).toBe(
-      "Only the 600 that fall within the index above are listed; the other 300 come after the point where the index stops.",
-    );
-  });
-
-  it("still says so when the cap left none of them on the page", () => {
-    // Review on #142: a guard on the visible list hid this case entirely.
-    expect(stoppedCutNote(0, 12)).toBe(
-      "None of the 12 fall within the index above; all of them come after the point where the index stops.",
-    );
+  it("points at the search, which reaches past the cap", () => {
+    expect(truncationNote(capped)).toContain("“Name contains” still finds any of them");
   });
 });

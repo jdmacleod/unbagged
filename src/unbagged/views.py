@@ -17,7 +17,7 @@ from collections.abc import Iterable, Mapping
 from statistics import median
 from typing import Any
 
-from unbagged import repository
+from unbagged import index_cap, repository
 from unbagged.adapters.registry import is_fallback, registry
 from unbagged.models import DisclosureCategory, DisclosureStatus, InferenceOrigin
 from unbagged.product_labels import clean_label, is_non_product
@@ -1618,12 +1618,6 @@ def product_index(
     if min_purchases > 1:
         products = [p for p in products if p["purchases"] >= min_purchases]
 
-    # Alphabetical, with the product key breaking ties so the order is total
-    # and the same filter always renders the same page. The key rather than the
-    # UPC: a response that disclosed no codes has none to sort by, and None
-    # does not compare against a string.
-    products.sort(key=lambda p: (p["description"], p["key"]))
-
     return {
         "disclosed": disclosed_specific_pieces(conn, request_id),
         # Unfiltered, because the headline figure is a fact about the response
@@ -1652,10 +1646,9 @@ def product_index(
             }
             for tier, floor in PURCHASE_TIERS
         ],
-        "truncated": len(products) > limit,
-        "limit": limit,
         "lines_disclosed": request_lines_disclosed(conn, request_id),
-        "products": products[:limit],
+        # The cap keeps the most-bought, drawn alphabetically (#141).
+        **index_cap.cap(products, limit),
     }
 
 

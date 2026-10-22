@@ -28,7 +28,9 @@ from a specific response. See `CONTRIBUTING.md`.
 **This can change what a response you have already loaded shows.** An
 Albertsons response's container deposits leave Products and Prices and are
 counted as set aside, so its product count goes down by the number of deposit
-entries it carried. Nothing needs uploading again for this.
+entries it carried. A response with more products than Products shows on one
+page now shows a different set of them: the most-bought, not the start of the
+alphabet. Nothing needs uploading again for either.
 
 ### Added
 
@@ -45,6 +47,13 @@ entries it carried. Nothing needs uploading again for this.
   often. The rule needs the register's codes at the end as well as the charge
   word at the start, so a product whose name merely begins with the same word
   is still listed.
+- A Products index too large for one page keeps the products bought most often
+  and leaves out the least-bought, rather than keeping the start of the
+  alphabet and dropping the end of it. The note under it says how many it left
+  out and how often the most-bought of those was bought, and that the search
+  box still finds them. The list of products bought and not since is no longer
+  cut with it, and shows a page at a time. A saved image says how many products
+  it draws rather than how many the response holds.
 
 ### Fixed
 
@@ -60,11 +69,6 @@ entries it carried. Nothing needs uploading again for this.
   the contact list printed after it. The quote now stops where the list begins.
   A response loaded before this keeps the longer quote until it is uploaded
   again.
-- A Products index too large for one page said only how many of its products it
-  was showing. The cap is alphabetical, so the end of the alphabet was missing
-  from the page, its letter rail and its list of products bought and not since,
-  and nothing said so. It now names where the index stops and, where it would
-  fit, the filter that brings everything bought more than once onto one page.
 
 ## [0.19.0] - 2026-10-22
 
