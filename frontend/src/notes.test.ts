@@ -55,15 +55,15 @@ describe("filteredNote", () => {
     expect(filteredNote(data, "   ", 1)).toBeNull();
   });
 
-  it("states the filtered count against the whole response", () => {
+  it("says how many match, not how many are shown, which the cap can make fewer", () => {
     expect(filteredNote(data, "", 2)).toBe(
-      "Showing 1,000 of 3,000 products: those bought at least 2 times.",
+      "1,000 of 3,000 products match: those bought at least 2 times.",
     );
   });
 
   it("names both filters when both are set", () => {
     expect(filteredNote(data, "tea", 3)).toBe(
-      "Showing 1,000 of 3,000 products: those bought at least 3 times and with “tea” in the name.",
+      "1,000 of 3,000 products match: those bought at least 3 times and with “tea” in the name.",
     );
   });
 });
