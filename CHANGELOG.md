@@ -25,6 +25,10 @@ from a specific response. See `CONTRIBUTING.md`.
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-10-22
+
+What a large Albertsons response looks like, read properly.
+
 **This can change what a response you have already loaded shows.** An
 Albertsons response's container deposits leave Products and Prices and are
 counted as set aside, so its product count goes down by the number of deposit
