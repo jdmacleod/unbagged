@@ -23,34 +23,9 @@ from a specific response. See `CONTRIBUTING.md`.
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/
 
-## [0.18.0] - 2026-09-18
-
-**This changes what responses you have already loaded look like.** The Products
-page lists one item fewer where a retailer printed the same product two ways.
-No migration runs and nothing needs re-reading. Not a PATCH.
-
-### Fixed
-
-- **A stray character no longer splits one product into two.** Where a retailer
-  disclosed no code, the app identifies a product by the name printed on the
-  receipt, so one item written `(CHINESE BROCCOLI` on one visit and
-  `CHINESE BROCCOLI` on the next was listed twice with its visits divided
-  between the rows. The label cleaner then declined to trim the bracket,
-  because trimming would have shown one name on two rows, so what reached the
-  page was a bracket standing in for a split nobody could see.
-
-  The split was already visible somewhere worse: the row saying you bought it
-  twice opened a timeline of three visits, because searching the clean spelling
-  also finds the bracketed one. Both now agree.
-
-  Entries are joined only where **no** spelling in the group carries a code. A
-  code is the retailer telling the two apart itself, and two coded products
-  printing one name are two products however alike the names read.
-
-  Prices joins on the same rule, so it cannot list two price series for a
-  product Products calls one thing.
-
 ## [Unreleased]
+
+## [0.19.0] - 2026-10-22
 
 A new retailer, and a new kind of spreadsheet read.
 
@@ -186,19 +161,6 @@ for the follow-up letter's questions; nothing needs re-reading.
   the response states no saving anywhere. The rule is the one the line items
   already follow for a product code no line carries.
 
-- **The vision model default is documented as the default**, rather than shown
-  as one option among several. `minicpm-v4.5:8b` has been the shipped default
-  since 0.16.0 and the example file presented it as a suggestion. The docs now
-  also say what the machine running the model needs: roughly 8GB of GPU or
-  unified memory, about eight seconds a page there, minutes on a CPU, against a
-  180s per-call ceiling.
-
-- **A saved bake-off run records what produced it.** Date, host, Ollama version,
-  this repo's version, and a digest per model, each read next to its own model's
-  measurement rather than snapshotted before a matrix that runs for hours. The
-  replay now refuses a file carrying no measurements instead of rendering an
-  empty table over it and exiting cleanly.
-
 - **The synthetic responses reproduce the shapes the real ones have**, rather
   than only their formats. Both generators were structurally faithful and
   distributionally wrong, which left documented behaviour unreachable from the
@@ -309,6 +271,48 @@ for the follow-up letter's questions; nothing needs re-reading.
   the newest release the linter can read.
 - **Files have a size limit.** A new file past 800 lines (1,200 for tests) fails
   the hook and CI; the ten already past it may shrink but not grow.
+
+## [0.18.0] - 2026-09-18
+
+**This changes what responses you have already loaded look like.** The Products
+page lists one item fewer where a retailer printed the same product two ways.
+No migration runs and nothing needs re-reading. Not a PATCH.
+
+### Fixed
+
+- **A stray character no longer splits one product into two.** Where a retailer
+  disclosed no code, the app identifies a product by the name printed on the
+  receipt, so one item written `(CHINESE BROCCOLI` on one visit and
+  `CHINESE BROCCOLI` on the next was listed twice with its visits divided
+  between the rows. The label cleaner then declined to trim the bracket,
+  because trimming would have shown one name on two rows, so what reached the
+  page was a bracket standing in for a split nobody could see.
+
+  The split was already visible somewhere worse: the row saying you bought it
+  twice opened a timeline of three visits, because searching the clean spelling
+  also finds the bracketed one. Both now agree.
+
+  Entries are joined only where **no** spelling in the group carries a code. A
+  code is the retailer telling the two apart itself, and two coded products
+  printing one name are two products however alike the names read.
+
+  Prices joins on the same rule, so it cannot list two price series for a
+  product Products calls one thing.
+
+### Changed
+
+- **The vision model default is documented as the default**, rather than shown
+  as one option among several. `minicpm-v4.5:8b` has been the shipped default
+  since 0.16.0 and the example file presented it as a suggestion. The docs now
+  also say what the machine running the model needs: roughly 8GB of GPU or
+  unified memory, about eight seconds a page there, minutes on a CPU, against a
+  180s per-call ceiling.
+
+- **A saved bake-off run records what produced it.** Date, host, Ollama version,
+  this repo's version, and a digest per model, each read next to its own model's
+  measurement rather than snapshotted before a matrix that runs for hours. The
+  replay now refuses a file carrying no measurements instead of rendering an
+  empty table over it and exiting cleanly.
 
 ## [0.17.0] - 2026-09-18
 
