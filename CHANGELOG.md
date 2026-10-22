@@ -25,6 +25,12 @@ from a specific response. See `CONTRIBUTING.md`.
 
 ## [Unreleased]
 
+### Added
+
+- `make sample-albertsons` builds a synthetic report and purchase workbook for
+  trying the app before a retailer response arrives, without committing a binary
+  fixture or writing into user data.
+
 ### Fixed
 
 - Compliance said a retailer "answered 2 of 8" when both of those answers were

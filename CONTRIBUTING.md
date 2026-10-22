@@ -182,6 +182,11 @@ committing one would put an unreviewed file in the one directory the scanner tru
 Its generator commits the text half of the response and exposes `build_workbook(seed)`
 for tests to call. Do the same for any other binary response format.
 
+To try that binary fixture in the app, run `make sample-albertsons` after setup.
+It copies the committed synthetic report and builds its workbook together in the
+ignored `.sample-albertsons/` scratch directory. Upload both files together; do
+not commit the generated workbook or place the sample under `data/`.
+
 **A fabricated date that matches a real one is a finding, not noise.** `make denylist`
 puts every visit date from a real response on the denylist, so a fixture date that
 happens to land on a day you shopped is reported as a leak — correctly, since nothing
