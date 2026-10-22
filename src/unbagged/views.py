@@ -11,7 +11,6 @@ Every function returns plain dicts and lists, ready to serialise.
 from __future__ import annotations
 
 import itertools
-import re
 import sqlite3
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
@@ -20,6 +19,7 @@ from typing import Any
 
 from unbagged.adapters.registry import is_fallback, registry
 from unbagged.models import DisclosureCategory, DisclosureStatus, InferenceOrigin
+from unbagged.product_labels import clean_label, is_non_product
 
 
 def _escape_like(value: str) -> str:
@@ -1305,6 +1305,27 @@ def _tier(purchases: int) -> int:
 #: was showing nothing and letting them conclude nothing was disclosed.
 PRODUCT_KEY = "COALESCE(NULLIF(i.upc, ''), NULLIF(i.description_raw, ''))"
 
+#: **What is a product, and what is said about a line that is not one** (#100).
+#:
+#: A line leaves the product index for one of four reasons, and the reason
+#: decides whether the page says so:
+#:
+#: - **Blank name** (`PRODUCT_KEY` is NULL): it names nothing. Not counted.
+#: - **Zero amount**: a placeholder or a coupon marker; nothing was charged.
+#:   Not counted.
+#: - **Negative amount**: a return or a markdown; money given back. Not counted.
+#: - **Charge vocabulary, or a name with nothing readable left**: a real charge,
+#:   but not a thing anybody chose (a deposit, a tax row, a bag fee). Counted,
+#:   as "set aside".
+#:
+#: The first three are not purchases at all, so leaving them out of an index of
+#: what you bought takes nothing away from it; their totals stay in the basket,
+#: and the Timeline's statistics count the zero and negative lines. The last is
+#: a purchase in the money sense, which is exactly why the page has to say it
+#: was set aside: a total that shrinks with nothing on screen to account for it
+#: is what this tool exists not to do. A new class goes on whichever side its
+#: answer to "was anything bought?" puts it.
+
 #: The amount a purchase is judged by: the shelf price where the retailer
 #: disclosed one, and what was paid where it disclosed only that. Albertsons
 #: discloses only the paid amount, so filtering on `retail_amt > 0` alone left
@@ -1313,81 +1334,6 @@ PRODUCT_KEY = "COALESCE(NULLIF(i.upc, ''), NULLIF(i.description_raw, ''))"
 #: predicate it always was. Both views use it, so they cannot disagree about
 #: what counts as a purchase.
 PURCHASE_AMOUNT = "COALESCE(i.retail_amt, i.loyalty_amt)"
-
-#: A price the retailer printed into the name field, e.g. `$0.05 CRV DEPOSIT`.
-#:
-#: **The currency symbol is required, and that is the whole point.** A rule that
-#: stripped any leading number was measured against the corpus and matched seven
-#: names: the five that really carry a price, and two that open with a bottle
-#: size followed by a unit. Eating the size off those leaves a name that is
-#: wrong and still reads like a plausible product, which is worse than an ugly
-#: one — it is the `2% MILK` hazard, one step along. Requiring the symbol
-#: matched five of five and nothing else.
-_PRICE_PREFIX = re.compile(r"^\s*\$\s*\d+(?:[.,]\d+)?\s+")
-
-
-def _strip_leading_punctuation(text: str) -> str:
-    """Drop what a name opens with that no reader needs.
-
-    A stray bracket, a quotation mark, an OCR artefact. Digits are NOT
-    punctuation here and must survive: `2% MILK` and `7UP` are products.
-
-    **Letters means letters in any script, which an `A-Za-z` class does not.**
-    This was written as `^[^A-Za-z0-9]+` and would have stripped the whole of a
-    name written in Hangul or Han, leaving the empty string — which the caller
-    reads as "this row names no product" and drops from Products AND Prices. On
-    a Korean grocer's response that is not an edge case, it is the shelf. Caught
-    by review on #102. `str.isalnum` is Unicode-aware, so 한 and é and 7 all
-    count as the start of a name and only punctuation is taken.
-    """
-    for index, char in enumerate(text):
-        if char.isalnum():
-            return text[index:]
-    return ""
-
-
-#: Words a receipt uses for a line that is a charge but not a thing you bought:
-#: a container deposit, a redemption value, a tax printed as its own row.
-#:
-#: **Every token has to be in here before a line is refused**, never one of
-#: them. Measured against the corpus: matching on containment drops eight rows
-#: where five are meant, and the three it takes are real drinks whose names
-#: carry the word beside a size and a unit. `adapters/hmart/receipt.py`
-#: `_is_furniture` records the same lesson from the other direction, where
-#: matching the word `TENDER` alone deleted a real `GIFT CARD` purchase and the
-#: basket then came up short for a reason nobody could see.
-#:
-#: Kept as a module constant rather than asked of the adapter. `RetailerAdapter`
-#: is a structural Protocol that no adapter inherits, so it cannot hand one a
-#: default, and `product_index` holds no retailer to ask. CLAUDE.md's rule is
-#: that core must not branch on retailer IDENTITY; a shared constant branches on
-#: nothing. It moves behind the protocol the first time a jurisdiction disagrees
-#: with it — see issue #100.
-NON_PRODUCT_WORDS = frozenset({"CRV", "DEPOSIT", "DEP", "BOTTLE", "TAX"})
-
-
-def clean_label(raw: str) -> str:
-    """The name with the retailer's furniture taken off the front.
-
-    Display only. The raw spelling is what every lookup still matches on, which
-    is why `product_index` returns it alongside as `match_name`: the timeline
-    searches `description_raw` with a LIKE, so a cleaned string sent as a query
-    finds a product that was bought and reports that it never was.
-
-    Returns `""` where nothing is left, which means the row names no product.
-    """
-    return _strip_leading_punctuation(_PRICE_PREFIX.sub("", raw)).strip()
-
-
-def is_non_product(label: str) -> bool:
-    """Is this line a charge rather than something bought?
-
-    True only when EVERY word is deposit or tax vocabulary. `CRV DEPOSIT` is
-    the receipt charging you for a container; a drink whose name happens to end
-    in `CRV` is a drink.
-    """
-    words = label.upper().split()
-    return bool(words) and all(word in NON_PRODUCT_WORDS for word in words)
 
 
 def _join_name_split_products(merged: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:

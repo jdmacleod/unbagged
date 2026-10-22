@@ -364,7 +364,8 @@ function Headline({ data }: { data: Index }) {
                 calling it nine lines would describe a subtraction the total
                 never made. Caught by review on #102. */}
             {number(data.set_aside)} {data.set_aside === 1 ? "entry was" : "entries were"} set aside
-            as charges rather than products: deposits, taxes, and names that were only punctuation.
+            as charges rather than products: deposits, taxes, fees, and names that were only
+            punctuation.
           </p>
         )}
       </div>

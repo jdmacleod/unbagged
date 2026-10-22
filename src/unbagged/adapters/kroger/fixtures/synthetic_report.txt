@@ -647,11 +647,11 @@ Information about your purchases:
           "division": "016",
           "store": "00891",
           "orderno": "5",
-          "total_amount_prior_to_discounts": "25.10",
+          "total_amount_prior_to_discounts": "25.15",
           "tenders": [
             {
               "tendertype": "CREDIT",
-              "amount": "26.20"
+              "amount": "26.25"
             }
           ],
           "items": [
@@ -716,6 +716,12 @@ Information about your purchases:
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
+            },
+            {
+              "purchasedescription": "$0.05 CRV DEPOSIT",
+              "productupc": "",
+              "retailamt": "0.05",
+              "customerloyamt": "0.05"
             }
           ]
         },
@@ -743,13 +749,13 @@ Information about your purchases:
               "purchasedescription": "SIMPLE TRUTH SPORTS DRINK 64Z",
               "productupc": "00006000150",
               "retailamt": "7.00",
+  17
               "customerloyamt": "7.00"
             },
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  17
               "customerloyamt": "0.00"
             },
             {
@@ -790,13 +796,13 @@ Information about your purchases:
             },
             {
               "purchasedescription": "KRO DEODORANT 3Z",
+  18
               "productupc": "00008000100",
               "retailamt": "3.02",
               "customerloyamt": "3.02"
             },
             {
               "purchasedescription": "SIMPLE TRUTH WHOLE MILK 12CT",
-  18
               "productupc": "00002000055",
               "retailamt": "10.92",
               "customerloyamt": "0.00"
@@ -837,13 +843,13 @@ Information about your purchases:
             },
             {
               "purchasedescription": "KRO SPAGHETTI 32Z",
+  19
               "productupc": "00004000038",
               "retailamt": "1.33",
               "customerloyamt": "1.33"
             },
             {
               "purchasedescription": "UNKNOWN",
-  19
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -884,13 +890,13 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  20
             {
               "purchasedescription": "ORGANIC BROCCOLI CROWN 2LB",
               "productupc": "00001000212",
               "retailamt": "1.91",
               "customerloyamt": "1.91"
             },
-  20
             {
               "purchasedescription": "BANANAS EA",
               "productupc": "00001000001",
@@ -931,13 +937,13 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  21
               "customerloyamt": "0.00"
             },
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  21
               "customerloyamt": "0.00"
             },
             {
@@ -978,13 +984,13 @@ Information about your purchases:
               "purchasedescription": "SIMPLE TRUTH ORG BLUEBERRY PINT 6CT",
               "productupc": "00001000395",
               "retailamt": "7.10",
+  22
               "customerloyamt": "7.10"
             },
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  22
               "customerloyamt": "0.00"
             },
             {
@@ -1025,13 +1031,13 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  23
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
             {
               "purchasedescription": "UNKNOWN",
-  23
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -1072,13 +1078,13 @@ Information about your purchases:
             },
             {
               "purchasedescription": "KRO VANILLA ICE CREAM 32Z",
+  24
               "productupc": "00005000038",
               "retailamt": "4.20",
               "customerloyamt": "4.20"
             },
             {
               "purchasedescription": "UNKNOWN",
-  24
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -1119,13 +1125,13 @@ Information about your purchases:
               "retailamt": "6.31",
               "customerloyamt": "4.42"
             },
+  25
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  25
             {
               "purchasedescription": "KRO SHAMPOO TWIN",
               "productupc": "00008000044",
@@ -1166,13 +1172,13 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  26
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  26
             {
               "purchasedescription": "KRO GROUND TURKEY FMLY",
               "productupc": "00003000240",
@@ -1213,13 +1219,13 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  27
               "customerloyamt": "0.00"
             },
             {
               "purchasedescription": "SIMPLE TRUTH ORANGE JUICE 2L",
               "productupc": "00006000016",
               "retailamt": "3.72",
-  27
               "customerloyamt": "0.00"
             },
             {
@@ -1260,13 +1266,13 @@ Information about your purchases:
             },
             {
               "purchasedescription": "PRIVATE SELECTION GROUND TURKEY 5LB",
+  28
               "productupc": "00003000260",
               "retailamt": "7.22",
               "customerloyamt": "7.22"
             },
             {
               "purchasedescription": "HOME SENSE SPONGE XL",
-  28
               "productupc": "00007000219",
               "retailamt": "4.80",
               "customerloyamt": "4.80"
@@ -1291,11 +1297,11 @@ Information about your purchases:
           "division": "016",
           "store": "00427",
           "orderno": "11",
-          "total_amount_prior_to_discounts": "24.89",
+          "total_amount_prior_to_discounts": "24.94",
           "tenders": [
             {
               "tendertype": "EBT",
-              "amount": "24.89"
+              "amount": "24.94"
             }
           ],
           "items": [
@@ -1307,13 +1313,13 @@ Information about your purchases:
             },
             {
               "purchasedescription": "KRO HALF AND HALF GAL",
+  29
               "productupc": "00002000273",
               "retailamt": "2.98",
               "customerloyamt": "2.98"
             },
             {
               "purchasedescription": "SIMPLE TRUTH ORG HASS AVOCADO LB",
-  29
               "productupc": "00001000057",
               "retailamt": "1.66",
               "customerloyamt": "1.66"
@@ -1347,7 +1353,14 @@ Information about your purchases:
               "productupc": "00004000460",
               "retailamt": "8.36",
               "customerloyamt": "6.69"
+            },
+            {
+              "purchasedescription": "$0.05 CRV DEPOSIT",
+              "productupc": "",
+              "retailamt": "0.05",
+              "customerloyamt": "0.05"
             }
+  30
           ]
         },
         {
@@ -1360,23 +1373,10 @@ Information about your purchases:
           "tenders": [
             {
               "tendertype": "CASH",
-  30
               "amount": "8.47"
             }
           ],
           "items": [
-            {
-              "purchasedescription": "UNKNOWN",
-              "productupc": "00010000080000",
-              "retailamt": "0.00",
-              "customerloyamt": "0.00"
-            },
-            {
-              "purchasedescription": "UNKNOWN",
-              "productupc": "00010000080000",
-              "retailamt": "0.00",
-              "customerloyamt": "0.00"
-            },
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -1427,6 +1427,18 @@ Information about your purchases:
               "customerloyamt": "0.00"
             },
             {
+              "purchasedescription": "UNKNOWN",
+              "productupc": "00010000080000",
+              "retailamt": "0.00",
+              "customerloyamt": "0.00"
+            },
+            {
+              "purchasedescription": "UNKNOWN",
+              "productupc": "00010000080000",
+              "retailamt": "0.00",
+              "customerloyamt": "0.00"
+            },
+            {
               "purchasedescription": "KRO HAND SOAP TWIN",
               "productupc": "00008000143",
               "retailamt": "4.03",
@@ -1442,6 +1454,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  32
               "customerloyamt": "0.00"
             },
             {
@@ -1454,7 +1467,6 @@ Information about your purchases:
         },
         {
           "date": "04/30/2024 00:00:00",
-  32
           "time": "08:24:49",
           "division": "016",
           "store": "00318",
@@ -1489,19 +1501,19 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-              "customerloyamt": "0.00"
-            },
-            {
-              "purchasedescription": "UNKNOWN",
-              "productupc": "00010000080000",
-              "retailamt": "0.00",
-              "customerloyamt": "0.00"
-            },
-            {
-              "purchasedescription": "UNKNOWN",
-              "productupc": "00010000080000",
-              "retailamt": "0.00",
   33
+              "customerloyamt": "0.00"
+            },
+            {
+              "purchasedescription": "UNKNOWN",
+              "productupc": "00010000080000",
+              "retailamt": "0.00",
+              "customerloyamt": "0.00"
+            },
+            {
+              "purchasedescription": "UNKNOWN",
+              "productupc": "00010000080000",
+              "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
             {
@@ -1536,6 +1548,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "KRO TORTILLA CHIP 5LB",
+  34
               "productupc": "00004000371",
               "retailamt": "10.41",
               "customerloyamt": "10.41"
@@ -1548,7 +1561,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "PRIVATE SELECTION CREAM CHEESE 16Z",
-  34
               "productupc": "00002000256",
               "retailamt": "2.71",
               "customerloyamt": "2.71"
@@ -1583,6 +1595,7 @@ Information about your purchases:
           "items": [
             {
               "purchasedescription": "UNKNOWN",
+  35
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -1595,7 +1608,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  35
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -1630,19 +1642,19 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-            {
-              "purchasedescription": "UNKNOWN",
-              "productupc": "00010000080000",
-              "retailamt": "0.00",
-              "customerloyamt": "0.00"
-            },
-            {
-              "purchasedescription": "UNKNOWN",
-              "productupc": "00010000080000",
-              "retailamt": "0.00",
-              "customerloyamt": "0.00"
-            },
   36
+            {
+              "purchasedescription": "UNKNOWN",
+              "productupc": "00010000080000",
+              "retailamt": "0.00",
+              "customerloyamt": "0.00"
+            },
+            {
+              "purchasedescription": "UNKNOWN",
+              "productupc": "00010000080000",
+              "retailamt": "0.00",
+              "customerloyamt": "0.00"
+            },
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -1677,6 +1689,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  37
             {
               "purchasedescription": "HONEY 48Z",
               "productupc": "00004000457",
@@ -1689,7 +1702,6 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  37
             {
               "purchasedescription": "PRIVATE SELECTION BUTTER 12Z",
               "productupc": "00002000189",
@@ -1724,6 +1736,7 @@ Information about your purchases:
               "purchasedescription": "KRO WHITE RICE 32Z",
               "productupc": "00004000302",
               "retailamt": "3.31",
+  38
               "customerloyamt": "2.98"
             },
             {
@@ -1736,7 +1749,6 @@ Information about your purchases:
               "purchasedescription": "PRIVATE SELECTION 2% MILK 32Z",
               "productupc": "00002000027",
               "retailamt": "4.24",
-  38
               "customerloyamt": "4.24"
             }
           ]
@@ -1771,6 +1783,7 @@ Information about your purchases:
               "purchasedescription": "PRIVATE SELECTION CHICKEN NUGGET PT",
               "productupc": "00005000117",
               "retailamt": "7.49",
+  39
               "customerloyamt": "7.49"
             },
             {
@@ -1783,7 +1796,6 @@ Information about your purchases:
               "purchasedescription": "HONEY 48Z",
               "productupc": "00004000457",
               "retailamt": "-7.13",
-  39
               "customerloyamt": "-7.13"
             },
             {
@@ -1818,6 +1830,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "SIMPLE TRUTH STRING CHEESE 8Z",
+  40
               "productupc": "00002000309",
               "retailamt": "3.22",
               "customerloyamt": "2.58"
@@ -1830,7 +1843,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  40
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -1865,19 +1877,19 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-              "productupc": "00010000080000",
-              "retailamt": "0.00",
-              "customerloyamt": "0.00"
-            },
-            {
-              "purchasedescription": "UNKNOWN",
-              "productupc": "00010000080000",
-              "retailamt": "0.00",
-              "customerloyamt": "0.00"
-            },
-            {
-              "purchasedescription": "UNKNOWN",
   41
+              "productupc": "00010000080000",
+              "retailamt": "0.00",
+              "customerloyamt": "0.00"
+            },
+            {
+              "purchasedescription": "UNKNOWN",
+              "productupc": "00010000080000",
+              "retailamt": "0.00",
+              "customerloyamt": "0.00"
+            },
+            {
+              "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -1912,19 +1924,19 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-            {
-              "purchasedescription": "UNKNOWN",
-              "productupc": "00010000080000",
-              "retailamt": "0.00",
-              "customerloyamt": "0.00"
-            },
-            {
-              "purchasedescription": "UNKNOWN",
-              "productupc": "00010000080000",
-              "retailamt": "0.00",
-              "customerloyamt": "0.00"
-            },
   42
+            {
+              "purchasedescription": "UNKNOWN",
+              "productupc": "00010000080000",
+              "retailamt": "0.00",
+              "customerloyamt": "0.00"
+            },
+            {
+              "purchasedescription": "UNKNOWN",
+              "productupc": "00010000080000",
+              "retailamt": "0.00",
+              "customerloyamt": "0.00"
+            },
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -1959,6 +1971,7 @@ Information about your purchases:
               "retailamt": "1.96",
               "customerloyamt": "1.76"
             },
+  43
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -1971,7 +1984,6 @@ Information about your purchases:
               "retailamt": "16.50",
               "customerloyamt": "16.50"
             },
-  43
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -2006,6 +2018,7 @@ Information about your purchases:
               "purchasedescription": "PRIVATE SELECTION VANILLA ICE CREAM 12Z",
               "productupc": "00005000046",
               "retailamt": "3.83",
+  44
               "customerloyamt": "3.83"
             },
             {
@@ -2018,7 +2031,6 @@ Information about your purchases:
               "purchasedescription": "CAT LITTER 30LB",
               "productupc": "00009000060",
               "retailamt": "13.03",
-  44
               "customerloyamt": "10.42"
             },
             {
@@ -2053,6 +2065,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  45
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -2065,7 +2078,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "SIMPLE TRUTH ICED TEA 12PK",
-  45
               "productupc": "00006000120",
               "retailamt": "3.03",
               "customerloyamt": "1.67"
@@ -2084,11 +2096,11 @@ Information about your purchases:
           "division": "016",
           "store": "00891",
           "orderno": "19",
-          "total_amount_prior_to_discounts": "41.73",
+          "total_amount_prior_to_discounts": "41.78",
           "tenders": [
             {
               "tendertype": "CASH",
-              "amount": "41.73"
+              "amount": "41.78"
             }
           ],
           "items": [
@@ -2100,6 +2112,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  46
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -2112,7 +2125,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "DEODORANT 16Z",
-  46
               "productupc": "00008000126",
               "retailamt": "5.68",
               "customerloyamt": "3.12"
@@ -2147,6 +2159,7 @@ Information about your purchases:
               "retailamt": "3.92",
               "customerloyamt": "3.92"
             },
+  47
             {
               "purchasedescription": "SIMPLE TRUTH ORG BABY CARROT 2LB",
               "productupc": "00001000157",
@@ -2159,7 +2172,6 @@ Information about your purchases:
               "retailamt": "6.67",
               "customerloyamt": "6.00"
             },
-  47
             {
               "purchasedescription": "KRO MIXED VEGETABLE PT",
               "productupc": "00005000073",
@@ -2177,6 +2189,12 @@ Information about your purchases:
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
+            },
+            {
+              "purchasedescription": "$0.05 CRV DEPOSIT",
+              "productupc": "",
+              "retailamt": "0.05",
+              "customerloyamt": "0.05"
             }
           ]
         },
@@ -2188,6 +2206,7 @@ Information about your purchases:
           "orderno": "20",
           "total_amount_prior_to_discounts": "83.93",
           "tenders": [
+  48
             {
               "tendertype": "CASH",
               "amount": "82.57"
@@ -2206,7 +2225,6 @@ Information about your purchases:
               "retailamt": "4.89",
               "customerloyamt": "3.91"
             },
-  48
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -2235,6 +2253,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  49
               "customerloyamt": "0.00"
             },
             {
@@ -2253,7 +2272,6 @@ Information about your purchases:
               "purchasedescription": "ORGANIC BROCCOLI CROWN 6CT",
               "productupc": "00001000219",
               "retailamt": "3.10",
-  49
               "customerloyamt": "2.17"
             },
             {
@@ -2282,6 +2300,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "PRIVATE SELECTION SALMON FILLET 8Z",
+  50
               "productupc": "00003000122",
               "retailamt": "33.09",
               "customerloyamt": "29.78"
@@ -2300,7 +2319,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "BANANAS EA",
-  50
               "productupc": "00001000001",
               "retailamt": "0.50",
               "customerloyamt": "0.00"
@@ -2329,6 +2347,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "SIMPLE TRUTH STRING CHEESE 48Z",
+  51
               "productupc": "00002000314",
               "retailamt": "4.81",
               "customerloyamt": "3.37"
@@ -2347,7 +2366,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  51
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -2376,6 +2394,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  52
             {
               "purchasedescription": "KRO HAND SOAP TWIN",
               "productupc": "00008000143",
@@ -2394,7 +2413,6 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  52
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -2423,6 +2441,7 @@ Information about your purchases:
             }
           ],
           "items": [
+  53
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -2441,7 +2460,6 @@ Information about your purchases:
               "retailamt": "17.45",
               "customerloyamt": "17.45"
             },
-  53
             {
               "purchasedescription": "KRO BLACK BEANS 5LB",
               "productupc": "00004000272",
@@ -2470,6 +2488,7 @@ Information about your purchases:
               "purchasedescription": "HAND SOAP 6Z",
               "productupc": "00008000156",
               "retailamt": "4.01",
+  54
               "customerloyamt": "4.01"
             }
           ]
@@ -2488,7 +2507,6 @@ Information about your purchases:
             }
           ],
           "items": [
-  54
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -2517,6 +2535,7 @@ Information about your purchases:
               "purchasedescription": "KRO HAND SOAP TWIN",
               "productupc": "00008000143",
               "retailamt": "3.99",
+  55
               "customerloyamt": "3.99"
             },
             {
@@ -2535,7 +2554,6 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  55
               "customerloyamt": "0.00"
             },
             {
@@ -2564,6 +2582,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "SIMPLE TRUTH WHOLE MILK 12CT",
+  56
               "productupc": "00002000055",
               "retailamt": "5.20",
               "customerloyamt": "4.16"
@@ -2582,7 +2601,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  56
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -2611,6 +2629,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  57
             {
               "purchasedescription": "KRO FRENCH FRY PT",
               "productupc": "00005000172",
@@ -2629,7 +2648,6 @@ Information about your purchases:
           "date": "07/08/2024 00:00:00",
           "time": "12:43:41",
           "division": "024",
-  57
           "store": "01102",
           "orderno": "24",
           "total_amount_prior_to_discounts": "19.68",
@@ -2658,6 +2676,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  58
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -2676,9 +2695,8 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  58
             {
-              "purchasedescription": "BATHROOM TISSUE LG",
+              "purchasedescription": "(BATHROOM TISSUE LG",
               "productupc": "00007000064",
               "retailamt": "16.56",
               "customerloyamt": "13.25"
@@ -2705,6 +2723,7 @@ Information about your purchases:
             }
           ],
           "items": [
+  59
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -2723,7 +2742,6 @@ Information about your purchases:
               "retailamt": "3.41",
               "customerloyamt": "3.41"
             },
-  59
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -2752,25 +2770,25 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-              "customerloyamt": "0.00"
-            },
-            {
-              "purchasedescription": "UNKNOWN",
-              "productupc": "00010000080000",
-              "retailamt": "0.00",
-              "customerloyamt": "0.00"
-            },
-            {
-              "purchasedescription": "UNKNOWN",
-              "productupc": "00010000080000",
-              "retailamt": "0.00",
-              "customerloyamt": "0.00"
-            },
-            {
-              "purchasedescription": "UNKNOWN",
-              "productupc": "00010000080000",
-              "retailamt": "0.00",
   60
+              "customerloyamt": "0.00"
+            },
+            {
+              "purchasedescription": "UNKNOWN",
+              "productupc": "00010000080000",
+              "retailamt": "0.00",
+              "customerloyamt": "0.00"
+            },
+            {
+              "purchasedescription": "UNKNOWN",
+              "productupc": "00010000080000",
+              "retailamt": "0.00",
+              "customerloyamt": "0.00"
+            },
+            {
+              "purchasedescription": "UNKNOWN",
+              "productupc": "00010000080000",
+              "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
             {
@@ -2799,6 +2817,7 @@ Information about your purchases:
               "tendertype": "DEBIT",
               "amount": "60.16"
             }
+  61
           ],
           "items": [
             {
@@ -2817,7 +2836,6 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  61
               "customerloyamt": "0.00"
             },
             {
@@ -2846,6 +2864,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "KRO ALUMINUM FOIL VALU",
+  62
               "productupc": "00007000176",
               "retailamt": "5.89",
               "customerloyamt": "5.89"
@@ -2864,7 +2883,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  62
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -2893,6 +2911,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  63
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -2911,7 +2930,6 @@ Information about your purchases:
               "retailamt": "3.38",
               "customerloyamt": "3.38"
             },
-  63
             {
               "purchasedescription": "KRO TORTILLA CHIP 5LB",
               "productupc": "00004000371",
@@ -2932,14 +2950,15 @@ Information about your purchases:
           "division": "701",
           "store": "00891",
           "orderno": "27",
-          "total_amount_prior_to_discounts": "31.67",
+          "total_amount_prior_to_discounts": "31.72",
           "tenders": [
             {
               "tendertype": "EBT",
-              "amount": "31.67"
+              "amount": "31.72"
             }
           ],
           "items": [
+  64
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -2958,7 +2977,6 @@ Information about your purchases:
               "retailamt": "6.95",
               "customerloyamt": "5.56"
             },
-  64
             {
               "purchasedescription": "SPONGE 12CT",
               "productupc": "00007000226",
@@ -2987,6 +3005,7 @@ Information about your purchases:
               "purchasedescription": "KRO COLA 6PK",
               "productupc": "00006000074",
               "retailamt": "6.90",
+  65
               "customerloyamt": "6.90"
             },
             {
@@ -2994,6 +3013,12 @@ Information about your purchases:
               "productupc": "00001000240",
               "retailamt": "1.04",
               "customerloyamt": "1.04"
+            },
+            {
+              "purchasedescription": "$0.05 CRV DEPOSIT",
+              "productupc": "",
+              "retailamt": "0.05",
+              "customerloyamt": "0.05"
             }
           ]
         },
@@ -3005,7 +3030,6 @@ Information about your purchases:
           "orderno": "28",
           "total_amount_prior_to_discounts": "24.65",
           "tenders": [
-  65
             {
               "tendertype": "GIFT CARD",
               "amount": "24.15"
@@ -3028,6 +3052,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  66
               "customerloyamt": "0.00"
             },
             {
@@ -3052,7 +3077,6 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  66
               "customerloyamt": "0.00"
             },
             {
@@ -3075,6 +3099,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "STRAWBERRY CLAM",
+  67
               "productupc": "00001000339",
               "retailamt": "2.89",
               "customerloyamt": "0.00"
@@ -3099,7 +3124,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  67
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -3122,6 +3146,7 @@ Information about your purchases:
           "date": "08/09/2024 00:00:00",
           "time": "19:29:29",
           "division": "024",
+  68
           "store": "00891",
           "orderno": "29",
           "total_amount_prior_to_discounts": "64.81",
@@ -3146,7 +3171,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "ORGANIC BABY CARROT 12CT",
-  68
               "productupc": "00001000154",
               "retailamt": "1.93",
               "customerloyamt": "1.35"
@@ -3169,6 +3193,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  69
             {
               "purchasedescription": "KRO HAND SOAP TWIN",
               "productupc": "00008000143",
@@ -3193,7 +3218,6 @@ Information about your purchases:
               "retailamt": "6.60",
               "customerloyamt": "6.60"
             },
-  69
             {
               "purchasedescription": "MARINARA SAUCE 8Z",
               "productupc": "00004000089",
@@ -3216,6 +3240,7 @@ Information about your purchases:
               "purchasedescription": "SIMPLE TRUTH WHITE RICE 5LB",
               "productupc": "00004000316",
               "retailamt": "5.37",
+  70
               "customerloyamt": "5.37"
             }
           ]
@@ -3240,7 +3265,6 @@ Information about your purchases:
               "retailamt": "3.95",
               "customerloyamt": "3.95"
             },
-  70
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -3263,6 +3287,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  71
               "customerloyamt": "0.00"
             },
             {
@@ -3287,7 +3312,6 @@ Information about your purchases:
               "purchasedescription": "BATHROOM TISSUE LG",
               "productupc": "00007000064",
               "retailamt": "16.50",
-  71
               "customerloyamt": "16.50"
             },
             {
@@ -3310,6 +3334,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  72
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -3334,7 +3359,6 @@ Information about your purchases:
               "tendertype": "EBT",
               "amount": "15.63"
             }
-  72
           ],
           "items": [
             {
@@ -3357,6 +3381,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  73
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -3381,12 +3406,11 @@ Information about your purchases:
           "division": "024",
           "store": "00891",
           "orderno": "32",
-  73
-          "total_amount_prior_to_discounts": "52.05",
+          "total_amount_prior_to_discounts": "52.10",
           "tenders": [
             {
               "tendertype": "EBT",
-              "amount": "52.05"
+              "amount": "52.10"
             }
           ],
           "items": [
@@ -3404,6 +3428,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "PRIVATE SELECTION DELI TURKEY 16Z",
+  74
               "productupc": "00003000289",
               "retailamt": "6.43",
               "customerloyamt": "6.43"
@@ -3428,7 +3453,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "KRO PEANUT BUTTER 48Z",
-  74
               "productupc": "00004000105",
               "retailamt": "2.45",
               "customerloyamt": "1.72"
@@ -3451,6 +3475,7 @@ Information about your purchases:
               "retailamt": "2.56",
               "customerloyamt": "1.41"
             },
+  75
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -3475,7 +3500,6 @@ Information about your purchases:
               "retailamt": "1.76",
               "customerloyamt": "1.76"
             },
-  75
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -3498,6 +3522,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  76
               "customerloyamt": "0.00"
             },
             {
@@ -3522,8 +3547,13 @@ Information about your purchases:
               "purchasedescription": "SIMPLE TRUTH ORG BLUEBERRY PINT LB",
               "productupc": "00001000387",
               "retailamt": "4.41",
-  76
               "customerloyamt": "4.41"
+            },
+            {
+              "purchasedescription": "$0.05 CRV DEPOSIT",
+              "productupc": "",
+              "retailamt": "0.05",
+              "customerloyamt": "0.05"
             }
           ]
         },
@@ -3539,6 +3569,7 @@ Information about your purchases:
               "tendertype": "EBT",
               "amount": "37.75"
             }
+  77
           ],
           "items": [
             {
@@ -3569,7 +3600,6 @@ Information about your purchases:
               "purchasedescription": "SIMPLE TRUTH ORG HASS AVOCADO LB",
               "productupc": "00001000057",
               "retailamt": "1.72",
-  77
               "customerloyamt": "1.20"
             },
             {
@@ -3586,6 +3616,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "KRO SHAMPOO EA",
+  78
               "productupc": "00008000040",
               "retailamt": "10.34",
               "customerloyamt": "10.34"
@@ -3616,7 +3647,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "ORGANIC BROCCOLI CROWN 2LB",
-  78
               "productupc": "00001000212",
               "retailamt": "6.06",
               "customerloyamt": "6.06"
@@ -3633,6 +3663,7 @@ Information about your purchases:
           "date": "09/11/2024 00:00:00",
           "time": "12:20:26",
           "division": "016",
+  79
           "store": "00891",
           "orderno": "34",
           "total_amount_prior_to_discounts": "31.31",
@@ -3663,7 +3694,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  79
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -3680,6 +3710,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  80
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -3710,7 +3741,6 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  80
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -3727,6 +3757,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  81
               "customerloyamt": "0.00"
             },
             {
@@ -3757,7 +3788,6 @@ Information about your purchases:
           "orderno": "35",
           "total_amount_prior_to_discounts": "24.43",
           "tenders": [
-  81
             {
               "tendertype": "EBT",
               "amount": "24.43"
@@ -3774,6 +3804,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  82
               "customerloyamt": "0.00"
             },
             {
@@ -3804,7 +3835,6 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  82
               "customerloyamt": "0.00"
             },
             {
@@ -3821,6 +3851,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "SIMPLE TRUTH SPAGHETTI 24Z",
+  83
               "productupc": "00004000048",
               "retailamt": "2.10",
               "customerloyamt": "1.16"
@@ -3851,7 +3882,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  83
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -3868,6 +3898,7 @@ Information about your purchases:
           "tenders": [
             {
               "tendertype": "CREDIT",
+  84
               "amount": "20.77"
             }
           ],
@@ -3898,7 +3929,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  84
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -3915,6 +3945,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  85
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -3945,7 +3976,6 @@ Information about your purchases:
               "retailamt": "-4.74",
               "customerloyamt": "-4.74"
             }
-  85
           ]
         },
         {
@@ -3962,6 +3992,7 @@ Information about your purchases:
             }
           ],
           "items": [
+  86
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -3992,7 +4023,6 @@ Information about your purchases:
               "retailamt": "3.83",
               "customerloyamt": "3.06"
             },
-  86
             {
               "purchasedescription": "ORGANIC BABY SPINACH PKG",
               "productupc": "00001000184",
@@ -4009,6 +4039,7 @@ Information about your purchases:
           "orderno": "38",
           "total_amount_prior_to_discounts": "38.99",
           "tenders": [
+  87
             {
               "tendertype": "CREDIT",
               "amount": "38.99"
@@ -4039,7 +4070,6 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  87
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -4056,6 +4086,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  88
               "customerloyamt": "0.00"
             },
             {
@@ -4086,7 +4117,6 @@ Information about your purchases:
               "purchasedescription": "BATHROOM TISSUE LG",
               "productupc": "00007000064",
               "retailamt": "15.44",
-  88
               "customerloyamt": "15.44"
             },
             {
@@ -4103,6 +4133,7 @@ Information about your purchases:
           "division": "701",
           "store": "01102",
           "orderno": "39",
+  89
           "total_amount_prior_to_discounts": "46.51",
           "tenders": [
             {
@@ -4133,7 +4164,6 @@ Information about your purchases:
               "purchasedescription": "SIMPLE TRUTH ORG LEMON 6CT",
               "productupc": "00001000494",
               "retailamt": "1.48",
-  89
               "customerloyamt": "1.48"
             },
             {
@@ -4150,6 +4180,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  90
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -4180,7 +4211,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  90
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -4197,6 +4227,7 @@ Information about your purchases:
           "tenders": [
             {
               "tendertype": "DEBIT",
+  91
               "amount": "40.14"
             }
           ],
@@ -4227,7 +4258,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "WHITE RICE 12CT",
-  91
               "productupc": "00004000330",
               "retailamt": "7.46",
               "customerloyamt": "5.97"
@@ -4244,6 +4274,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  92
             {
               "purchasedescription": "RUSSET POTATO 3LB",
               "productupc": "00001000268",
@@ -4274,7 +4305,6 @@ Information about your purchases:
               "retailamt": "5.07",
               "customerloyamt": "5.07"
             },
-  92
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -4291,6 +4321,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  93
               "customerloyamt": "0.00"
             },
             {
@@ -4321,7 +4352,6 @@ Information about your purchases:
             }
           ],
           "items": [
-  93
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -4338,6 +4368,7 @@ Information about your purchases:
               "purchasedescription": "PRIVATE SELECTION DELI TURKEY 16Z",
               "productupc": "00003000289",
               "retailamt": "7.06",
+  94
               "customerloyamt": "6.35"
             },
             {
@@ -4368,7 +4399,6 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  94
               "customerloyamt": "0.00"
             },
             {
@@ -4385,6 +4415,7 @@ Information about your purchases:
             }
           ]
         },
+  95
         {
           "date": "10/18/2024 00:00:00",
           "time": "08:59:40",
@@ -4415,7 +4446,6 @@ Information about your purchases:
               "purchasedescription": "KRO STRING CHEESE HGAL",
               "productupc": "00002000305",
               "retailamt": "3.58",
-  95
               "customerloyamt": "3.58"
             },
             {
@@ -4432,6 +4462,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  96
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -4462,7 +4493,6 @@ Information about your purchases:
               "purchasedescription": "PAPER TOWEL SM",
               "productupc": "00007000030",
               "retailamt": "11.64",
-  96
               "customerloyamt": "11.64"
             },
             {
@@ -4479,6 +4509,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  97
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -4509,7 +4540,6 @@ Information about your purchases:
               "tendertype": "CASH",
               "amount": "79.69"
             }
-  97
           ],
           "items": [
             {
@@ -4526,6 +4556,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "PRIVATE SELECTION PORK CHOP 8Z",
+  98
               "productupc": "00003000089",
               "retailamt": "5.20",
               "customerloyamt": "5.20"
@@ -4556,7 +4587,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  98
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -4573,6 +4603,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  99
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -4603,7 +4634,6 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  99
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -4620,6 +4650,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  100
               "customerloyamt": "0.00"
             }
           ]
@@ -4650,7 +4681,6 @@ Information about your purchases:
               "retailamt": "15.33",
               "customerloyamt": "15.33"
             },
-  100
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -4667,6 +4697,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  101
               "customerloyamt": "0.00"
             },
             {
@@ -4697,7 +4728,6 @@ Information about your purchases:
               "purchasedescription": "SIMPLE TRUTH BUTTER 48Z",
               "productupc": "00002000182",
               "retailamt": "5.66",
-  101
               "customerloyamt": "5.66"
             },
             {
@@ -4714,6 +4744,7 @@ Information about your purchases:
           "division": "016",
           "store": "00891",
           "orderno": "46",
+  102
           "total_amount_prior_to_discounts": "78.97",
           "tenders": [
             {
@@ -4744,7 +4775,6 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  102
               "customerloyamt": "0.00"
             },
             {
@@ -4761,6 +4791,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  103
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -4791,7 +4822,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "KRO GROUND COFFEE 6CT",
-  103
               "productupc": "00004000175",
               "retailamt": "8.74",
               "customerloyamt": "8.74"
@@ -4808,6 +4838,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  104
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -4838,7 +4869,6 @@ Information about your purchases:
           "date": "11/16/2024 00:00:00",
           "time": "08:05:02",
           "division": "024",
-  104
           "store": "00891",
           "orderno": "47",
           "total_amount_prior_to_discounts": "37.74",
@@ -4855,6 +4885,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  105
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -4885,7 +4916,6 @@ Information about your purchases:
               "retailamt": "2.22",
               "customerloyamt": "2.22"
             },
-  105
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -4902,6 +4932,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  106
               "customerloyamt": "0.00"
             },
             {
@@ -4932,7 +4963,6 @@ Information about your purchases:
           "orderno": "48",
           "total_amount_prior_to_discounts": "23.14",
           "tenders": [
-  106
             {
               "tendertype": "CASH",
               "amount": "23.14"
@@ -4949,6 +4979,7 @@ Information about your purchases:
               "purchasedescription": "SIMPLE TRUTH ORG ROMA TOMATO 6CT",
               "productupc": "00001000098",
               "retailamt": "3.35",
+  107
               "customerloyamt": "1.84"
             },
             {
@@ -4979,7 +5010,6 @@ Information about your purchases:
               "purchasedescription": "MAPLE SYRUP 48Z",
               "productupc": "00004000490",
               "retailamt": "12.78",
-  107
               "customerloyamt": "12.78"
             },
             {
@@ -4996,6 +5026,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  108
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -5026,7 +5057,6 @@ Information about your purchases:
               "tendertype": "CREDIT",
               "amount": "6.03"
             }
-  108
           ],
           "items": [
             {
@@ -5043,6 +5073,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "ROMA TOMATO 3LB",
+  109
               "productupc": "00001000070",
               "retailamt": "1.45",
               "customerloyamt": "0.80"
@@ -5073,7 +5104,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  109
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -5090,6 +5120,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  110
             {
               "purchasedescription": "KRO SHRED CHEDDAR HGAL",
               "productupc": "00002000107",
@@ -5120,7 +5151,6 @@ Information about your purchases:
               "retailamt": "-7.34",
               "customerloyamt": "-7.34"
             },
-  110
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -5137,6 +5167,7 @@ Information about your purchases:
           "orderno": "50",
           "total_amount_prior_to_discounts": "44.85",
           "tenders": [
+  111
             {
               "tendertype": "EBT",
               "amount": "44.26"
@@ -5167,7 +5198,6 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  111
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -5184,6 +5214,7 @@ Information about your purchases:
               "purchasedescription": "SIMPLE TRUTH HONEY NUT CEREAL 12CT",
               "productupc": "00004000154",
               "retailamt": "6.53",
+  112
               "customerloyamt": "4.57"
             },
             {
@@ -5214,7 +5245,6 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  112
               "customerloyamt": "0.00"
             },
             {
@@ -5231,6 +5261,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  113
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -5261,7 +5292,6 @@ Information about your purchases:
           "division": "024",
           "store": "00891",
           "orderno": "51",
-  113
           "total_amount_prior_to_discounts": "83.45",
           "tenders": [
             {
@@ -5278,6 +5308,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "KRO SIRLOIN STEAK FMLY",
+  114
               "productupc": "00003000174",
               "retailamt": "12.77",
               "customerloyamt": "7.02"
@@ -5308,7 +5339,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  114
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -5325,6 +5355,7 @@ Information about your purchases:
               "retailamt": "8.51",
               "customerloyamt": "8.51"
             },
+  115
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -5355,7 +5386,6 @@ Information about your purchases:
               "retailamt": "4.50",
               "customerloyamt": "4.50"
             },
-  115
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -5372,6 +5402,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  116
               "customerloyamt": "0.00"
             },
             {
@@ -5402,7 +5433,6 @@ Information about your purchases:
               "purchasedescription": "SIMPLE TRUTH BUTTER 48Z",
               "productupc": "00002000182",
               "retailamt": "5.45",
-  116
               "customerloyamt": "5.45"
             },
             {
@@ -5419,11 +5449,12 @@ Information about your purchases:
           "division": "701",
           "store": "00318",
           "orderno": "52",
-          "total_amount_prior_to_discounts": "20.51",
+  117
+          "total_amount_prior_to_discounts": "20.56",
           "tenders": [
             {
               "tendertype": "DEBIT",
-              "amount": "20.51"
+              "amount": "20.56"
             }
           ],
           "items": [
@@ -5449,7 +5480,6 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  117
               "customerloyamt": "0.00"
             },
             {
@@ -5466,6 +5496,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "SIMPLE TRUTH STRING CHEESE 8Z",
+  118
               "productupc": "00002000309",
               "retailamt": "3.58",
               "customerloyamt": "3.22"
@@ -5496,7 +5527,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  118
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -5513,6 +5543,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  119
             {
               "purchasedescription": "BANANAS LB",
               "productupc": "00001000002",
@@ -5536,6 +5567,12 @@ Information about your purchases:
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
+            },
+            {
+              "purchasedescription": "$0.05 CRV DEPOSIT",
+              "productupc": "",
+              "retailamt": "0.05",
+              "customerloyamt": "0.05"
             }
           ]
         },
@@ -5543,7 +5580,6 @@ Information about your purchases:
           "date": "12/11/2024 00:00:00",
           "time": "15:57:38",
           "division": "016",
-  119
           "store": "00318",
           "orderno": "53",
           "total_amount_prior_to_discounts": "37.88",
@@ -5554,6 +5590,7 @@ Information about your purchases:
             }
           ],
           "items": [
+  120
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -5590,7 +5627,6 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  120
             {
               "purchasedescription": "PRIVATE SELECTION CHICKEN NUGGET PT",
               "productupc": "00005000117",
@@ -5601,6 +5637,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  121
               "customerloyamt": "0.00"
             },
             {
@@ -5637,7 +5674,6 @@ Information about your purchases:
               "purchasedescription": "PRIVATE SELECTION PEPPERONI PIZZA PT",
               "productupc": "00005000018",
               "retailamt": "7.33",
-  121
               "customerloyamt": "5.86"
             },
             {
@@ -5648,6 +5684,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  122
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -5684,7 +5721,6 @@ Information about your purchases:
               "purchasedescription": "HERITAGE FARM PORK CHOP PKG",
               "productupc": "00003000085",
               "retailamt": "6.98",
-  122
               "customerloyamt": "6.98"
             },
             {
@@ -5695,6 +5731,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  123
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -5731,7 +5768,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  123
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -5742,6 +5778,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  124
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -5778,7 +5815,6 @@ Information about your purchases:
           "tenders": [
             {
               "tendertype": "CASH",
-  124
               "amount": "12.04"
             }
           ],
@@ -5789,6 +5825,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  125
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -5825,7 +5862,6 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  125
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -5836,6 +5872,7 @@ Information about your purchases:
               "purchasedescription": "SIMPLE TRUTH GROUND COFFEE 48Z",
               "productupc": "00004000182",
               "retailamt": "7.58",
+  126
               "customerloyamt": "7.58"
             },
             {
@@ -5872,7 +5909,6 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  126
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -5883,6 +5919,7 @@ Information about your purchases:
               "purchasedescription": "SIMPLE TRUTH CANNED TOMATO 8Z",
               "productupc": "00004000243",
               "retailamt": "1.15",
+  127
               "customerloyamt": "1.15"
             },
             {
@@ -5919,7 +5956,6 @@ Information about your purchases:
               "purchasedescription": "PRIVATE SELECTION SIRLOIN STEAK 16Z",
               "productupc": "00003000190",
               "retailamt": "12.44",
-  127
               "customerloyamt": "12.44"
             },
             {
@@ -5930,6 +5966,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "HERITAGE FARM SALMON FILLET VALU",
+  128
               "productupc": "00003000120",
               "retailamt": "29.43",
               "customerloyamt": "29.43"
@@ -5966,7 +6003,6 @@ Information about your purchases:
               "purchasedescription": "SHAMPOO TWIN",
               "productupc": "00008000066",
               "retailamt": "9.84",
-  128
               "customerloyamt": "7.87"
             },
             {
@@ -5977,6 +6013,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "SIMPLE TRUTH ORG LEMON 6CT",
+  129
               "productupc": "00001000494",
               "retailamt": "2.88",
               "customerloyamt": "2.88"
@@ -6013,7 +6050,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  129
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -6024,6 +6060,7 @@ Information about your purchases:
               "retailamt": "18.40",
               "customerloyamt": "16.56"
             },
+  130
             {
               "purchasedescription": "ORANGE JUICE 8PK",
               "productupc": "00006000031",
@@ -6060,7 +6097,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  130
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -6071,6 +6107,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  131
             {
               "purchasedescription": "HONEY 48Z",
               "productupc": "00004000457",
@@ -6107,7 +6144,6 @@ Information about your purchases:
               "retailamt": "4.00",
               "customerloyamt": "4.00"
             },
-  131
             {
               "purchasedescription": "HOME SENSE SPONGE VALU",
               "productupc": "00007000220",
@@ -6118,6 +6154,7 @@ Information about your purchases:
               "purchasedescription": "SIMPLE TRUTH WHOLE MILK 12CT",
               "productupc": "00002000055",
               "retailamt": "5.75",
+  132
               "customerloyamt": "5.17"
             },
             {
@@ -6154,7 +6191,6 @@ Information about your purchases:
               "purchasedescription": "HERITAGE FARM CHICKEN BREAST FMLY",
               "productupc": "00003000020",
               "retailamt": "10.83",
-  132
               "customerloyamt": "10.83"
             },
             {
@@ -6165,6 +6201,7 @@ Information about your purchases:
             }
           ]
         },
+  133
         {
           "date": "01/14/2025 00:00:00",
           "time": "09:50:58",
@@ -6201,7 +6238,6 @@ Information about your purchases:
               "purchasedescription": "PRIVATE SELECTION PEPPERONI PIZZA PT",
               "productupc": "00005000018",
               "retailamt": "7.27",
-  133
               "customerloyamt": "7.27"
             },
             {
@@ -6212,6 +6248,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "MAPLE SYRUP 8Z",
+  134
               "productupc": "00004000485",
               "retailamt": "6.30",
               "customerloyamt": "6.30"
@@ -6248,7 +6285,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "PRIVATE SELECTION CHICKEN NUGGET 16Z",
-  134
               "productupc": "00005000113",
               "retailamt": "6.63",
               "customerloyamt": "6.63"
@@ -6259,6 +6295,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  135
             {
               "purchasedescription": "PRIVATE SELECTION FRENCH FRY 12CT",
               "productupc": "00005000187",
@@ -6295,7 +6332,6 @@ Information about your purchases:
           "date": "01/16/2025 00:00:00",
           "time": "14:09:39",
           "division": "024",
-  135
           "store": "00891",
           "orderno": "60",
           "total_amount_prior_to_discounts": "27.61",
@@ -6306,6 +6342,7 @@ Information about your purchases:
             }
           ],
           "items": [
+  136
             {
               "purchasedescription": "SIMPLE TRUTH STRING CHEESE 8Z",
               "productupc": "00002000309",
@@ -6342,7 +6379,6 @@ Information about your purchases:
               "retailamt": "3.93",
               "customerloyamt": "3.93"
             },
-  136
             {
               "purchasedescription": "SIMPLE TRUTH ORG LEMON 6CT",
               "productupc": "00001000494",
@@ -6353,6 +6389,7 @@ Information about your purchases:
               "purchasedescription": "KRO GROUND COFFEE 6CT",
               "productupc": "00004000175",
               "retailamt": "9.05",
+  137
               "customerloyamt": "9.05"
             },
             {
@@ -6389,7 +6426,6 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  137
               "customerloyamt": "0.00"
             },
             {
@@ -6400,6 +6436,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "HOME SENSE SPONGE SM",
+  138
               "productupc": "00007000217",
               "retailamt": "4.36",
               "customerloyamt": "4.36"
@@ -6436,7 +6473,6 @@ Information about your purchases:
               "purchasedescription": "SIMPLE TRUTH ORANGE JUICE 2L",
               "productupc": "00006000016",
               "retailamt": "4.15",
-  138
               "customerloyamt": "4.15"
             },
             {
@@ -6447,6 +6483,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "PRIVATE SELECTION DELI TURKEY 16Z",
+  139
               "productupc": "00003000289",
               "retailamt": "7.19",
               "customerloyamt": "7.19"
@@ -6483,7 +6520,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  139
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -6494,6 +6530,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  140
             {
               "purchasedescription": "KRO GROUND COFFEE 24Z",
               "productupc": "00004000169",
@@ -6530,7 +6567,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  140
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -6541,43 +6577,43 @@ Information about your purchases:
               "retailamt": "6.72",
               "customerloyamt": "6.72"
             },
-            {
-              "purchasedescription": "UNKNOWN",
-              "productupc": "00010000080000",
-              "retailamt": "0.00",
-              "customerloyamt": "0.00"
-            },
-            {
-              "purchasedescription": "UNKNOWN",
-              "productupc": "00010000080000",
-              "retailamt": "0.00",
-              "customerloyamt": "0.00"
-            },
-            {
-              "purchasedescription": "UNKNOWN",
-              "productupc": "00010000080000",
-              "retailamt": "0.00",
-              "customerloyamt": "0.00"
-            },
-            {
-              "purchasedescription": "UNKNOWN",
-              "productupc": "00010000080000",
-              "retailamt": "0.00",
-              "customerloyamt": "0.00"
-            },
-            {
-              "purchasedescription": "UNKNOWN",
-              "productupc": "00010000080000",
-              "retailamt": "0.00",
-              "customerloyamt": "0.00"
-            },
-            {
-              "purchasedescription": "UNKNOWN",
-              "productupc": "00010000080000",
-              "retailamt": "0.00",
-              "customerloyamt": "0.00"
-            },
   141
+            {
+              "purchasedescription": "UNKNOWN",
+              "productupc": "00010000080000",
+              "retailamt": "0.00",
+              "customerloyamt": "0.00"
+            },
+            {
+              "purchasedescription": "UNKNOWN",
+              "productupc": "00010000080000",
+              "retailamt": "0.00",
+              "customerloyamt": "0.00"
+            },
+            {
+              "purchasedescription": "UNKNOWN",
+              "productupc": "00010000080000",
+              "retailamt": "0.00",
+              "customerloyamt": "0.00"
+            },
+            {
+              "purchasedescription": "UNKNOWN",
+              "productupc": "00010000080000",
+              "retailamt": "0.00",
+              "customerloyamt": "0.00"
+            },
+            {
+              "purchasedescription": "UNKNOWN",
+              "productupc": "00010000080000",
+              "retailamt": "0.00",
+              "customerloyamt": "0.00"
+            },
+            {
+              "purchasedescription": "UNKNOWN",
+              "productupc": "00010000080000",
+              "retailamt": "0.00",
+              "customerloyamt": "0.00"
+            },
             {
               "purchasedescription": "VANILLA ICE CREAM 24Z",
               "productupc": "00005000059",
@@ -6588,6 +6624,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  142
               "customerloyamt": "0.00"
             },
             {
@@ -6624,7 +6661,6 @@ Information about your purchases:
               "purchasedescription": "BATHROOM TISSUE LG",
               "productupc": "00007000064",
               "retailamt": "12.32",
-  142
               "customerloyamt": "8.62"
             },
             {
@@ -6635,6 +6671,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  143
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -6671,7 +6708,6 @@ Information about your purchases:
               "tendertype": "CREDIT",
               "amount": "44.62"
             }
-  143
           ],
           "items": [
             {
@@ -6682,6 +6718,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  144
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -6718,7 +6755,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "PEPPERONI PIZZA BOX",
-  144
               "productupc": "00005000031",
               "retailamt": "10.38",
               "customerloyamt": "10.38"
@@ -6729,6 +6765,7 @@ Information about your purchases:
               "retailamt": "0.38",
               "customerloyamt": "0.34"
             },
+  145
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -6765,7 +6802,6 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  145
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -6776,6 +6812,7 @@ Information about your purchases:
               "purchasedescription": "CAT LITTER 5Z",
               "productupc": "00009000062",
               "retailamt": "16.54",
+  146
               "customerloyamt": "16.54"
             }
           ]
@@ -6812,7 +6849,6 @@ Information about your purchases:
               "retailamt": "6.88",
               "customerloyamt": "6.88"
             },
-  146
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -6823,6 +6859,7 @@ Information about your purchases:
               "purchasedescription": "PRIVATE SELECTION GROUND TURKEY 3LB",
               "productupc": "00003000259",
               "retailamt": "7.33",
+  147
               "customerloyamt": "4.03"
             },
             {
@@ -6859,7 +6896,6 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  147
               "customerloyamt": "0.00"
             },
             {
@@ -6870,6 +6906,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "PRIVATE SELECTION SOUR CREAM 12Z",
+  148
               "productupc": "00002000222",
               "retailamt": "2.37",
               "customerloyamt": "2.37"
@@ -6906,7 +6943,6 @@ Information about your purchases:
               "tendertype": "DEBIT",
               "amount": "70.54"
             }
-  148
           ],
           "items": [
             {
@@ -6917,6 +6953,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  149
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -6953,7 +6990,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "PRIVATE SELECTION BACON PKG",
-  149
               "productupc": "00003000162",
               "retailamt": "10.12",
               "customerloyamt": "0.00"
@@ -6964,6 +7000,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  150
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -7000,7 +7037,6 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  150
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -7011,6 +7047,7 @@ Information about your purchases:
               "purchasedescription": "PRIVATE SELECTION CHICKEN NUGGET PT",
               "productupc": "00005000117",
               "retailamt": "8.45",
+  151
               "customerloyamt": "6.76"
             },
             {
@@ -7047,7 +7084,6 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  151
             {
               "purchasedescription": "KRO HAND SOAP TWIN",
               "productupc": "00008000143",
@@ -7058,6 +7094,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  152
               "customerloyamt": "0.00"
             },
             {
@@ -7094,7 +7131,6 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  152
               "customerloyamt": "0.00"
             },
             {
@@ -7105,6 +7141,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  153
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -7141,7 +7178,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "KRO GROUND BEEF 80/20 16Z",
-  153
               "productupc": "00003000036",
               "retailamt": "7.22",
               "customerloyamt": "7.22"
@@ -7152,6 +7188,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  154
             {
               "purchasedescription": "BANANAS EA",
               "productupc": "00001000001",
@@ -7188,7 +7225,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "HERITAGE FARM DELI TURKEY LB",
-  154
               "productupc": "00003000279",
               "retailamt": "6.33",
               "customerloyamt": "6.33"
@@ -7199,6 +7235,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  155
             {
               "purchasedescription": "SIMPLE TRUTH ORG LEMON 6CT",
               "productupc": "00001000494",
@@ -7235,7 +7272,6 @@ Information about your purchases:
               "retailamt": "2.67",
               "customerloyamt": "2.67"
             },
-  155
             {
               "purchasedescription": "SIMPLE TRUTH ORG GALA APPLE 3LB",
               "productupc": "00001000125",
@@ -7246,6 +7282,7 @@ Information about your purchases:
               "purchasedescription": "HONEY 48Z",
               "productupc": "00004000457",
               "retailamt": "7.60",
+  156
               "customerloyamt": "5.32"
             },
             {
@@ -7282,7 +7319,6 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  156
             {
               "purchasedescription": "KRO HAND SOAP TWIN",
               "productupc": "00008000143",
@@ -7293,6 +7329,7 @@ Information about your purchases:
               "purchasedescription": "ORGANIC RUSSET POTATO BAG",
               "productupc": "00001000281",
               "retailamt": "5.76",
+  157
               "customerloyamt": "5.76"
             },
             {
@@ -7329,7 +7366,6 @@ Information about your purchases:
               "purchasedescription": "PRIVATE SELECTION 2% MILK 32Z",
               "productupc": "00002000027",
               "retailamt": "4.42",
-  157
               "customerloyamt": "4.42"
             },
             {
@@ -7340,6 +7376,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "HOME SENSE LAUNDRY DETERGENT 8CT",
+  158
               "productupc": "00007000082",
               "retailamt": "12.33",
               "customerloyamt": "11.10"
@@ -7376,7 +7413,6 @@ Information about your purchases:
               "tendertype": "CREDIT",
               "amount": "45.55"
             }
-  158
           ],
           "items": [
             {
@@ -7387,6 +7423,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  159
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -7423,7 +7460,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  159
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -7434,6 +7470,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  160
             {
               "purchasedescription": "KRO GROUND BEEF 80/20 FMLY",
               "productupc": "00003000042",
@@ -7470,7 +7507,6 @@ Information about your purchases:
               "retailamt": "7.25",
               "customerloyamt": "7.25"
             },
-  160
             {
               "purchasedescription": "SIMPLE TRUTH BUTTER 48Z",
               "productupc": "00002000182",
@@ -7481,6 +7517,7 @@ Information about your purchases:
               "purchasedescription": "SIMPLE TRUTH ORG BABY CARROT 12CT",
               "productupc": "00001000165",
               "retailamt": "2.74",
+  161
               "customerloyamt": "2.74"
             },
             {
@@ -7517,7 +7554,6 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  161
             {
               "purchasedescription": "RED ONION CLAM",
               "productupc": "00001000240",
@@ -7528,6 +7564,7 @@ Information about your purchases:
               "purchasedescription": "PRIVATE SELECTION CHICKEN BREAST FMLY",
               "productupc": "00003000031",
               "retailamt": "13.29",
+  162
               "customerloyamt": "10.63"
             },
             {
@@ -7564,7 +7601,6 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  162
               "customerloyamt": "0.00"
             },
             {
@@ -7575,6 +7611,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  163
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -7611,7 +7648,6 @@ Information about your purchases:
             }
           ]
         },
-  163
         {
           "date": "03/12/2025 00:00:00",
           "time": "09:59:44",
@@ -7622,6 +7658,7 @@ Information about your purchases:
           "tenders": [
             {
               "tendertype": "CREDIT",
+  164
               "amount": "94.00"
             }
           ],
@@ -7633,7 +7670,7 @@ Information about your purchases:
               "customerloyamt": "0.00"
             },
             {
-              "purchasedescription": "WHITE RICE 12CT",
+              "purchasedescription": "(WHITE RICE 12CT",
               "productupc": "00004000330",
               "retailamt": "7.98",
               "customerloyamt": "7.98"
@@ -7658,7 +7695,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "PRIVATE SELECTION CHICKEN BREAST EA",
-  164
               "productupc": "00003000033",
               "retailamt": "35.97",
               "customerloyamt": "35.97"
@@ -7669,6 +7705,7 @@ Information about your purchases:
               "retailamt": "10.12",
               "customerloyamt": "10.12"
             },
+  165
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -7705,7 +7742,6 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  165
             {
               "purchasedescription": "WET CAT FOOD 10LB",
               "productupc": "00009000123",
@@ -7716,6 +7752,7 @@ Information about your purchases:
               "purchasedescription": "PEPPERONI PIZZA BOX",
               "productupc": "00005000031",
               "retailamt": "9.65",
+  166
               "customerloyamt": "9.65"
             },
             {
@@ -7752,7 +7789,6 @@ Information about your purchases:
         },
         {
           "date": "03/16/2025 00:00:00",
-  166
           "time": "07:40:19",
           "division": "016",
           "store": "00427",
@@ -7763,6 +7799,7 @@ Information about your purchases:
               "tendertype": "CASH",
               "amount": "34.58"
             }
+  167
           ],
           "items": [
             {
@@ -7799,7 +7836,6 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  167
               "customerloyamt": "0.00"
             },
             {
@@ -7810,6 +7846,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  168
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -7846,7 +7883,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  168
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -7857,6 +7893,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  169
             {
               "purchasedescription": "PRIVATE SELECTION DELI TURKEY 16Z",
               "productupc": "00003000289",
@@ -7893,7 +7930,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "KRO WHOLE MILK 48Z",
-  169
               "productupc": "00002000039",
               "retailamt": "3.85",
               "customerloyamt": "2.12"
@@ -7904,6 +7940,7 @@ Information about your purchases:
               "retailamt": "6.09",
               "customerloyamt": "4.26"
             },
+  170
             {
               "purchasedescription": "HONEY NUT CEREAL 12Z",
               "productupc": "00004000156",
@@ -7940,7 +7977,6 @@ Information about your purchases:
               "retailamt": "5.13",
               "customerloyamt": "5.13"
             },
-  170
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -7951,6 +7987,7 @@ Information about your purchases:
               "purchasedescription": "ORGANIC BLUEBERRY PINT BAG",
               "productupc": "00001000380",
               "retailamt": "5.28",
+  171
               "customerloyamt": "5.28"
             },
             {
@@ -7987,7 +8024,6 @@ Information about your purchases:
             }
           ],
           "items": [
-  171
             {
               "purchasedescription": "SIMPLE TRUTH HONEY NUT CEREAL 24Z",
               "productupc": "00004000147",
@@ -7998,6 +8034,7 @@ Information about your purchases:
               "purchasedescription": "SIMPLE TRUTH 2% MILK 8Z",
               "productupc": "00002000012",
               "retailamt": "4.52",
+  172
               "customerloyamt": "4.52"
             },
             {
@@ -8034,7 +8071,6 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  172
               "customerloyamt": "0.00"
             },
             {
@@ -8045,6 +8081,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  173
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -8081,7 +8118,6 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  173
               "customerloyamt": "0.00"
             },
             {
@@ -8092,6 +8128,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  174
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -8128,7 +8165,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  174
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -8139,6 +8175,7 @@ Information about your purchases:
           "date": "04/03/2025 00:00:00",
           "time": "19:52:09",
           "division": "016",
+  175
           "store": "00318",
           "orderno": "76",
           "total_amount_prior_to_discounts": "49.24",
@@ -8175,7 +8212,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  175
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -8186,6 +8222,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  176
             {
               "purchasedescription": "PRIVATE SELECTION DELI TURKEY 16Z",
               "productupc": "00003000289",
@@ -8222,7 +8259,6 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  176
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -8233,6 +8269,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  177
               "customerloyamt": "0.00"
             },
             {
@@ -8269,7 +8306,6 @@ Information about your purchases:
         },
         {
           "date": "04/09/2025 00:00:00",
-  177
           "time": "19:37:47",
           "division": "701",
           "store": "00318",
@@ -8280,6 +8316,7 @@ Information about your purchases:
               "tendertype": "CREDIT",
               "amount": "64.14"
             }
+  178
           ],
           "items": [
             {
@@ -8316,7 +8353,6 @@ Information about your purchases:
               "purchasedescription": "BANANAS EA",
               "productupc": "00001000001",
               "retailamt": "0.49",
-  178
               "customerloyamt": "0.49"
             },
             {
@@ -8327,6 +8363,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "SPORTS DRINK 1L",
+  179
               "productupc": "00006000158",
               "retailamt": "7.14",
               "customerloyamt": "3.93"
@@ -8363,7 +8400,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "SHAMPOO 6Z",
-  179
               "productupc": "00008000057",
               "retailamt": "7.09",
               "customerloyamt": "7.09"
@@ -8374,6 +8410,7 @@ Information about your purchases:
               "retailamt": "6.77",
               "customerloyamt": "6.09"
             },
+  180
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -8410,7 +8447,6 @@ Information about your purchases:
           "tenders": [
             {
               "tendertype": "CREDIT",
-  180
               "amount": "21.85"
             }
           ],
@@ -8421,6 +8457,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  181
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -8457,7 +8494,6 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  181
             {
               "purchasedescription": "SIMPLE TRUTH BLACK BEANS 12CT",
               "productupc": "00004000286",
@@ -8468,6 +8504,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  182
               "customerloyamt": "0.00"
             },
             {
@@ -8504,7 +8541,6 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  182
               "customerloyamt": "0.00"
             },
             {
@@ -8515,6 +8551,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  183
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -8551,7 +8588,6 @@ Information about your purchases:
               "purchasedescription": "KRO GROUND COFFEE 12Z",
               "productupc": "00004000167",
               "retailamt": "5.77",
-  183
               "customerloyamt": "5.19"
             },
             {
@@ -8562,6 +8598,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "SIMPLE TRUTH SALSA 2LB",
+  184
               "productupc": "00004000414",
               "retailamt": "3.93",
               "customerloyamt": "3.14"
@@ -8598,7 +8635,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "KRO GREEK YOGURT 8Z",
-  184
               "productupc": "00002000133",
               "retailamt": "3.48",
               "customerloyamt": "3.48"
@@ -8609,6 +8645,7 @@ Information about your purchases:
           "date": "04/26/2025 00:00:00",
           "time": "15:38:39",
           "division": "024",
+  185
           "store": "00318",
           "orderno": "80",
           "total_amount_prior_to_discounts": "49.51",
@@ -8645,7 +8682,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  185
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -8656,6 +8692,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  186
             {
               "purchasedescription": "KRO GREEK YOGURT QT",
               "productupc": "00002000139",
@@ -8692,7 +8729,6 @@ Information about your purchases:
               "retailamt": "2.41",
               "customerloyamt": "2.41"
             },
-  186
             {
               "purchasedescription": "HERITAGE FARM SALMON FILLET FMLY",
               "productupc": "00003000119",
@@ -8703,6 +8739,7 @@ Information about your purchases:
               "purchasedescription": "SIMPLE TRUTH WHOLE WHEAT BREAD 8Z",
               "productupc": "00004000012",
               "retailamt": "1.74",
+  187
               "customerloyamt": "1.74"
             },
             {
@@ -8739,7 +8776,6 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  187
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -8750,6 +8786,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  188
               "customerloyamt": "0.00"
             },
             {
@@ -8786,7 +8823,6 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  188
               "customerloyamt": "0.00"
             },
             {
@@ -8797,6 +8833,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  189
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -8833,7 +8870,6 @@ Information about your purchases:
               "purchasedescription": "KRO PAPER TOWEL 2CT",
               "productupc": "00007000002",
               "retailamt": "6.11",
-  189
               "customerloyamt": "4.28"
             },
             {
@@ -8844,6 +8880,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "SIMPLE TRUTH TOOTHPASTE 16Z",
+  190
               "productupc": "00008000016",
               "retailamt": "4.47",
               "customerloyamt": "4.47"
@@ -8880,7 +8917,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  190
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -8891,6 +8927,7 @@ Information about your purchases:
               "retailamt": "17.69",
               "customerloyamt": "17.69"
             },
+  191
             {
               "purchasedescription": "SIMPLE TRUTH BLACK BEANS 24Z",
               "productupc": "00004000279",
@@ -8927,7 +8964,6 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  191
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -8938,6 +8974,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  192
               "customerloyamt": "0.00"
             }
           ]
@@ -8974,7 +9011,6 @@ Information about your purchases:
               "retailamt": "7.04",
               "customerloyamt": "6.34"
             },
-  192
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -8985,6 +9021,7 @@ Information about your purchases:
               "purchasedescription": "HOME SENSE SPONGE XL",
               "productupc": "00007000219",
               "retailamt": "5.27",
+  193
               "customerloyamt": "4.74"
             },
             {
@@ -9021,7 +9058,6 @@ Information about your purchases:
               "purchasedescription": "LEMON CLAM",
               "productupc": "00001000471",
               "retailamt": "0.87",
-  193
               "customerloyamt": "0.78"
             },
             {
@@ -9032,6 +9068,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  194
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -9068,7 +9105,6 @@ Information about your purchases:
               "purchasedescription": "HERITAGE FARM GROUND TURKEY 16Z",
               "productupc": "00003000245",
               "retailamt": "5.20",
-  194
               "customerloyamt": "5.20"
             },
             {
@@ -9079,6 +9115,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "SIMPLE TRUTH ORG LEMON 6CT",
+  195
               "productupc": "00001000494",
               "retailamt": "1.48",
               "customerloyamt": "0.81"
@@ -9115,7 +9152,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "SIMPLE TRUTH ORG LEMON PKG",
-  195
               "productupc": "00001000492",
               "retailamt": "1.98",
               "customerloyamt": "1.78"
@@ -9126,6 +9162,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  196
             {
               "purchasedescription": "SIMPLE TRUTH ORG GALA APPLE 5LB",
               "productupc": "00001000126",
@@ -9162,7 +9199,6 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  196
             {
               "purchasedescription": "SIMPLE TRUTH SPAGHETTI 16Z",
               "productupc": "00004000047",
@@ -9173,6 +9209,7 @@ Information about your purchases:
         },
         {
           "date": "05/26/2025 00:00:00",
+  197
           "time": "15:46:59",
           "division": "016",
           "store": "00891",
@@ -9209,7 +9246,6 @@ Information about your purchases:
               "retailamt": "6.79",
               "customerloyamt": "6.79"
             },
-  197
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -9220,6 +9256,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  198
               "customerloyamt": "0.00"
             },
             {
@@ -9254,12 +9291,11 @@ Information about your purchases:
           "division": "024",
           "store": "00427",
           "orderno": "86",
-          "total_amount_prior_to_discounts": "21.88",
+          "total_amount_prior_to_discounts": "21.93",
           "tenders": [
-  198
             {
               "tendertype": "CREDIT",
-              "amount": "21.88"
+              "amount": "21.93"
             }
           ],
           "items": [
@@ -9267,6 +9303,7 @@ Information about your purchases:
               "purchasedescription": "WHOLE WHEAT BREAD 2LB",
               "productupc": "00004000029",
               "retailamt": "4.19",
+  199
               "customerloyamt": "4.19"
             },
             {
@@ -9303,7 +9340,6 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  199
               "customerloyamt": "0.00"
             },
             {
@@ -9314,6 +9350,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  200
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -9329,6 +9366,12 @@ Information about your purchases:
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
+            },
+            {
+              "purchasedescription": "$0.05 CRV DEPOSIT",
+              "productupc": "",
+              "retailamt": "0.05",
+              "customerloyamt": "0.05"
             }
           ]
         },
@@ -9350,11 +9393,11 @@ Information about your purchases:
               "purchasedescription": "SPONGE SM",
               "productupc": "00007000228",
               "retailamt": "4.48",
-  200
               "customerloyamt": "4.48"
             },
             {
               "purchasedescription": "UNKNOWN",
+  201
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -9397,11 +9440,11 @@ Information about your purchases:
             }
           ]
         },
-  201
         {
           "date": "06/18/2025 00:00:00",
           "time": "18:09:58",
           "division": "024",
+  202
           "store": "01102",
           "orderno": "88",
           "total_amount_prior_to_discounts": "75.80",
@@ -9444,11 +9487,11 @@ Information about your purchases:
             },
             {
               "purchasedescription": "ORGANIC BABY SPINACH PKG",
-  202
               "productupc": "00001000184",
               "retailamt": "4.47",
               "customerloyamt": "0.00"
             },
+  203
             {
               "purchasedescription": "HOME SENSE PAPER TOWEL LG",
               "productupc": "00007000020",
@@ -9491,11 +9534,11 @@ Information about your purchases:
               "retailamt": "2.82",
               "customerloyamt": "1.97"
             },
-  203
             {
               "purchasedescription": "SIMPLE TRUTH STRING CHEESE 8Z",
               "productupc": "00002000309",
               "retailamt": "3.56",
+  204
               "customerloyamt": "3.56"
             },
             {
@@ -9538,11 +9581,11 @@ Information about your purchases:
         },
         {
           "date": "06/23/2025 00:00:00",
-  204
           "time": "11:32:55",
           "division": "701",
           "store": "01102",
           "orderno": "89",
+  205
           "total_amount_prior_to_discounts": "21.72",
           "tenders": [
             {
@@ -9585,11 +9628,11 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  205
               "customerloyamt": "0.00"
             },
             {
               "purchasedescription": "UNKNOWN",
+  206
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -9632,11 +9675,11 @@ Information about your purchases:
           "division": "701",
           "store": "01102",
           "orderno": "90",
-  206
           "total_amount_prior_to_discounts": "61.50",
           "tenders": [
             {
               "tendertype": "GIFT CARD",
+  207
               "amount": "61.50"
             }
           ],
@@ -9679,11 +9722,11 @@ Information about your purchases:
             },
             {
               "purchasedescription": "ORGANIC BLUEBERRY PINT BNCH",
-  207
               "productupc": "00001000381",
               "retailamt": "4.15",
               "customerloyamt": "3.32"
             },
+  208
             {
               "purchasedescription": "KRO WHITE RICE 32Z",
               "productupc": "00004000302",
@@ -9726,11 +9769,11 @@ Information about your purchases:
               "retailamt": "5.26",
               "customerloyamt": "5.26"
             }
-  208
           ]
         },
         {
           "date": "07/07/2025 00:00:00",
+  209
           "time": "18:33:51",
           "division": "024",
           "store": "00891",
@@ -9773,11 +9816,11 @@ Information about your purchases:
               "retailamt": "7.18",
               "customerloyamt": "7.18"
             },
-  209
             {
               "purchasedescription": "PRIVATE SELECTION WAFFLE 12Z",
               "productupc": "00005000145",
               "retailamt": "-2.87",
+  210
               "customerloyamt": "-2.87"
             },
             {
@@ -9820,11 +9863,11 @@ Information about your purchases:
               "purchasedescription": "KRO FRENCH FRY QT",
               "productupc": "00005000173",
               "retailamt": "3.86",
-  210
               "customerloyamt": "2.70"
             },
             {
               "purchasedescription": "SIMPLE TRUTH SPAGHETTI 24Z",
+  211
               "productupc": "00004000048",
               "retailamt": "2.17",
               "customerloyamt": "2.17"
@@ -9867,11 +9910,11 @@ Information about your purchases:
               "purchasedescription": "BATHROOM TISSUE LG",
               "productupc": "00007000064",
               "retailamt": "26.72",
-  211
               "customerloyamt": "24.05"
             },
             {
               "purchasedescription": "UNKNOWN",
+  212
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -9914,11 +9957,11 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  212
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  213
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -9961,11 +10004,11 @@ Information about your purchases:
             },
             {
               "purchasedescription": "HOME SENSE SPONGE XL",
-  213
               "productupc": "00007000219",
               "retailamt": "4.13",
               "customerloyamt": "2.89"
             },
+  214
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -10008,11 +10051,11 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  214
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  215
               "customerloyamt": "0.00"
             },
             {
@@ -10055,11 +10098,11 @@ Information about your purchases:
             }
           ],
           "items": [
-  215
             {
               "purchasedescription": "ORGANIC LEMON BAG",
               "productupc": "00001000479",
               "retailamt": "1.00",
+  216
               "customerloyamt": "1.00"
             },
             {
@@ -10102,11 +10145,11 @@ Information about your purchases:
               "purchasedescription": "SIMPLE TRUTH SHAMPOO TWIN",
               "productupc": "00008000055",
               "retailamt": "10.73",
-  216
               "customerloyamt": "10.73"
             },
             {
               "purchasedescription": "UNKNOWN",
+  217
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -10149,11 +10192,11 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  217
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  218
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -10196,11 +10239,11 @@ Information about your purchases:
           "tenders": [
             {
               "tendertype": "CASH",
-  218
               "amount": "67.93"
             }
           ],
           "items": [
+  219
             {
               "purchasedescription": "BLACK BEANS 8Z",
               "productupc": "00004000287",
@@ -10243,11 +10286,11 @@ Information about your purchases:
               "retailamt": "6.39",
               "customerloyamt": "6.39"
             },
-  219
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  220
               "customerloyamt": "0.00"
             },
             {
@@ -10290,16 +10333,16 @@ Information about your purchases:
         },
         {
           "date": "08/12/2025 00:00:00",
-  220
           "time": "18:55:26",
           "division": "024",
           "store": "01102",
           "orderno": "96",
-          "total_amount_prior_to_discounts": "27.67",
+  221
+          "total_amount_prior_to_discounts": "27.72",
           "tenders": [
             {
               "tendertype": "GIFT CARD",
-              "amount": "27.67"
+              "amount": "27.72"
             }
           ],
           "items": [
@@ -10337,11 +10380,11 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  221
               "customerloyamt": "0.00"
             },
             {
               "purchasedescription": "PRIVATE SELECTION 2% MILK 32Z",
+  222
               "productupc": "00002000027",
               "retailamt": "3.73",
               "customerloyamt": "3.73"
@@ -10384,11 +10427,11 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  222
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  223
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -10400,6 +10443,12 @@ Information about your purchases:
               "productupc": "00001000395",
               "retailamt": "5.23",
               "customerloyamt": "5.23"
+            },
+            {
+              "purchasedescription": "$0.05 CRV DEPOSIT",
+              "productupc": "",
+              "retailamt": "0.05",
+              "customerloyamt": "0.05"
             }
           ]
         },
@@ -10409,11 +10458,11 @@ Information about your purchases:
           "division": "016",
           "store": "01102",
           "orderno": "97",
-          "total_amount_prior_to_discounts": "78.38",
+          "total_amount_prior_to_discounts": "78.43",
           "tenders": [
             {
               "tendertype": "EBT",
-              "amount": "78.38"
+              "amount": "78.43"
             }
           ],
           "items": [
@@ -10429,9 +10478,9 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  224
             {
               "purchasedescription": "UNKNOWN",
-  223
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -10476,13 +10525,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-              "customerloyamt": "0.00"
-            },
-  224
-            {
-              "purchasedescription": "UNKNOWN",
-              "productupc": "00010000080000",
-              "retailamt": "0.00",
+  225
               "customerloyamt": "0.00"
             },
             {
@@ -10508,6 +10551,18 @@ Information about your purchases:
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
+            },
+            {
+              "purchasedescription": "UNKNOWN",
+              "productupc": "00010000080000",
+              "retailamt": "0.00",
+              "customerloyamt": "0.00"
+            },
+            {
+              "purchasedescription": "$0.05 CRV DEPOSIT",
+              "productupc": "",
+              "retailamt": "0.05",
+              "customerloyamt": "0.05"
             }
           ]
         },
@@ -10517,6 +10572,7 @@ Information about your purchases:
           "division": "016",
           "store": "00427",
           "orderno": "98",
+  226
           "total_amount_prior_to_discounts": "63.22",
           "tenders": [
             {
@@ -10525,7 +10581,6 @@ Information about your purchases:
             }
           ],
           "items": [
-  225
             {
               "purchasedescription": "PRIVATE SELECTION CHICKEN THIGH 8Z",
               "productupc": "00003000221",
@@ -10564,6 +10619,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "SIMPLE TRUTH LARGE EGGS 12CT",
+  227
               "productupc": "00002000088",
               "retailamt": "6.04",
               "customerloyamt": "6.04"
@@ -10572,7 +10628,6 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  226
               "customerloyamt": "0.00"
             },
             {
@@ -10611,6 +10666,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  228
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -10619,7 +10675,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "KRO WHOLE WHEAT BREAD 48Z",
-  227
               "productupc": "00004000006",
               "retailamt": "2.13",
               "customerloyamt": "2.13"
@@ -10658,6 +10713,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  229
             {
               "purchasedescription": "KRO WHOLE MILK QT",
               "productupc": "00002000040",
@@ -10666,7 +10722,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "ORGANIC BROCCOLI CROWN 2LB",
-  228
               "productupc": "00001000212",
               "retailamt": "-2.03",
               "customerloyamt": "-2.03"
@@ -10705,6 +10760,7 @@ Information about your purchases:
           "orderno": "100",
           "total_amount_prior_to_discounts": "28.60",
           "tenders": [
+  230
             {
               "tendertype": "GIFT CARD",
               "amount": "28.60"
@@ -10713,7 +10769,6 @@ Information about your purchases:
           "items": [
             {
               "purchasedescription": "UNKNOWN",
-  229
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -10752,6 +10807,7 @@ Information about your purchases:
               "purchasedescription": "KRO CAT LITTER 5LB",
               "productupc": "00009000034",
               "retailamt": "5.96",
+  231
               "customerloyamt": "5.96"
             },
             {
@@ -10760,7 +10816,6 @@ Information about your purchases:
               "retailamt": "1.60",
               "customerloyamt": "0.00"
             },
-  230
             {
               "purchasedescription": "MAPLE SYRUP 8Z",
               "productupc": "00004000485",
@@ -10799,6 +10854,7 @@ Information about your purchases:
               "purchasedescription": "KRO OLIVE OIL 32Z",
               "productupc": "00004000203",
               "retailamt": "8.85",
+  232
               "customerloyamt": "8.85"
             },
             {
@@ -10807,7 +10863,6 @@ Information about your purchases:
               "retailamt": "1.59",
               "customerloyamt": "1.59"
             },
-  231
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -10846,6 +10901,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  233
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -10854,7 +10910,6 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  232
               "customerloyamt": "0.00"
             },
             {
@@ -10893,6 +10948,7 @@ Information about your purchases:
               "retailamt": "5.70",
               "customerloyamt": "3.14"
             },
+  234
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -10901,7 +10957,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "SIMPLE TRUTH ORG BROCCOLI CROWN 6CT",
-  233
               "productupc": "00001000230",
               "retailamt": "3.92",
               "customerloyamt": "2.74"
@@ -10940,6 +10995,7 @@ Information about your purchases:
             }
           ],
           "items": [
+  235
             {
               "purchasedescription": "KRO DRY DOG FOOD 3Z",
               "productupc": "00009000006",
@@ -10948,7 +11004,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  234
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -10987,6 +11042,7 @@ Information about your purchases:
           "orderno": "103",
           "total_amount_prior_to_discounts": "58.82",
           "tenders": [
+  236
             {
               "tendertype": "EBT",
               "amount": "58.82"
@@ -10995,7 +11051,6 @@ Information about your purchases:
           "items": [
             {
               "purchasedescription": "UNKNOWN",
-  235
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -11034,6 +11089,7 @@ Information about your purchases:
               "purchasedescription": "BANANAS EA",
               "productupc": "00001000001",
               "retailamt": "0.55",
+  237
               "customerloyamt": "0.55"
             },
             {
@@ -11042,7 +11098,6 @@ Information about your purchases:
               "retailamt": "0.93",
               "customerloyamt": "0.93"
             },
-  236
             {
               "purchasedescription": "HONEY 48Z",
               "productupc": "00004000457",
@@ -11075,12 +11130,13 @@ Information about your purchases:
           "division": "024",
           "store": "01102",
           "orderno": "104",
-          "total_amount_prior_to_discounts": "21.12",
+          "total_amount_prior_to_discounts": "21.17",
           "tenders": [
             {
               "tendertype": "GIFT CARD",
-              "amount": "21.12"
+              "amount": "21.17"
             }
+  238
           ],
           "items": [
             {
@@ -11089,7 +11145,6 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  237
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -11128,6 +11183,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "SIMPLE TRUTH HONEY 12Z",
+  239
               "productupc": "00004000442",
               "retailamt": "4.89",
               "customerloyamt": "4.89"
@@ -11136,7 +11192,6 @@ Information about your purchases:
               "purchasedescription": "DEODORANT 6CT",
               "productupc": "00008000131",
               "retailamt": "8.53",
-  238
               "customerloyamt": "8.53"
             },
             {
@@ -11162,6 +11217,12 @@ Information about your purchases:
               "productupc": "00005000117",
               "retailamt": "6.20",
               "customerloyamt": "4.96"
+            },
+            {
+              "purchasedescription": "$0.05 CRV DEPOSIT",
+              "productupc": "",
+              "retailamt": "0.05",
+              "customerloyamt": "0.05"
             }
           ]
         },
@@ -11169,6 +11230,7 @@ Information about your purchases:
           "date": "10/07/2025 00:00:00",
           "time": "10:41:33",
           "division": "024",
+  240
           "store": "00318",
           "orderno": "105",
           "total_amount_prior_to_discounts": "27.22",
@@ -11183,7 +11245,6 @@ Information about your purchases:
               "purchasedescription": "KRO HONEY NUT CEREAL 16Z",
               "productupc": "00004000135",
               "retailamt": "3.60",
-  239
               "customerloyamt": "3.24"
             },
             {
@@ -11216,6 +11277,7 @@ Information about your purchases:
               "retailamt": "2.91",
               "customerloyamt": "2.91"
             },
+  241
             {
               "purchasedescription": "HOME SENSE TRASH BAG EA",
               "productupc": "00007000144",
@@ -11230,7 +11292,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "SIMPLE TRUTH CREAM CHEESE 16Z",
-  240
               "productupc": "00002000245",
               "retailamt": "2.66",
               "customerloyamt": "2.66"
@@ -11263,6 +11324,7 @@ Information about your purchases:
             }
           ],
           "items": [
+  242
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -11277,7 +11339,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "SIMPLE TRUTH LARGE EGGS 48Z",
-  241
               "productupc": "00002000083",
               "retailamt": "4.89",
               "customerloyamt": "3.42"
@@ -11310,6 +11371,7 @@ Information about your purchases:
               "purchasedescription": "KRO ICED TEA 12Z",
               "productupc": "00006000100",
               "retailamt": "1.64",
+  243
               "customerloyamt": "1.48"
             },
             {
@@ -11324,7 +11386,6 @@ Information about your purchases:
           "date": "10/21/2025 00:00:00",
           "time": "10:56:52",
           "division": "016",
-  242
           "store": "00891",
           "orderno": "107",
           "total_amount_prior_to_discounts": "41.28",
@@ -11357,6 +11418,7 @@ Information about your purchases:
               "purchasedescription": "SIMPLE TRUTH ORG BROCCOLI CROWN 5LB",
               "productupc": "00001000225",
               "retailamt": "2.91",
+  244
               "customerloyamt": "2.91"
             },
             {
@@ -11371,7 +11433,6 @@ Information about your purchases:
               "retailamt": "5.03",
               "customerloyamt": "3.52"
             },
-  243
             {
               "purchasedescription": "ORGANIC RUSSET POTATO BNCH",
               "productupc": "00001000282",
@@ -11404,6 +11465,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  245
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -11418,7 +11480,6 @@ Information about your purchases:
               "purchasedescription": "KRO MARINARA SAUCE 6CT",
               "productupc": "00004000076",
               "retailamt": "3.37",
-  244
               "customerloyamt": "3.37"
             },
             {
@@ -11451,6 +11512,7 @@ Information about your purchases:
           "tenders": [
             {
               "tendertype": "GIFT CARD",
+  246
               "amount": "80.58"
             }
           ],
@@ -11465,7 +11527,6 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  245
               "customerloyamt": "0.00"
             },
             {
@@ -11498,6 +11559,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  247
             {
               "purchasedescription": "KRO DISH SOAP 12CT",
               "productupc": "00007000105",
@@ -11512,7 +11574,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  246
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -11545,6 +11606,7 @@ Information about your purchases:
         },
         {
           "date": "11/03/2025 00:00:00",
+  248
           "time": "08:28:41",
           "division": "016",
           "store": "00891",
@@ -11559,7 +11621,6 @@ Information about your purchases:
           "items": [
             {
               "purchasedescription": "ICED TEA 8PK",
-  247
               "productupc": "00006000130",
               "retailamt": "4.76",
               "customerloyamt": "3.81"
@@ -11592,6 +11653,7 @@ Information about your purchases:
         },
         {
           "date": "11/10/2025 00:00:00",
+  249
           "time": "14:10:18",
           "division": "016",
           "store": "01102",
@@ -11606,7 +11668,6 @@ Information about your purchases:
           "items": [
             {
               "purchasedescription": "UNKNOWN",
-  248
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -11639,6 +11700,7 @@ Information about your purchases:
               "purchasedescription": "KRO WHOLE WHEAT BREAD 32Z",
               "productupc": "00004000005",
               "retailamt": "2.68",
+  250
               "customerloyamt": "2.68"
             },
             {
@@ -11653,7 +11715,6 @@ Information about your purchases:
               "retailamt": "4.81",
               "customerloyamt": "4.81"
             },
-  249
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -11686,6 +11747,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  251
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -11700,7 +11762,6 @@ Information about your purchases:
               "purchasedescription": "SIMPLE TRUTH SHRED CHEDDAR HGAL",
               "productupc": "00002000118",
               "retailamt": "3.88",
-  250
               "customerloyamt": "3.88"
             },
             {
@@ -11733,6 +11794,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  252
             {
               "purchasedescription": "KRO COLA 6PK",
               "productupc": "00006000074",
@@ -11747,7 +11809,6 @@ Information about your purchases:
           "division": "024",
           "store": "00427",
           "orderno": "111",
-  251
           "total_amount_prior_to_discounts": "33.54",
           "tenders": [
             {
@@ -11780,6 +11841,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  253
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -11794,7 +11856,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "KRO FRENCH FRY QT",
-  252
               "productupc": "00005000173",
               "retailamt": "3.72",
               "customerloyamt": "3.72"
@@ -11827,6 +11888,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  254
               "customerloyamt": "0.00"
             },
             {
@@ -11841,7 +11903,6 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  253
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -11874,6 +11935,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  255
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -11888,7 +11950,6 @@ Information about your purchases:
           "orderno": "112",
           "total_amount_prior_to_discounts": "54.48",
           "tenders": [
-  254
             {
               "tendertype": "GIFT CARD",
               "amount": "54.48"
@@ -11921,6 +11982,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  256
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -11935,7 +11997,6 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  255
               "customerloyamt": "0.00"
             },
             {
@@ -11968,6 +12029,7 @@ Information about your purchases:
               "retailamt": "1.80",
               "customerloyamt": "1.80"
             },
+  257
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -11982,7 +12044,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  256
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -12001,11 +12062,11 @@ Information about your purchases:
           "division": "701",
           "store": "01102",
           "orderno": "113",
-          "total_amount_prior_to_discounts": "48.55",
+          "total_amount_prior_to_discounts": "48.60",
           "tenders": [
             {
               "tendertype": "EBT",
-              "amount": "48.55"
+              "amount": "48.60"
             }
           ],
           "items": [
@@ -12015,6 +12076,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  258
             {
               "purchasedescription": "SIMPLE TRUTH OLIVE OIL 2LB",
               "productupc": "00004000216",
@@ -12029,7 +12091,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "KRO STRING CHEESE 6CT",
-  257
               "productupc": "00002000307",
               "retailamt": "5.76",
               "customerloyamt": "5.76"
@@ -12062,6 +12123,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  259
               "customerloyamt": "0.00"
             },
             {
@@ -12075,8 +12137,13 @@ Information about your purchases:
               "productupc": "00008000143",
               "retailamt": "4.63",
               "customerloyamt": "4.63"
+            },
+            {
+              "purchasedescription": "$0.05 CRV DEPOSIT",
+              "productupc": "",
+              "retailamt": "0.05",
+              "customerloyamt": "0.05"
             }
-  258
           ]
         },
         {
@@ -12103,6 +12170,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  260
               "customerloyamt": "0.00"
             },
             {
@@ -12123,7 +12191,6 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  259
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -12150,6 +12217,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
+  261
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -12170,7 +12238,6 @@ Information about your purchases:
         },
         {
           "date": "12/19/2025 00:00:00",
-  260
           "time": "14:10:06",
           "division": "701",
           "store": "00891",
@@ -12197,6 +12264,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "KRO HAND SOAP TWIN",
+  262
               "productupc": "00008000143",
               "retailamt": "4.42",
               "customerloyamt": "2.43"
@@ -12217,7 +12285,6 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  261
               "customerloyamt": "0.00"
             },
             {
@@ -12244,8 +12311,9 @@ Information about your purchases:
               "retailamt": "6.53",
               "customerloyamt": "6.53"
             },
+  263
             {
-              "purchasedescription": "PRIVATE SELECTION BUTTER 24Z",
+              "purchasedescription": "(PRIVATE SELECTION BUTTER 24Z",
               "productupc": "00002000191",
               "retailamt": "5.86",
               "customerloyamt": "4.10"
@@ -12264,7 +12332,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  262
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -12291,6 +12358,7 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
+  264
             {
               "purchasedescription": "BANANAS EA",
               "productupc": "00001000001",
@@ -12311,7 +12379,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  263
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -12338,6 +12405,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  265
               "customerloyamt": "0.00"
             },
             {
@@ -12358,7 +12426,6 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  264
             {
               "purchasedescription": "KRO SPORTS DRINK 2L",
               "productupc": "00006000137",
@@ -12385,6 +12452,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "PRIVATE SELECTION DELI TURKEY LB",
+  266
               "productupc": "00003000290",
               "retailamt": "8.14",
               "customerloyamt": "8.14"
@@ -12405,7 +12473,6 @@ Information about your purchases:
           "orderno": "117",
           "total_amount_prior_to_discounts": "33.76",
           "tenders": [
-  265
             {
               "tendertype": "CREDIT",
               "amount": "33.76"
@@ -12432,6 +12499,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "BABY CARROT 2LB",
+  267
               "productupc": "00001000135",
               "retailamt": "1.01",
               "customerloyamt": "0.91"
@@ -12452,7 +12520,6 @@ Information about your purchases:
               "purchasedescription": "HERITAGE FARM CHICKEN THIGH PKG",
               "productupc": "00003000217",
               "retailamt": "6.00",
-  266
               "customerloyamt": "4.80"
             },
             {
@@ -12479,6 +12546,7 @@ Information about your purchases:
               "retailamt": "4.08",
               "customerloyamt": "3.26"
             },
+  268
             {
               "purchasedescription": "HONEY 48Z",
               "productupc": "00004000457",
@@ -12499,7 +12567,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "SIMPLE TRUTH TORTILLA CHIP 12Z",
-  267
               "productupc": "00004000376",
               "retailamt": "3.26",
               "customerloyamt": "3.26"
@@ -12526,6 +12593,7 @@ Information about your purchases:
           "orderno": "118",
           "total_amount_prior_to_discounts": "71.24",
           "tenders": [
+  269
             {
               "tendertype": "EBT",
               "amount": "70.08"
@@ -12546,7 +12614,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  268
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -12573,6 +12640,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  270
               "customerloyamt": "0.00"
             },
             {
@@ -12593,7 +12661,6 @@ Information about your purchases:
               "retailamt": "4.79",
               "customerloyamt": "4.79"
             },
-  269
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -12620,6 +12687,7 @@ Information about your purchases:
             },
             {
               "purchasedescription": "PRIVATE SELECTION CHICKEN NUGGET 8Z",
+  271
               "productupc": "00005000111",
               "retailamt": "17.97",
               "customerloyamt": "17.97"
@@ -12640,7 +12708,6 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
-  270
               "customerloyamt": "0.00"
             },
             {
@@ -12667,6 +12734,7 @@ Information about your purchases:
           "items": [
             {
               "purchasedescription": "UNKNOWN",
+  272
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -12687,7 +12755,6 @@ Information about your purchases:
               "purchasedescription": "PRIVATE SELECTION BACON PKG",
               "productupc": "00003000162",
               "retailamt": "10.95",
-  271
               "customerloyamt": "10.95"
             },
             {
@@ -12714,6 +12781,7 @@ Information about your purchases:
               "retailamt": "8.29",
               "customerloyamt": "0.00"
             },
+  273
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -12734,7 +12802,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  272
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -12761,6 +12828,7 @@ Information about your purchases:
           "orderno": "120",
           "total_amount_prior_to_discounts": "22.38",
           "tenders": [
+  274
             {
               "tendertype": "DEBIT",
               "amount": "21.34"
@@ -12781,7 +12849,6 @@ Information about your purchases:
             },
             {
               "purchasedescription": "UNKNOWN",
-  273
               "productupc": "00010000080000",
               "retailamt": "0.00",
               "customerloyamt": "0.00"
@@ -12808,6 +12875,7 @@ Information about your purchases:
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
               "retailamt": "0.00",
+  275
               "customerloyamt": "0.00"
             },
             {
@@ -12828,7 +12896,6 @@ Information about your purchases:
               "retailamt": "0.00",
               "customerloyamt": "0.00"
             },
-  274
             {
               "purchasedescription": "UNKNOWN",
               "productupc": "00010000080000",
@@ -12855,5 +12922,6 @@ Information about your purchases:
 }
 
 If you have questions about this report, please contact our privacy office.
+  276
 
 End of report.

@@ -23,7 +23,8 @@ other side, where matching the word `TENDER` alone deleted a real `GIFT CARD`
 purchase.
 """
 
-from unbagged.views import NON_PRODUCT_WORDS, clean_label, is_non_product, label_for
+from unbagged.product_labels import NON_PRODUCT_WORDS, clean_label, is_non_product
+from unbagged.views import label_for
 
 
 class TestCleanLabel:
@@ -115,6 +116,19 @@ class TestIsNonProduct:
 
     def test_the_match_is_case_insensitive(self):
         assert is_non_product("crv deposit") is True
+
+    def test_a_bag_fee_is_a_charge(self):
+        """Issue #105. A statutory carrier-bag fee is a charge the receipt made,
+        the same kind of line as a container deposit, and was listed in Products
+        as something bought."""
+        assert is_non_product("CARRYOUT BAG FEE") is True
+        assert is_non_product("BAG FEE") is True
+
+    def test_a_product_sold_by_the_bag_is_a_product(self):
+        """`BAG` is the dangerous half of the phrase: the whole-label rule is what
+        keeps a bag of something on the list."""
+        assert is_non_product("BARLEY TEA BAG") is False
+        assert is_non_product("ICE BAG 10 LB") is False
 
     def test_every_word_in_the_vocabulary_is_refused_on_its_own(self):
         """Each token, so an edit to the constant cannot quietly drop one."""
