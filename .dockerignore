@@ -14,6 +14,7 @@
 # ---------------------------------------------------------------------------
 data/
 output/
+**/.sample-albertsons/
 # `make reset` renames ./data to data.bak-<timestamp> and leaves it in the
 # checkout. It holds every report and the database — the exact contents of
 # data/, under a name data/ does not match. .gitignore denies it; so must this.
