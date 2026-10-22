@@ -135,6 +135,15 @@ class TestGenericParse:
         result = GenericAdapter().parse(bundle(tmp_path, text))
         assert any("loyalty account" in f.description for f in result.follow_ups)
 
+    def test_its_notes_are_for_the_reader_and_never_reach_a_letter(self, tmp_path):
+        """Issue #37. "Consider contributing an adapter" is advice to the person
+        using this tool; addressed to a privacy office it would be noise in their
+        correspondence. No question means the letter leaves it out."""
+        for text in (LETTER, "Dear Customer,\n\nWe have no record of an account for you.\n"):
+            result = GenericAdapter().parse(bundle(tmp_path, text))
+            assert result.follow_ups
+            assert all(f.question is None for f in result.follow_ups)
+
     def test_nothing_readable_raises_a_message_for_a_person(self, tmp_path):
         missing = SourceDocument("gone.pdf", "0" * 64, path=str(tmp_path / "gone.pdf"))
         with pytest.raises(AdapterError, match="scanned PDF"):

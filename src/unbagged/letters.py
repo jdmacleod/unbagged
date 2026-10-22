@@ -112,6 +112,13 @@ def draft_follow_up(
             "request, and I would like that data as well.",
         ]
 
+    # Only the follow-ups that carry a question for the retailer. The rest are
+    # advice to the reader, and a letter is the one output somebody else reads.
+    questions = [f.question for f in follow_ups if f.question]
+    if questions:
+        lines += ["", "I would also like to ask:", ""]
+        lines += [f"  {n}. {q}" for n, q in enumerate(questions, start=1)]
+
     lines += [
         "",
         "Please confirm receipt and let me know if you need anything further to "

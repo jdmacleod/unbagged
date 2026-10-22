@@ -360,7 +360,8 @@ CREATE TABLE follow_up (
     request_id INTEGER REFERENCES request(id),
     kind TEXT,                 -- supplemental_period|missing_category|clarification
     description TEXT,
-    resolved INTEGER DEFAULT 0
+    resolved INTEGER DEFAULT 0,
+    question TEXT              -- put to the retailer in the letter; NULL = for the reader (#37)
 );
 
 CREATE TABLE parse_warning (

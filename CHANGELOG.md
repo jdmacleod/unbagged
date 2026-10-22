@@ -65,6 +65,16 @@ deposit already was. No migration runs and nothing needs re-reading.
 
 ### Added
 
+- **The follow-up letter asks the retailer what its response left open.** An
+  Albertsons response can raise three questions worth putting to the privacy
+  office: why a profile in another name was returned, whether purchases after
+  the history's end are held elsewhere, and what withheld information can be
+  given with another person's details removed. They were shown in the app and
+  left out of the letter. They are now asked in it, in the first person. Notes
+  meant for the reader, such as the fallback adapter's, still never reach a
+  letter (#37). A response loaded before this keeps its letter as it was until
+  it is uploaded again.
+
 - **Albertsons responses are read.** Albertsons Companies answers for every
   banner it runs — Albertsons, Safeway, Vons and the rest — with two files: a
   report PDF holding the request details, a loyalty profile, consent

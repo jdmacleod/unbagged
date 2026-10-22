@@ -192,6 +192,15 @@ topic was mentioned; it cannot show the question was answered, and a green cell
 next to "we take your privacy seriously" is worse than a red one. The generic
 fallback follows this rule and is worth reading as an example.
 
+**A follow-up says who it is for.** `FollowUpAction.description` is written to
+the person reading the app. Set `question` only when the follow-up is something
+to put to the retailer, written in the first person of the person who made the
+request ("Please tell me whether…"): the follow-up letter asks exactly those, and
+nothing else. Advice to the reader ("consider contributing an adapter") leaves
+`question` unset and never reaches a letter. Keep a question to what the response
+showed, never what it failed to do: the letter reports observations, and
+`tests/test_letters.py` holds it to that tone.
+
 `docs/legal-basis.md` maps each category to its citation, and records two things
 that should *not* be scored as failures: the 12-month lookback with its
 supplemental-request path, and a refusal on verification grounds.
