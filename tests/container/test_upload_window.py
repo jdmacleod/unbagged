@@ -31,6 +31,7 @@ renderer in the frontend suite.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 import urllib.request
@@ -690,7 +691,19 @@ class TestThisTabFindsOutAboutTheOtherOne:
 
         return_to_tab(page)
         page.wait_for_selector("select[aria-label]", state="detached", timeout=30_000)
-        page.wait_for_load_state("networkidle")
+        # The selector goes when the list is re-read; the URL is rewritten a
+        # render later. `wait_for_load_state("networkidle")` returned at once,
+        # since that state was reached long before, so the assertion below could
+        # read the old `?r=` and fail with nothing wrong (seen on #134's CI).
+        # Wait for the URL itself, and fail with the same message if it never moves.
+        from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
+        with contextlib.suppress(PlaywrightTimeoutError):
+            page.wait_for_function(
+                "(gone) => new URLSearchParams(location.search).get('r') !== gone",
+                arg=str(newest),
+                timeout=30_000,
+            )
 
         assert selected(page) != str(newest), (
             "the URL went on naming a response this tab no longer has"
